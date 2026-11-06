@@ -1,0 +1,5 @@
+# Tests fail by panicking, so the no-panic lints do not apply inside them.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true

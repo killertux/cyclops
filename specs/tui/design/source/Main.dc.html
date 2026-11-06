@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cyclops TUI plan</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#6CC4E8;text-decoration:none}a:hover{color:#A8DDF2}
+th,td{text-align:left;vertical-align:top}
+kbd{font-family:'JetBrains Mono',Menlo,monospace;font-size:13px;color:#6CC4E8;font-weight:700}
+</style>
+</helmet>
+<div style="width: 1480px; height: 940px; box-sizing: border-box; padding: 56px 64px; background: #0F1216; color: #D5DAE1; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 22px; display: flex; flex-direction: column; gap: 32px">
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 64px; align-items: end">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<h1 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 52px; line-height: 56px; font-weight: 700; color: #F1F4F8; letter-spacing: -0.01em">One symbol in focus. Every view is a lens on it.</h1>
+<p style="margin: 0; font-size: 18px; line-height: 27px; color: #AEB6C2; max-width: 760px">Quality tools give numbers with no place. Diagrams give place with no numbers. The TUI holds both, so a question about code ends in an answer you can defend.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; color: #F1F4F8">The lens</h2>
+<p style="margin: 0; color: #AEB6C2">Four settings live in the status line and follow you across every view, so moving never loses context.</p>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 13px">
+<div style="background: #1C232C; padding: 8px 10px; color: #F1F4F8">focus</div>
+<div style="background: #1C232C; padding: 8px 10px; color: #F1F4F8">metric</div>
+<div style="background: #1C232C; padding: 8px 10px; color: #F1F4F8">filter</div>
+<div style="background: #1C232C; padding: 8px 10px; color: #F1F4F8">tests</div>
+</div>
+</div>
+</div>
+
+<table style="border-collapse: collapse; width: 100%; table-layout: fixed">
+<thead>
+<tr style="border-bottom: 1px solid #323A45">
+<th scope="col" style="width: 21%; padding: 0 16px 12px 0; font-weight: 500; color: #8A94A3">The question</th>
+<th scope="col" style="padding: 0 16px 12px 0"><div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; color: #F1F4F8">Orient</div><div style="font-weight: 400; color: #8A94A3; font-size: 13px">What am I looking at?</div></th>
+<th scope="col" style="padding: 0 16px 12px 0"><div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; color: #F1F4F8">Spot</div><div style="font-weight: 400; color: #8A94A3; font-size: 13px">What stands out?</div></th>
+<th scope="col" style="padding: 0 16px 12px 0"><div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; color: #F1F4F8">Explain</div><div style="font-weight: 400; color: #8A94A3; font-size: 13px">Why is it like that?</div></th>
+<th scope="col" style="padding: 0 16px 12px 0"><div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; color: #F1F4F8">Weigh</div><div style="font-weight: 400; color: #8A94A3; font-size: 13px">Does it matter?</div></th>
+<th scope="col" style="padding: 0 0 12px 0"><div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; color: #F1F4F8">Act</div><div style="font-weight: 400; color: #8A94A3; font-size: 13px">What happens next?</div></th>
+</tr>
+</thead>
+<tbody>
+<tr style="border-bottom: 1px solid #232A33">
+<th scope="row" style="padding: 16px 16px 16px 0; font-weight: 600; color: #F1F4F8">How is this project organized?</th>
+<td style="padding: 16px 16px 16px 0"><a href="Overview.dc.html">Overview</a><br>Size, languages, packages</td>
+<td style="padding: 16px 16px 16px 0"><a href="Map.dc.html">Map</a><br>Area shows lines <kbd>Space m</kbd></td>
+<td style="padding: 16px 16px 16px 0"><a href="Explore.dc.html">Explore</a><br>Open the tree <kbd>l</kbd> <kbd>K</kbd></td>
+<td style="padding: 16px 16px 16px 0"><a href="Diagram.dc.html">Diagram</a><br>Widen the view <kbd>&gt;</kbd></td>
+<td style="padding: 16px 0">Export the view<br><kbd>:export mermaid</kbd></td>
+</tr>
+<tr style="border-bottom: 1px solid #232A33">
+<th scope="row" style="padding: 16px 16px 16px 0; font-weight: 600; color: #F1F4F8">Where is the risk concentrated?</th>
+<td style="padding: 16px 16px 16px 0"><a href="Overview.dc.html">Overview</a><br>Worst per metric</td>
+<td style="padding: 16px 16px 16px 0"><a href="Map.dc.html">Map</a><br>Color by hotspot <kbd>M</kbd></td>
+<td style="padding: 16px 16px 16px 0"><a href="Why.dc.html">Why</a><br>Open the reason <kbd>gd</kbd></td>
+<td style="padding: 16px 16px 16px 0"><a href="Explore.dc.html">Inspector</a><br>Rank against the project</td>
+<td style="padding: 16px 0">Mark it <kbd>ma</kbd><br>Copy the query <kbd>yf</kbd></td>
+</tr>
+<tr style="border-bottom: 1px solid #232A33">
+<th scope="row" style="padding: 16px 16px 16px 0; font-weight: 600; color: #F1F4F8">What should we refactor first, and what would that affect?</th>
+<td style="padding: 16px 16px 16px 0"><a href="Overview.dc.html">Overview</a><br>Select a metric <kbd>j k</kbd></td>
+<td style="padding: 16px 16px 16px 0"><a href="Find.dc.html">Find</a><br>Rank any metric <kbd>f</kbd></td>
+<td style="padding: 16px 16px 16px 0"><a href="Why.dc.html">Why</a><br>Decision points, commits</td>
+<td style="padding: 16px 16px 16px 0"><a href="Diagram.dc.html">Impact</a><br>Dependents <kbd>gr</kbd>, settle guesses <kbd>Space p</kbd></td>
+<td style="padding: 16px 0">Open editor <kbd>gf</kbd><br>Refresh on return <kbd>Space r</kbd></td>
+</tr>
+<tr>
+<th scope="row" style="padding: 16px 16px 16px 0; font-weight: 600; color: #F1F4F8">Is this part better or worse than the rest?</th>
+<td style="padding: 16px 16px 16px 0">Jump straight to it<br><kbd>Ctrl-p</kbd></td>
+<td style="padding: 16px 16px 16px 0"><a href="Explore.dc.html">Inspector</a><br>Each metric, ranked <kbd>K</kbd></td>
+<td style="padding: 16px 16px 16px 0"><a href="Alerts.dc.html">Alerts</a><br>Step through hits <kbd>]a</kbd></td>
+<td style="padding: 16px 16px 16px 0"><a href="Diagram.dc.html">Diagram</a><br>See cycles around it <kbd>]c</kbd></td>
+<td style="padding: 16px 0"><a href="AlertRule.dc.html">New rule</a><br>Preview, then save <kbd>A</kbd></td>
+</tr>
+</tbody>
+</table>
+
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 40px; border-top: 1px solid #323A45; padding-top: 22px">
+<div><strong style="color: #F1F4F8">No score, anywhere.</strong> Each metric stands alone, with its rank and distribution.</div>
+<div><strong style="color: #F1F4F8">Warm means risk.</strong> The interface stays cool, so color always points at code health.</div>
+<div><strong style="color: #F1F4F8">Guesses look like guesses.</strong> Line style shows confidence, and stale data is labelled.</div>
+<div><strong style="color: #F1F4F8">The mouse teaches the keys.</strong> Everything clickable shows its key, and nothing is mouse-only.</div>
+</div>
+
+<p style="margin: 0; font-size: 13px; color: #8A94A3">Screens use illustrative data: a scaled-up version of <span style="font-family: 'JetBrains Mono', Menlo, monospace">samples/rust-shop</span>.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1480,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

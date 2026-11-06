@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › billing                                                                                      module · trail 2/2
+╭─ Structure ────────────────────────────────────────────────╮╭─ Inspector ────────────────────────────────────────────╮
+│ name                            cyclomatic (highest inside)││ billing                                         module │
+│ ▾ shop                                       31 ━━━━━━━━━━ ││ src/billing/                                           │
+│   ▾ billing                              @   31 ━━━━━━━━━━ ││                                                        │
+│     ▾ invoice                            !   31 ━━━━━━━━━━ ││  Metrics   Why   Relations   Clones   Impact           │
+│       ▾ Invoice                          !   31 ━━━━━━━━━━ ││                                                        │
+│           reconcile                      !   31 ━━━━━━━━━━ ││ metric        value among 188 modules spread           │
+│           apply_credit                       14 ━━━━╸───── ││ cyclomatic       31 #1                ▇▆▃▂▁▁ ▁         │
+│           finalize                           11 ━━━╸────── ││ cognitive        58 #1                ▇▅▃▂▁▁▁▁         │
+│           total                               6 ━╸──────── ││ lines        18,204 #1                ▇▆▃▂▁▁▁▁         │
+│       ▸ LineItem                              4 ━───────── ││ duplication    6.2% #48               ▇▄▂▁▁▁ ▁         │
+│     ▸ tax                                !   22 ━━━━━━━─── ││ afferent          6 #31               ▇▅▂▁▁  ▁         │
+│     ▸ ledger                             !!  12 ━━━╸────── ││ efferent          5 #44               ▇▆▄▂▁▁ ▁         │
+│     ▸ rates                                   5 ━╸──────── ││ instability    0.45 #102              ▂▃▄▆▇▆▄▃         │
+│   ▾ orders                               @   27 ━━━━━━━━╸─ ││ distance       0.41 #1                ▅▆▇▅▃▂▁▁         │
+│     ▸ checkout                           !   27 ━━━━━━━━╸─ ││ hotspot        1.00 #1                ▇▄▂▁▁▁ ▁         │
+│     ▸ service                            !!  19 ━━━━━━──── ││ lcom            n/a types only                         │
+│     ▸ state                                   9 ━━╸─────── ││                                                        │
+│   ▸ catalog                              !   24 ━━━━━━━╸── ││ ────────────────────────────────────────────────────── │
+│   ▸ inventory                                13 ━━━━────── ││ Alerts inside                                          │
+│   ▸ notes                                     1 ────────── ││ 1 error   8 warning   of 29 in the project             │
+│ ▸ storefront                             !   22 ━━━━━━━─── ││                                                        │
+│ ▸ shop-api                               !   19 ━━━━━━──── ││ Cycle                                                  │
+│ ▸ shop-jobs                                  15 ━━━━╸───── ││ @ billing, orders   size 2                             │
+│                                                            ││                                                        │
+│                                                            ││ Relations                                              │
+│                                                            ││ 52 exact   14 inferred   4 ambiguous ~                 │
+│                                                            ││                                                        │
+│                                                            ││ ]a step through its alerts   gr see its impact         │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+╰────────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────╯
+ NORMAL  metric cyclomatic  filter none  tests off  layer syntax                           29 alerts  2 problems  fresh
+ hjkl move  Enter open  K inspector  H L sections  gd why  gr impact  M metric  f filter            Space menu   ? keys

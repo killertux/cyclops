@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › billing › invoice › Invoice › reconcile                                                                  method
+╭─ Structure ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▾ shop                                                                                                            31 │
+│   ▾ billing                                                                                                       31 │
+│     ▾ invoice                                                                                                     31 │
+│       ▾ Invoice                                                                                                   31 │
+│           reconcile                                                                                               31 │
+│           apply_credit                                                                                            14 │
+│           finalize                                                                                                11 │
+│           total                                                                                                    6 │
+│       ▸ LineItem                                                                                                   4 │
+│     ▸ tax                                                                                                         22 │
+│     ▸ ledger                                                                                                      12 │
+│     ▸ rates                                                                                                        5 │
+│   ▸ orders                                                                                                        27 │
+│   ▸ catalog                                                                                                       24 │
+│   ▸ inventory                                                                                                     13 │
+│   ▸ notes                                                                                                          1 │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮│
+││  Go to                       Project                           Session                                             ││
+││  o  Overview                 r  Refresh what changed           ?  All keys                                         ││
+││  m  Map                      p  Precise analysis               q  Quit                                             ││
+││  e  Explore                  t  Test code: off                                                                     ││
+││  d  Diagram                  x  Export this view                                                                   ││
+││  f  Find                                                                                                           ││
+││  a  Alerts                                                                                                         ││
+││  s  Status                                                                                                         ││
+│╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯│
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ NORMAL  metric cyclomatic  filter none  tests off  layer syntax                           29 alerts  2 problems  fresh
+ Space press a key, or click one. Esc closes.

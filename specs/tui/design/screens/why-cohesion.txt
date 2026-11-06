@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › orders › service › OrderService                                                              struct · trail 3/3
+╭─ Structure ────────────────────────────────────────────────╮╭─ Inspector ────────────────────────────────────────────╮
+│ name                                                   lcom││ OrderService                                    struct │
+│ ▾ shop                                                  n/a││ src/orders/service.rs:18                               │
+│   ▾ orders                                      @       n/a││                                                        │
+│     ▾ service                                   !!      n/a││ Metrics   Why   Relations   Clones   Impact            │
+│       ▸ OrderService                            !!        5││                                                        │
+│       ▸ RefundPolicy                                      1││ Why lcom is 5                                          │
+│     ▸ checkout                                  !       n/a││ These 5 groups of methods share no fields.             │
+│     ▸ state                                             n/a││ Each group could become its own type.                  │
+│   ▸ billing                                     @       n/a││                                                        │
+│   ▸ catalog                                     !       n/a││ 1  submit, validate, price_lines                       │
+│   ▸ inventory                                           n/a││    fields cart, rates                                  │
+│   ▸ notes                                               n/a││                                                        │
+│                                                            ││ 2  refund, reverse_tax                                 │
+│                                                            ││    fields ledger                                       │
+│                                                            ││                                                        │
+│                                                            ││ 3  notify, render_email                                │
+│                                                            ││    fields mailer                                       │
+│                                                            ││                                                        │
+│                                                            ││ 4  audit_trail                                         │
+│                                                            ││    fields log                                          │
+│                                                            ││                                                        │
+│                                                            ││ 5  next_id                                             │
+│                                                            ││    fields counter                                      │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+╰────────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────╯
+ NORMAL  metric lcom  filter none  tests off  layer syntax                                 29 alerts  2 problems  fresh
+ j k move  Enter jump to a method  H L sections  gf editor  Ctrl-o back                             Space menu   ? keys

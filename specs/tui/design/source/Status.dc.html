@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Status</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"confirm":{"editor":"boolean","default":true},"running":{"editor":"boolean","default":false},"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const confirm = this.props.confirm ?? true;
+    const running = !!this.props.running;
+    const ops = [
+      ['sh', confirm
+        ? { v: 'Status', mode: 'CONFIRM', mk: 'on', crumb: 'shop › ⟦b|status⟧', hint: [['y', 'run rust-analyzer'], ['n', 'not now'], ['Esc', 'close']], menu: false }
+        : { v: 'Status', crumb: 'shop › ⟦b|status⟧', right: running ? '⟦chiph|29 alerts⟧  2 problems  ⟦chipa|indexing 3m 12s⟧' : undefined, hint: [['Enter', 'open file'], [']p', 'next problem'], ['Space p', 'precise'], ['Space t', 'test code'], ['Space r', 'refresh']] }],
+      ['b', 0, 2, 56, 13, 'Last refresh: 3 files changed, 2.4s'],
+      ['tb', 2, 3, [10, -6, 34], [
+        ['step', 'time', 'result'],
+        ['Discover', '0.1s', '842 files'],
+        ['Check', '0.1s', '3 changed'],
+        ['Extract', '0.2s', '3 parsed, 839 from cache'],
+        ['Link', '1.4s', '21,840 relations'],
+        ['Enrich', '-', '⟦dim|skipped: no index yet⟧'],
+        ['History', '0.1s', '2 new commits'],
+        ['Analyze', '0.5s', 'all metrics'],
+        ['Evaluate', '0.0s', '29 alerts'],
+      ], { head: 1 }],
+      ['b', 56, 2, 64, 13, 'Precise analysis', 'a'],
+      ['tb', 58, 3, [24, 16, 18], [
+        ['language', 'indexer', 'ready?'],
+        ['Rust', 'rust-analyzer', 'yes'],
+        ['TypeScript, JavaScript', 'scip-typescript', '⟦h1|no⟧'],
+      ], { head: 1 }],
+      ['t', 58, 6, 'The project\'s dependencies are not installed.', 'dim'],
+      ['t', 58, 8, 'Relations now', 'faint'],
+      ['t', 58, 9, 'exact'], ['r', 76, 9, '71%'], ['bar', 78, 9, 38, 0.71, 'acc'],
+      ['t', 58, 10, 'inferred'], ['r', 76, 10, '24%'], ['bar', 78, 10, 38, 0.24, 'acc'],
+      ['t', 58, 11, 'ambiguous'], ['r', 76, 11, '5%'], ['bar', 78, 11, 38, 0.05, 'h1'],
+      ['t', 58, 13, running ? 'Running ⟦accb|rust-analyzer⟧ for 3m 12s. No progress reported.' : 'semantic.mode ⟦fg|manual⟧   index ⟦fg|none yet⟧', 'dim'],
+      ['b', 0, 15, 56, 10, 'Problems: 2 files'],
+      ['t', 2, 16, 'storefront/src/legacy/old_cart.ts: syntax error', 'fg'], ['h', 1, 16, 54],
+      ['t', 2, 17, 'src/billing/rates_table.rs: not valid UTF-8', 'fg'],
+      ['t', 2, 19, 'Everything else was analyzed as usual. Code around', 'dim'],
+      ['t', 2, 20, 'a syntax error still counts, as far as it can be', 'dim'],
+      ['t', 2, 21, 'understood.', 'dim'],
+      ['b', 0, 25, 56, 9, 'Known limits'],
+      ['t', 2, 26, '14 functions contain macro calls.', 'fg'],
+      ['t', 2, 27, 'Logic inside macros is undercounted, even with', 'dim'],
+      ['t', 2, 28, 'precise analysis.', 'dim'],
+      ['t', 2, 30, 'Metrics unavailable: none', 'fg'],
+      ['t', 2, 31, 'Without git, churn and hotspot would be listed here.', 'dim'],
+      ['b', 56, 15, 64, 8, 'Test code'],
+      ['t', 58, 16, 'Left out', 'b'], ['t', 67, 16, '214 files, 18,902 lines', 'fg'],
+      ['t', 58, 18, 'Hidden from every view, and counted in no metric.', 'dim'],
+      ['t', 58, 19, 'Switching never re-parses anything.', 'dim'],
+      ['t', 58, 21, '⟦acc|Space t⟧ include test code', 'fg'],
+      ['b', 56, 23, 64, 11, 'Semantic index'],
+      ['t', 58, 25, 'No index yet, so calls are matched by name.', 'fg'],
+      ['t', 58, 27, 'Once indexed, this shows the commit it belongs to and', 'dim'],
+      ['t', 58, 28, 'which files changed since. Those files fall back to', 'dim'],
+      ['t', 58, 29, 'syntax relations and are marked ⟦fg|*⟧ everywhere.', 'dim'],
+    ].concat(confirm ? [
+      ['b', 28, 10, 64, 11, '', 'p'],
+      ['t', 30, 11, 'Run precise analysis?', 'popb'],
+      ['t', 30, 13, 'Indexing runs compiler tooling over the whole project.', 'pop'],
+      ['t', 30, 14, 'It is slow, and for Rust it may run this project\'s', 'pop'],
+      ['t', 30, 15, 'build scripts and proc macros.', 'pop'],
+      ['t', 30, 17, 'You can keep browsing. It shows how long it has run.', 'popd'],
+      ['t', 30, 19, '⟦popk|y⟧ run rust-analyzer now    ⟦popk|n⟧ not now', 'pop'],
+    ] : []);
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Why, for cohesion</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const heat = (v) => (v >= 5 ? 'h3' : v >= 3 ? 'h2' : v >= 2 ? 'h1' : 'h0');
+    const tree = [
+      [0, '▾', 'shop', '', 'n/a'], [1, '▾', 'orders', '@', 'n/a'], [2, '▾', 'service', '!!', 'n/a'],
+      [3, '▸', 'OrderService', '!!', 5], [3, '▸', 'RefundPolicy', '', 1], [2, '▸', 'checkout', '!', 'n/a'], [2, '▸', 'state', '', 'n/a'],
+      [1, '▸', 'billing', '@', 'n/a'], [1, '▸', 'catalog', '!', 'n/a'], [1, '▸', 'inventory', '', 'n/a'], [1, '▸', 'notes', '', 'n/a'],
+    ];
+    const groups = [
+      [['submit', 'validate', 'price_lines'], ['cart', 'rates']],
+      [['refund', 'reverse_tax'], ['ledger']],
+      [['notify', 'render_email'], ['mailer']],
+      [['audit_trail'], ['log']],
+      [['next_id'], ['counter']],
+    ];
+    const ops = [
+      ['sh', { v: 'Explore', crumb: 'shop › orders › service › ⟦b|OrderService⟧', side: 'struct · trail 3/3', metric: 'lcom', hint: [['j k', 'move'], ['Enter', 'jump to a method'], ['H L', 'sections'], ['gf', 'editor'], ['Ctrl-o', 'back']] }],
+      ['b', 0, 2, 62, 32, 'Structure'],
+      ['t', 2, 3, 'name', 'faint'], ['r', 60, 3, 'lcom', 'faint'],
+    ].concat(
+      tree.flatMap(([d, caret, name, mark, v], i) => [
+        ['t', 2 + d * 2, 4 + i, caret + ' ' + name, d === 0 ? 'b' : 'fg'],
+        ['t', 50, 4 + i, mark, mark === '!!' ? 'h3' : 'h2'],
+        ['r', 60, 4 + i, v, v === 'n/a' ? 'dim' : heat(v)],
+      ]),
+      [
+        ['h', 1, 7, 60],
+        ['b', 62, 2, 58, 32, 'Inspector', 'a'],
+        ['t', 64, 3, 'OrderService', 'b'], ['r', 117, 3, 'struct', 'dim'],
+        ['t', 64, 4, 'src/orders/service.rs:18', 'dim'],
+        ['t', 64, 6, 'Metrics', 'dim'], ['t', 73, 6, ' Why ', 'on'], ['t', 80, 6, 'Relations   Clones   Impact', 'dim'],
+        ['t', 64, 8, 'Why lcom is ⟦h3|5⟧', 'b'],
+        ['t', 64, 9, 'These 5 groups of methods share no fields.', 'fg'],
+        ['t', 64, 10, 'Each group could become its own type.', 'dim'],
+      ],
+      groups.flatMap(([methods, fields], i) => [
+        ['t', 64, 12 + i * 3, '⟦acc|' + (i + 1) + '⟧  ' + methods.join(', ')],
+        ['t', 67, 13 + i * 3, 'fields ' + fields.join(', '), 'dim'],
+      ]),
+      [['h', 63, 12, 56], ['h', 63, 13, 56]]
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Alerts</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const hits = [
+      ['Invoice::reconcile', 31, 'src/billing/invoice.rs:212'], ['checkout::place_order', 27, 'src/orders/checkout.rs:88'],
+      ['pricing::resolve_price', 24, 'src/catalog/pricing.rs:140'], ['cart/reducer::cartReducer', 22, 'storefront/src/cart/reducer.ts:31'],
+      ['tax::apply_rules', 22, 'src/billing/tax.rs:57'], ['OrderService::submit', 19, 'src/orders/service.rs:203'],
+      ['routes::orders::create', 19, 'shop-api/src/routes/orders.rs:44'], ['steps::nextStep', 18, 'storefront/src/checkout/steps.tsx…'],
+      ['export::run_all', 18, 'shop-jobs/src/export/run_all.rs:12'], ['Ledger::post', 17, 'src/billing/ledger.rs:118'],
+      ['search::rank', 17, 'src/catalog/search.rs:62'], ['stock::reserve', 17, 'src/inventory/stock.rs:95'],
+    ];
+    const heat = (v) => (v >= 20 ? 'h3' : v >= 10 ? 'h2' : 'h1');
+    const ops = [
+      ['sh', { v: 'Alerts', crumb: 'Rule › ⟦b|Very complex function⟧', side: 'by rule · ⟦acc|v⟧ by location', hint: [['j k', 'move'], ['Enter', 'go to symbol'], [']a', 'next hit'], ['A', 'new rule'], ['e', 'edit'], ['x', 'disable'], ['v', 'group']] }],
+      ['b', 0, 2, 50, 18, 'Rules', 'a'],
+      ['tb', 2, 3, [2, -4, 39], [['', 'hits', 'name'], ['⟦h2|!⟧', '23', 'Very complex function'], ['⟦h3|!!⟧', '2', 'Low cohesion in core'], ['⟦h2|!⟧', '4', 'Far from the main line'], ['⟦h2|!⟧', '0', 'Tangled billing logic (yours)'], ['⟦dim|-⟧', '⟦dim|0⟧', '⟦dim|Long parameter lists (disabled)⟧']], { head: 1, sel: 1 }],
+      ['l', 2, 9, 47, 9, 's', 'faint'],
+      ['t', 2, 10, 'Very complex function', 'b'],
+      ['tb', 2, 11, [10, 33], [['⟦dim|metric⟧', 'cyclomatic'], ['⟦dim|scope⟧', 'function'], ['⟦dim|when⟧', '> 15'], ['⟦dim|severity⟧', 'warning'], ['⟦dim|paths⟧', 'all']]],
+      ['t', 2, 17, 'Defined in .cyclops/config.toml', 'faint'],
+      ['b', 0, 20, 50, 14, 'If CI ran now'],
+      ['t', 2, 21, 'cyclops check', 'acc'],
+      ['t', 2, 23, 'fail_on      ⟦fg|error⟧', 'dim'],
+      ['t', 2, 24, 'errors       ⟦h3|2⟧', 'dim'],
+      ['t', 2, 25, 'warnings     ⟦h2|27⟧', 'dim'],
+      ['t', 2, 26, 'Exit code 1: this would fail the build.', 'fg'],
+      ['t', 2, 27, 'Leaves out 1 rule of yours.', 'dim'],
+      ['t', 2, 29, 'Both errors are in Low cohesion in core:', 'dim'],
+      ['t', 2, 30, '⟦h3|!!⟧ orders::OrderService   ⟦dim|lcom⟧ 5', 'fg'],
+      ['t', 2, 31, '⟦h3|!!⟧ billing::Ledger        ⟦dim|lcom⟧ 4', 'fg'],
+      ['b', 50, 2, 70, 32, '23 hits, worst first'],
+      ['tb', 52, 3, [26, -4, 34], [['symbol', 'cc', 'where']].concat(hits.map((h) => [h[0], '⟦' + heat(h[1]) + '|' + h[1] + '⟧', '⟦dim|' + h[2] + '⟧'])), { head: 1, sel: 1 }],
+      ['t', 52, 17, '11 more below', 'faint'],
+      ['l', 52, 19, 117, 19, 's', 'faint'],
+      ['t', 52, 20, 'Spread of cyclomatic across all functions', 'faint'],
+      ['sp', 52, 22, [8, 8, 7, 6, 5, 5, 4, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'dim', 30, 'h3'],
+      ['l', 66, 21, 66, 23, 's', 'h2'],
+      ['t', 67, 21, '> 15', 'h2'],
+      ['t', 52, 24, '3,181 functions are under the line. 23 are over it.', 'dim'],
+      ['t', 52, 26, '⟦acc|e⟧ edit the rule: the line and hit count move as you type', 'dim'],
+    ];
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

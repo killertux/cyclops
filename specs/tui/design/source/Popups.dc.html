@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Popups</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"popup":{"editor":"enum","options":["more","relations","metrics"],"default":"metrics"},"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const popup = this.props.popup ?? 'metrics';
+    const node = (x, y, name, value, mode) => [
+      ['b', x, y, 20, 4, '', mode],
+      ['t', x + 2, y + 1, name, mode ? 'accb' : 'b'],
+      ['t', x + 2, y + 2, value, 'dim'],
+    ];
+    const background = [
+      ['b', 0, 2, 120, 32, 'Neighbors of billing'],
+      ['t', 2, 3, 'level ⟦accb|module⟧   depth ⟦accb|1⟧   relations ⟦accb|all⟧   overlay ⟦accb|cyclomatic⟧', 'dim'],
+    ].concat(
+      node(3, 6, 'orders ⟦h2|@⟧', 'cyclomatic ⟦h3|27⟧'),
+      node(3, 12, 'api::routes ⟦h2|!⟧', 'cyclomatic ⟦h2|19⟧'),
+      node(50, 12, 'billing ⟦h2|@⟧', 'cyclomatic ⟦h3|31⟧', 'f'),
+      node(97, 12, 'inventory', 'cyclomatic ⟦h2|13⟧'),
+      [['b', 3, 18, 20, 3, ''], ['t', 5, 19, '+3 more  ⟦acc|Enter⟧', 'dim']]
+    );
+    const sh = (o) => ['sh', Object.assign({ v: 'Diagram', crumb: 'shop › ⟦b|billing⟧', side: 'module' }, o)];
+    const close = [['Enter', 'pick'], ['Esc', 'close']];
+    const relations = [
+      ['imports', '>', 'A module depends on another', true], ['implements', '○', 'A type implements an interface', true],
+      ['inherits', '▷', 'A class extends a class', true], ['composes', '◆', 'A type has a field of another', true],
+      ['uses', '>', 'A function mentions a type', false], ['calls', '>', 'A function calls another', true],
+    ];
+    const metrics = [
+      ['cyclomatic', 'Paths through code', ''], ['cognitive', 'Difficulty to follow', ''], ['max_nesting', 'Deepest control flow', ''],
+      ['lines', 'Lines of code', ''], ['comment_lines', 'Lines of comments', 'neutral'], ['blank_lines', 'Blank lines', 'neutral'],
+      ['parameters', 'Function parameters', ''], ['members', 'Fields and methods', ''], ['duplication', 'Share of copied lines', ''],
+      ['lcom', 'Unrelated method groups', ''], ['afferent', 'Modules depending on it', 'neutral'], ['efferent', 'Modules it depends on', 'neutral'],
+      ['instability', 'Share of outgoing dependencies', 'neutral'], ['abstractness', 'Share of interfaces', 'neutral'], ['distance', 'Imbalance of the two', ''],
+      ['cycle size', 'Modules in its cycle', ''], ['churn', 'Commits changing it', 'neutral'], ['hotspot', 'Churn and complexity', ''],
+    ];
+    let ops;
+    if (popup === 'more') {
+      const rows = [['api::admin', '⟦h2|12⟧', 'exact'], ['inventory::audit ⟦dim|~⟧', '⟦h1|7⟧', 'inferred'], ['notes::digest', '⟦h0|3⟧', 'exact']];
+      ops = [sh({ hint: [['j k', 'move'], ['Enter', 'select'], ['Esc', 'close']], menu: false })].concat(background, [
+        ['b', 24, 15, 50, 9, '', 'p'],
+        ['t', 26, 16, '3 more depend on billing', 'popb'],
+        ['t', 26, 17, 'Worst first. Enter selects it in the diagram.', 'popd'],
+      ], rows.flatMap(([name, value, sure], i) => [
+        ['t', 26, 19 + i, name, i === 0 ? 'pops' : 'pop'], ['r', 56, 19 + i, value, i === 0 ? 'pops' : 'pop'], ['r', 71, 19 + i, sure, i === 0 ? 'pops' : 'popd'],
+      ]), [['h', 25, 19, 48]]);
+    } else if (popup === 'relations') {
+      ops = [sh({ hint: [['Space', 'tick'], ['Enter', 'apply'], ['Esc', 'close']], menu: false })].concat(background, [
+        ['b', 30, 8, 60, 13, '', 'p'],
+        ['t', 32, 9, 'Relations to draw', 'popb'],
+        ['t', 32, 10, '⟦popk|>⟧ ', 'pop'],
+      ], relations.flatMap(([name, glyph, meaning, on], i) => [
+        ['t', 32, 12 + i, (on ? '[x] ' : '[ ] ') + glyph + ' ' + name, i === 4 ? 'pops' : 'pop'],
+        ['t', 54, 12 + i, meaning, i === 4 ? 'pops' : 'popd'],
+      ]), [['h', 31, 16, 58], ['t', 32, 19, 'Type to narrow.   ⟦popk|Space⟧ tick   ⟦popk|Enter⟧ apply', 'popd']]);
+    } else {
+      ops = [sh({ hint: close, menu: false })].concat(background, [
+        ['b', 28, 5, 64, 25, '', 'p'],
+        ['t', 30, 6, 'Metric', 'popb'],
+        ['t', 30, 7, '⟦popk|>⟧ ', 'pop'],
+      ], metrics.flatMap(([name, meaning, tag], i) => [
+        ['t', 30, 9 + i, name, i === 0 ? 'pops' : 'pop'],
+        ['t', 46, 9 + i, meaning, i === 0 ? 'pops' : 'popd'],
+        ['r', 89, 9 + i, tag, i === 0 ? 'pops' : 'popd'],
+      ]), [['h', 29, 9, 62], ['t', 30, 28, 'Type to narrow. Neutral metrics have no heat.', 'popd']]);
+    }
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

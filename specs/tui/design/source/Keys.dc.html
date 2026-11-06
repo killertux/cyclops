@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Space menu</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const tree = [
+      [0, '▾', 'shop', 31], [1, '▾', 'billing', 31], [2, '▾', 'invoice', 31], [3, '▾', 'Invoice', 31],
+      [4, ' ', 'reconcile', 31], [4, ' ', 'apply_credit', 14], [4, ' ', 'finalize', 11], [4, ' ', 'total', 6],
+      [3, '▸', 'LineItem', 4], [2, '▸', 'tax', 22], [2, '▸', 'ledger', 12], [2, '▸', 'rates', 5],
+      [1, '▸', 'orders', 27], [1, '▸', 'catalog', 24], [1, '▸', 'inventory', 13], [1, '▸', 'notes', 1],
+    ];
+    const col = (x, title, list) => [['t', x, 24, title, 'popd']].concat(list.map(([k, d], i) => ['t', x, 25 + i, '⟦popk|' + k + '⟧  ' + d, 'pop']));
+    const ops = [
+      ['sh', { v: 'Explore', crumb: 'shop › billing › invoice › Invoice › ⟦b|reconcile⟧', side: 'method', cmd: ' ⟦acc|Space⟧ ⟦dim|press a key, or click one. Esc closes.⟧' }],
+      ['b', 0, 2, 120, 32, 'Structure', 'a'],
+    ].concat(
+      tree.flatMap(([d, c, name, v], i) => [['t', 2 + d * 2, 3 + i, c + ' ' + name, d === 0 ? 'b' : 'fg'], ['r', 117, 3 + i, v, v > 24 ? 'h3' : v > 15 ? 'h2' : v > 9 ? 'h1' : 'h0']]),
+      [['h', 1, 7, 118], ['b', 1, 23, 118, 10, '', 'p']],
+      col(4, 'Go to', [['o', 'Overview'], ['m', 'Map'], ['e', 'Explore'], ['d', 'Diagram'], ['f', 'Find'], ['a', 'Alerts'], ['s', 'Status']]),
+      col(32, 'Project', [['r', 'Refresh what changed'], ['p', 'Precise analysis'], ['t', 'Test code: off'], ['x', 'Export this view']]),
+      col(66, 'Session', [['?', 'All keys'], ['q', 'Quit']])
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

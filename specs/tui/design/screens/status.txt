@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › status
+╭─ Last refresh: 3 files changed, 2.4s ────────────────╮╭─ Precise analysis ───────────────────────────────────────────╮
+│ step         time result                             ││ language                 indexer          ready?             │
+│ Discover     0.1s 842 files                          ││ Rust                     rust-analyzer    yes                │
+│ Check        0.1s 3 changed                          ││ TypeScript, JavaScript   scip-typescript  no                 │
+│ Extract      0.2s 3 parsed, 839 from cache           ││ The project's dependencies are not installed.                │
+│ Link         1.4s 21,840 relations                   ││                                                              │
+│ Enrich          - skipped: no index yet              ││ Relations now                                                │
+│ History      0.1s 2 new commits                      ││ exact           71% ━━━━━━━━━━━━━━━━━━━━━━━━━━╸───────────   │
+│ Analyze      0.5s all metrics                        ││ inferred        24% ━━━━━━━━━─────────────────────────────   │
+│ Evaluate     0.0s 29 alerts                          ││ ambiguous        5% ━╸────────────────────────────────────   │
+│                                                      ││                                                              │
+│                                                      ││ semantic.mode manual   index none yet                        │
+╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────╯
+╭─ Problems: 2 files ──────────────────────────────────╮╭─ Test code ──────────────────────────────────────────────────╮
+│ storefront/src/legacy/old_cart.ts: syntax error      ││ Left out 214 files, 18,902 lines                             │
+│ src/billing/rates_table.rs: not valid UTF-8          ││                                                              │
+│                                                      ││ Hidden from every view, and counted in no metric.            │
+│ Everything else was analyzed as usual. Code around   ││ Switching never re-parses anything.                          │
+│ a syntax error still counts, as far as it can be     ││                                                              │
+│ understood.                                          ││ Space t include test code                                    │
+│                                                      │╰──────────────────────────────────────────────────────────────╯
+│                                                      │╭─ Semantic index ─────────────────────────────────────────────╮
+╰──────────────────────────────────────────────────────╯│                                                              │
+╭─ Known limits ───────────────────────────────────────╮│ No index yet, so calls are matched by name.                  │
+│ 14 functions contain macro calls.                    ││                                                              │
+│ Logic inside macros is undercounted, even with       ││ Once indexed, this shows the commit it belongs to and        │
+│ precise analysis.                                    ││ which files changed since. Those files fall back to          │
+│                                                      ││ syntax relations and are marked * everywhere.                │
+│ Metrics unavailable: none                            ││                                                              │
+│ Without git, churn and hotspot would be listed here. ││                                                              │
+│                                                      ││                                                              │
+╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────╯
+ NORMAL  metric cyclomatic  filter none  tests off  layer syntax                           29 alerts  2 problems  fresh
+ Enter open file  ]p next problem  Space p precise  Space t test code  Space r refresh              Space menu   ? keys

@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › billing                                                                                                  module
+╭─ Neighbors of billing ───────────────────────────────────────────────────────────────────────────────────────────────╮
+│ level module   depth 1   relations all   overlay cyclomatic                                                          │
+│                                                                                                                      │
+│                                                                                                                      │
+│  ╭──────────────────╮                                                                                                │
+│  │ orders @         │                                                                                                │
+│  │ cyclomatic 27    │                                                                                                │
+│  ╰──────────────────╯                                                                                                │
+│                                                                                                                      │
+│                                                                                                                      │
+│  ╭──────────────────╮                           ┏━━━━━━━━━━━━━━━━━━┓                           ╭──────────────────╮  │
+│  │ api::routes !    │                           ┃ billing @        ┃                           │ inventory        │  │
+│  │ cyclomatic 19    │                           ┃ cyclomatic 31    ┃                           │ cyclomatic 13    │  │
+│  ╰──────────────────╯ ╭────────────────────────────────────────────────╮                       ╰──────────────────╯  │
+│                       │ 3 more depend on billing                       │                                             │
+│                       │ Worst first. Enter selects it in the diagram.  │                                             │
+│  ╭──────────────────╮ │                                                │                                             │
+│  │ +3 more  Enter   │ │ api::admin                   12          exact │                                             │
+│  ╰──────────────────╯ │ inventory::audit ~            7       inferred │                                             │
+│                       │ notes::digest                 3          exact │                                             │
+│                       │                                                │                                             │
+│                       ╰────────────────────────────────────────────────╯                                             │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ NORMAL  metric cyclomatic  filter none  tests off  layer syntax                           29 alerts  2 problems  fresh
+ j k move  Enter select  Esc close

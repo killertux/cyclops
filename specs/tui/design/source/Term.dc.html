@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Visual language</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="position: relative; width: {{pw}}px; height: {{ph}}px; background: {{ground}}; color: {{ink}}; font-family: 'JetBrains Mono', Menlo, Consolas, monospace; font-size: 15px; line-height: 20px; font-variant-ligatures: none; overflow: hidden">
+<sc-for list="{{rects}}" as="r" hint-placeholder-count="4">
+<div style="position: absolute; box-sizing: border-box; left: {{r.l}}px; top: {{r.t}}px; width: {{r.w}}px; height: {{r.h}}px; background: {{r.bg}}; border-top: {{r.bt}}; border-right: {{r.br}}; border-bottom: {{r.bb}}; border-left: {{r.bl}}; border-radius: {{r.rad}}px"></div>
+</sc-for>
+<div style="position: absolute; left: 0; top: 0">
+<sc-for list="{{lines}}" as="ln" hint-placeholder-count="36">
+<div style="display: flex; height: 20px">
+<sc-for list="{{ln.runs}}" as="s" hint-placeholder-count="6">
+<span style="flex: 0 0 {{s.w}}px; overflow: hidden; white-space: pre; color: {{s.fg}}; background: {{s.bg}}; font-weight: {{s.fw}}; text-decoration: {{s.td}}">{{s.t}}</span>
+</sc-for>
+</div>
+</sc-for>
+</div>
+<sc-for list="{{tops}}" as="r" hint-placeholder-count="0">
+<div style="position: absolute; box-sizing: border-box; left: {{r.l}}px; top: {{r.t}}px; width: {{r.w}}px; height: {{r.h}}px; background: {{r.bg}}; border-top: {{r.bt}}; border-right: {{r.br}}; border-bottom: {{r.bb}}; border-left: {{r.bl}}; border-radius: {{r.rad}}px"></div>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"ops":{"editor":null},"cols":{"editor":null},"rows":{"editor":null},"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const light = this.props.theme === 'light';
+    const CW = 9, CH = 20, BG = light ? '#F6F7F9' : '#0F1216', SEL = light ? '#CFE6F2' : '#1E3A4C', LINE = light ? '#C3CAD3' : '#3A4350', TRACK = light ? '#DDE2E8' : '#232A33';
+    const cols = Number(this.props.cols ?? 120), rows = Number(this.props.rows ?? 36);
+    const mono = !!this.props.mono;
+    const gray = (c) => {
+      const n = parseInt(c.slice(1), 16);
+      const v = Math.round(0.3 * (n >> 16) + 0.59 * ((n >> 8) & 255) + 0.11 * (n & 255)).toString(16).padStart(2, '0');
+      return '#' + v + v + v;
+    };
+    const col = (c) => (mono && c && c[0] === '#' ? gray(c) : c);
+    const LIGHT = {
+      fg: ['#2A313A'], b: ['#0F1216', null, 1], dim: ['#59636F'], faint: ['#6A7480'],
+      acc: ['#0B6E99'], accb: ['#0B6E99', null, 1], key: ['#0B6E99', null, 1, 1],
+      h0: ['#59636F'], h1: ['#8A6A00'], h2: ['#B45309', null, 1], h3: ['#C2300F', null, 1],
+      on: ['#F6F7F9', '#0B6E99', 1], mode: ['#F6F7F9', '#2A313A', 1],
+      chip: ['#2F3742', '#E4E8ED'], chipa: ['#0B6E99', '#E4E8ED', 1], chiph: ['#A84A06', '#E4E8ED', 1], chipd: ['#59636F', '#E4E8ED'],
+      t0: ['#59636F', '#F0F2F5'], t1: ['#3A4450', '#DDE2E8'], t2: ['#5A3500', '#F5CF8E'], t3: ['#FFFFFF', '#B35509'], t4: ['#FFFFFF', '#B93A1C', 1],
+      kw: ['#2F6DA8'], str: ['#4F6B3A'], pop: ['#2A313A', '#FFFFFF'], popb: ['#0F1216', '#FFFFFF', 1], popd: ['#59636F', '#FFFFFF'], popk: ['#0B6E99', '#FFFFFF', 1],
+      pops: ['#0F1216', SEL, 1], poph: ['#B45309', '#FFFFFF', 1], opaque: ['#2A313A', BG],
+    };
+    const DARK = {
+      fg: ['#D5DAE1'], b: ['#F1F4F8', null, 1], dim: ['#8A94A3'], faint: ['#76808F'],
+      acc: ['#6CC4E8'], accb: ['#6CC4E8', null, 1], key: ['#6CC4E8', null, 1, 1],
+      h0: ['#8A94A3'], h1: ['#E3C878'], h2: ['#F2A03D', null, 1], h3: ['#FF7A59', null, 1],
+      on: ['#0F1216', '#6CC4E8', 1], mode: ['#0F1216', '#D5DAE1', 1],
+      chip: ['#C9D0D9', '#1C232C'], chipa: ['#6CC4E8', '#1C232C', 1], chiph: ['#F2A03D', '#1C232C', 1], chipd: ['#8A94A3', '#1C232C'],
+      t0: ['#8A94A3', '#161B22'], t1: ['#B8C1CC', '#232B35'], t2: ['#F0E6C8', '#4F4420'], t3: ['#FFF0E0', '#A5521A'], t4: ['#FFFFFF', '#B93A1C', 1],
+      kw: ['#8FB8DE'], str: ['#B4C4A4'], pop: ['#D5DAE1', '#171C23'], popb: ['#F1F4F8', '#171C23', 1], popd: ['#8A94A3', '#171C23'], popk: ['#6CC4E8', '#171C23', 1],
+      pops: ['#F1F4F8', SEL, 1], poph: ['#F2A03D', '#171C23', 1], opaque: ['#D5DAE1', BG],
+    };
+    const S = light ? LIGHT : DARK;
+    const PX = { B: '#5E7F94', D: '#3F5868', W: '#F1F4F8', I: '#6CC4E8', P: '#0F1216', H: '#8FB8DE', M: '#0F1216', O: '#F2A03D', L: '#4C6878' };
+    const G = [];
+    for (let y = 0; y < rows; y++) {
+      const row = [];
+      for (let x = 0; x < cols; x++) row.push({ c: ' ', k: 'fg', bg: null });
+      G.push(row);
+    }
+    const R = [], R2 = [];
+    const parse = (s, k) => {
+      const out = [], re = /⟦(\w+)\|([^⟧]*)⟧/g;
+      let i = 0, m;
+      while ((m = re.exec(s))) {
+        for (const ch of s.slice(i, m.index)) out.push([ch, k]);
+        for (const ch of m[2]) out.push([ch, m[1]]);
+        i = re.lastIndex;
+      }
+      for (const ch of s.slice(i)) out.push([ch, k]);
+      return out;
+    };
+    const put = (x, y, s, k = 'fg') => {
+      parse(String(s), k).forEach(([ch, t], i) => {
+        const c = G[y] && G[y][x + i];
+        if (!c) return;
+        c.c = ch; c.k = t;
+        const st = S[t] || S.fg;
+        if (st[1]) c.bg = st[1];
+      });
+    };
+    const rput = (x, y, s, k = 'fg') => put(x - parse(String(s), k).length + 1, y, s, k);
+    const fill = (x, y, w, h, k) => {
+      for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) {
+        const c = G[j] && G[j][i];
+        if (c) { c.c = ' '; c.k = k; c.bg = (S[k] || S.fg)[1]; }
+      }
+    };
+    const hl = (x, y, w, bg = SEL) => {
+      const fillc = bg === 'ground' ? BG : bg;
+      for (let i = x; i < x + w; i++) { const c = G[y] && G[y][i]; if (c) c.bg = fillc; }
+    };
+    const rect = (l, t, w, h, o = {}) => Object.assign({ l, t, w, h, bg: 'transparent', bt: '0 none transparent', br: '0 none transparent', bb: '0 none transparent', bl: '0 none transparent', rad: 0 }, o);
+    const edge = (c, st = 'solid', px = 1) => px + 'px ' + st + ' ' + col(c);
+    const box = (x, y, w, h, title, mode) => {
+      const c = mode === 'a' || mode === 'p' || mode === 'f' ? S.acc[0] : LINE, e = edge(c, 'solid', mode === 'f' ? 2 : 1);
+      const r = rect(x * CW + 4, y * CH + 10, (w - 1) * CW + 1, (h - 1) * CH + 1, { bt: e, br: e, bb: e, bl: e, rad: 5 });
+      if (mode === 'p') { fill(x, y, w, h, 'pop'); R2.push(r); return; }
+      if (mode === 'f') { R.push(r); return; }
+      R.push(r);
+      if (title) {
+        const n = parse(' ' + title + ' ', 'dim').length;
+        put(x + 2, y, ' ' + title + ' ', mode === 'a' ? 'accb' : 'dim');
+        hl(x + 2, y, n, BG);
+      }
+    };
+    const hr = (x, y, w, mode) => R.push(rect(x * CW + 4, y * CH + 10, (w - 1) * CW + 1, 0, { bt: edge(mode === 'f' ? S.acc[0] : LINE) }));
+    const line = (x1, y1, x2, y2, st = 's', k = 'dim') => {
+      const c = (S[k] || S.dim)[0];
+      const e = st === 'B' ? edge(c, 'solid', 2) : edge(c, st === 'd' ? 'dashed' : st === 'o' ? 'dotted' : 'solid');
+      const l = Math.min(x1, x2) * CW + 4, t = Math.min(y1, y2) * CH + 10;
+      if (y1 === y2) R.push(rect(l, t, Math.abs(x2 - x1) * CW + 1, 0, { bt: e }));
+      else R.push(rect(l, t, 0, Math.abs(y2 - y1) * CH + 1, { bl: e }));
+    };
+    const tb = (x, y, ws, rs, o = {}) => {
+      rs.forEach((r, i) => {
+        let cx = x;
+        const base = o.head && i === 0 ? 'faint' : 'fg';
+        r.forEach((cell, j) => {
+          const w = Math.abs(ws[j]), s = String(cell), n = parse(s, base).length;
+          put(cx + (ws[j] < 0 ? Math.max(0, w - n) : 0), y + i, s, base);
+          cx += w + 1;
+        });
+        if (o.sel === i) hl(x, y + i, ws.reduce((a, b) => a + Math.abs(b) + 1, -1));
+      });
+    };
+    const sp = (x, y, vals, k = 'dim', mark = -1, markTok = 'h2') => {
+      vals.forEach((v, i) => {
+        const h = Math.round(v / 8 * 16);
+        if (h > 0) R.push(rect((x + i) * CW + 1, y * CH + 18 - h, CW - 2, h, { bg: col((S[i === mark ? markTok : k] || S.dim)[0]) }));
+      });
+    };
+    const bar = (x, y, w, frac, k = 'h1') => {
+      R.push(rect(x * CW, y * CH + 7, w * CW, 6, { bg: col(TRACK) }));
+      R.push(rect(x * CW, y * CH + 7, Math.round(w * CW * frac), 6, { bg: col((S[k] || S.dim)[0]) }));
+    };
+    const px = (x, y, art, sc = 1, over = {}) => {
+      const P = Object.assign({}, PX, over), pw = CW * sc, ph = (CH / 2) * sc;
+      art.forEach((row, j) => {
+        let i = 0;
+        while (i < row.length) {
+          const ch = row[i];
+          let e = i;
+          while (e < row.length && row[e] === ch) e++;
+          if (P[ch]) R.push(rect(x * CW + i * pw, y * CH + j * ph, (e - i) * pw, ph, { bg: col(P[ch]) }));
+          i = e;
+        }
+      });
+    };
+    const shell = (o) => {
+      const tabs = ['Overview', 'Map', 'Explore', 'Diagram', 'Find', 'Alerts', 'Status'];
+      R.push(rect(8, 3, 19, 14, { bg: col('#5E7F94'), rad: 7 }));
+      R.push(rect(10, 5, 15, 10, { bg: col('#F1F4F8'), rad: 5 }));
+      R.push(rect(13, 6, 9, 8, { bg: col('#6CC4E8'), rad: 4 }));
+      R.push(rect(15, 8, 5, 4, { bg: col('#0F1216'), rad: 2 }));
+      put(4, 0, 'cyclops', 'b');
+      let x = 12;
+      tabs.forEach((t) => {
+        if (t === o.v) put(x, 0, ' ' + t + ' ', 'on');
+        else put(x, 0, ' ⟦key|' + t[0] + '⟧' + t.slice(1) + ' ', 'dim');
+        x += t.length + 2;
+      });
+      if (o.proj !== '') rput(cols - 2, 0, o.proj ?? 'shop · 842 files · 96,410 lines', 'faint');
+      if (o.crumb) put(1, 1, o.crumb, 'dim');
+      if (o.side) rput(cols - 2, 1, o.side, 'faint');
+      const y = rows - 2;
+      fill(0, y, cols, 1, 'chip');
+      const m = ' ' + (o.mode ?? 'NORMAL') + ' ';
+      put(0, y, m, o.mk ?? 'mode');
+      const lens = o.lens ?? ('metric ⟦chipa|' + (o.metric ?? 'cyclomatic') + '⟧  filter ' + (o.filter ? '⟦chipa|' + o.filter + '⟧' : '⟦chipd|none⟧') + '  tests ' + (o.tests ?? 'off') + '  layer ' + (o.layer ?? 'syntax'));
+      put(m.length + 1, y, lens, 'chip');
+      rput(cols - 2, y, o.right ?? '⟦chiph|29 alerts⟧  2 problems  ⟦chipd|fresh⟧', 'chip');
+      if (o.cmd) put(0, rows - 1, o.cmd, 'fg');
+      else if (o.hint) {
+        let hx = 1;
+        o.hint.forEach(([k, d]) => { put(hx, rows - 1, '⟦acc|' + k + '⟧ ' + d, 'dim'); hx += k.length + d.length + 3; });
+        if (o.menu !== false) rput(cols - 2, rows - 1, '⟦acc|Space⟧ menu   ⟦acc|?⟧ keys', 'dim');
+      }
+    };
+    const D = { t: put, r: rput, b: box, hr, l: line, f: fill, h: hl, tb, sh: shell, sp, bar, px };
+    const DEMO = [
+      ['t', 2, 1, 'Visual language', 'b'],
+      ['t', 2, 2, 'Warm means risk. Cool means the interface. Nothing relies on color alone.', 'dim'],
+      ['b', 1, 4, 57, 9, 'Metric heat'],
+      ['f', 3, 6, 10, 3, 't0'], ['f', 13, 6, 10, 3, 't1'], ['f', 23, 6, 10, 3, 't2'], ['f', 33, 6, 10, 3, 't3'], ['f', 43, 6, 13, 3, 't4'],
+      ['t', 4, 7, 'n/a', 't0'], ['t', 14, 7, 'quiet', 't1'], ['t', 24, 7, 'mild', 't2'], ['t', 34, 7, 'high', 't3'], ['t', 44, 7, 'severe', 't4'],
+      ['t', 3, 10, 'Heat is a fixed level per metric. Values are printed.', 'dim'],
+      ['b', 60, 4, 59, 9, 'Confidence and cycles'],
+      ['l', 63, 6, 73, 6, 's', 'fg'], ['t', 75, 6, 'exact: in the code, or proven'],
+      ['l', 63, 7, 73, 7, 'd', 'fg'], ['t', 75, 7, 'inferred: one symbol fits'],
+      ['l', 63, 8, 73, 8, 'o', 'fg'], ['t', 75, 8, 'ambiguous: several symbols fit'],
+      ['l', 63, 10, 73, 10, 'B', 'h3'], ['t', 75, 10, 'part of a dependency cycle'],
+      ['b', 1, 14, 57, 10, 'Marks work without color'],
+      ['tb', 3, 16, [5, 46], [['⟦h2|!⟧', 'warning alert'], ['⟦h3|!!⟧', 'error alert'], ['⟦h2|@⟧', 'in a dependency cycle'], ['⟦dim|~⟧', 'relation is a guess, not proven'], ['⟦dim|n/a⟧', 'metric does not apply here'], ['⟦dim|*⟧', 'stale: file changed since the index']]],
+      ['b', 60, 14, 59, 10, 'Interface'],
+      ['t', 63, 16, ' Explore ', 'on'], ['t', 74, 16, 'current view'],
+      ['t', 63, 17, '⟦key|D⟧iagram', 'dim'], ['t', 74, 17, 'underlined letter: ⟦acc|Space⟧ then ⟦acc|d⟧'],
+      ['t', 63, 18, 'selected', 'b'], ['h', 62, 18, 11], ['t', 74, 18, 'current row'],
+      ['t', 63, 19, ' tests off ', 'chip'], ['t', 74, 19, 'status chip, click to change'],
+      ['t', 63, 20, '▸ node', 'b'], ['h', 62, 20, 11], ['t', 74, 20, 'selection: cursor and background'],
+      ['l', 63, 21, 72, 21, 's', 'acc'], ['t', 74, 21, 'pane with the keyboard'],
+      ['l', 63, 22, 72, 22, 'B', 'acc'], ['t', 74, 22, 'focus: heavy border on a node'],
+      ['b', 1, 25, 57, 9, 'Numbers come with context'],
+      ['t', 3, 27, 'cyclomatic'], ['t', 15, 27, '31', 'h3'], ['t', 21, 27, '#1 of 3,204', 'dim'],
+      ['sp', 34, 27, [8, 5, 3, 2, 1, 1, 1, 1], 'dim', 7, 'h3'],
+      ['t', 3, 28, 'lines'], ['t', 15, 28, '168', 'h3'], ['bar', 21, 28, 21, 0.72, 'h3'],
+      ['t', 3, 29, 'instability'], ['t', 15, 29, '0.94', 'fg'], ['t', 21, 29, 'neutral: no heat, never warm', 'dim'],
+      ['t', 3, 30, 'lcom'], ['t', 15, 30, 'n/a', 'dim'], ['t', 21, 30, 'does not apply: never 0', 'dim'],
+      ['b', 60, 25, 59, 9, 'Relation kinds and members'],
+      ['t', 63, 27, '⟦fg|>⟧  uses, imports, calls   ⟦fg|▷⟧  inherits', 'dim'],
+      ['t', 63, 28, '⟦fg|○⟧  implements             ⟦fg|◆⟧  composes, at the owner', 'dim'],
+      ['t', 63, 30, '⟦fg|+⟧  public   ⟦fg|#⟧  restricted   ⟦fg|-⟧  private', 'dim'],
+    ];
+    (this.props.ops ?? DEMO).forEach((o) => { const fn = D[o[0]]; if (fn) fn(...o.slice(1)); });
+    const lines = G.map((row) => {
+      const runs = [];
+      let cur = null;
+      row.forEach((c) => {
+        const key = c.k + '/' + (c.bg || '');
+        if (cur && cur.key === key) { cur.t += c.c; cur.n += 1; }
+        else { cur = { key, t: c.c, n: 1, k: c.k, b: c.bg }; runs.push(cur); }
+      });
+      return {
+        runs: runs.map((r) => {
+          const s = S[r.k] || S.fg;
+          return { t: r.t, w: r.n * CW, fg: col(s[0]), bg: r.b ? col(r.b) : 'transparent', fw: s[2] ? 700 : 400, td: s[3] ? 'underline' : 'none' };
+        }),
+      };
+    });
+    return { pw: cols * CW, ph: rows * CH, ground: col(BG), ink: col('#D5DAE1'), rects: R, tops: R2, lines };
+  }
+}
+</script>
+</body>
+</html>

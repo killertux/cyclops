@@ -1,0 +1,8 @@
+# Runs the specification in specs/. See specs/writing-specs.md.
+execute_server_command = "cargo run --quiet -p cyclops-fixtures --bin spec -- %p"
+# SliM reserves port 1 for communication over the child process's stdin/stdout.
+port = 1
+pool_size = 1
+test_dir = "specs/"
+recursive = true
+show_snoozed = false

@@ -1,0 +1,36 @@
+ The Why section, when a metric has no lines to point at
+ Each form shares one layout: the value, what it means, a list, and keys. Enter jumps to the row.
+
+╭─ Inspector: Why ─────────────────────╮╭─ Inspector: Why ─────────────────────╮╭─ Inspector: Why ─────────────────────╮
+│                                      ││                                      ││                                      │
+│ Why efferent is 5                    ││ Why cycle size is 3                  ││ Why duplication is 23.4%             │
+│ The modules on each side of billing. ││ The way around the cycle.            ││ Where the copies of export are.      │
+│                                      ││ Removing one link breaks it.         ││                                      │
+│                                      ││                                      ││                                      │
+│ Depends on 5                         ││ cart @                               ││ Copy 1   38 lines                    │
+│ catalog::model                       ││   > checkout   imports, exact        ││ src/export/csv.rs:14                 │
+│ inventory                            ││   > session    imports, exact        ││ src/export/json.rs:9                 │
+│ orders @                             ││   > cart       imports, inferred ~   ││                                      │
+│ catalog::pricing ~                   ││                                      ││ Copy 2   21 lines                    │
+│ api::auth ~                          ││                                      ││ src/export/csv.rs:88                 │
+│                                      ││                                      ││ src/export/xml.rs:40                 │
+│ Depended on by 6                     ││                                      ││ src/export/json.rs:71                │
+│ orders @                             ││                                      ││                                      │
+│ api::routes                          ││                                      ││                                      │
+│ jobs::export                         ││                                      ││                                      │
+│ api::admin                           ││                                      ││                                      │
+│ notes::digest                        ││                                      ││                                      │
+│ inventory::audit ~                   ││                                      ││                                      │
+│                                      ││                                      ││                                      │
+│ Instability 5 / (5 + 6) = 0.45       ││                                      ││                                      │
+│                                      ││                                      ││                                      │
+│                                      ││                                      ││                                      │
+│                                      ││                                      ││                                      │
+│                                      ││                                      ││                                      │
+│                                      ││                                      ││                                      │
+│                                      ││                                      ││                                      │
+│                                      ││                                      ││                                      │
+│ Enter jump   gr impact               ││ Enter jump   ]c next cycle           ││ Enter jump   ]d next clone           │
+╰──────────────────────────────────────╯╰──────────────────────────────────────╯╰──────────────────────────────────────╯
+
+

@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › status
+╭─ Last refresh: 3 files changed, 2.4s ────────────────╮╭─ Precise analysis ───────────────────────────────────────────╮
+│ step         time result                             ││ language                 indexer          ready?             │
+│ Discover     0.1s 842 files                          ││ Rust                     rust-analyzer    yes                │
+│ Check        0.1s 3 changed                          ││ TypeScript, JavaScript   scip-typescript  no                 │
+│ Extract      0.2s 3 parsed, 839 from cache           ││ The project's dependencies are not installed.                │
+│ Link         1.4s 21,840 relations                   ││                                                              │
+│ Enrich          - skipped: no index yet              ││ Relations now                                                │
+│ History      0.1s 2 new commits                      ││ exact           71% ━━━━━━━━━━━━━━━━━━━━━━━━━━╸───────────   │
+│ Analyze      0.5s all metr╭──────────────────────────────────────────────────────────────╮────────────────────────   │
+│ Evaluate     0.0s 29 alert│ Run precise analysis?                                        │────────────────────────   │
+│                           │                                                              │                           │
+│                           │ Indexing runs compiler tooling over the whole project.       │yet                        │
+╰───────────────────────────│ It is slow, and for Rust it may run this project's           │───────────────────────────╯
+╭─ Problems: 2 files ───────│ build scripts and proc macros.                               │───────────────────────────╮
+│ storefront/src/legacy/old_│                                                              │                           │
+│ src/billing/rates_table.rs│ You can keep browsing. It shows how long it has run.         │                           │
+│                           │                                                              │d in no metric.            │
+│ Everything else was analyz│ y run rust-analyzer now    n not now                         │.                          │
+│ a syntax error still count╰──────────────────────────────────────────────────────────────╯                           │
+│ understood.                                          ││ Space t include test code                                    │
+│                                                      │╰──────────────────────────────────────────────────────────────╯
+│                                                      │╭─ Semantic index ─────────────────────────────────────────────╮
+╰──────────────────────────────────────────────────────╯│                                                              │
+╭─ Known limits ───────────────────────────────────────╮│ No index yet, so calls are matched by name.                  │
+│ 14 functions contain macro calls.                    ││                                                              │
+│ Logic inside macros is undercounted, even with       ││ Once indexed, this shows the commit it belongs to and        │
+│ precise analysis.                                    ││ which files changed since. Those files fall back to          │
+│                                                      ││ syntax relations and are marked * everywhere.                │
+│ Metrics unavailable: none                            ││                                                              │
+│ Without git, churn and hotspot would be listed here. ││                                                              │
+│                                                      ││                                                              │
+╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────╯
+ CONFIRM  metric cyclomatic  filter none  tests off  layer syntax                          29 alerts  2 problems  fresh
+ y run rust-analyzer  n not now  Esc close

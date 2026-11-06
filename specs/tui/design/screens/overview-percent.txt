@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop                                                                                                           project
+╭─ shop ───────────────────────────────╮ ╭─ Metrics ───────────────────────────────────────────────────────────────────╮
+│ Packages            4                │ │ metric        spread    highest                                       value │
+│ Modules           188                │ │ cyclomatic    ▇▆▃▂▁▁ ▁  Invoice::reconcile                               31 │
+│ Types             612                │ │ cognitive     ▇▅▃▂▁▁▁▁  Invoice::reconcile                               58 │
+│ Functions       3,204                │ │ max_nesting   ▇▇▄▂▁  ▁  Invoice::reconcile                                6 │
+│ Files             842                │ │ lines         ▇▆▃▂▁▁ ▁  export::run_all                                 214 │
+│ Lines          96,410  tests left out│ │ parameters    ▇▇▅▂▁  ▁  pricing::resolve_price                            9 │
+│                                      │ │ duplication   ▇▄▂▁▁▁ ▁  shop_jobs::export                             23.4% │
+│ rust       ━━━━━━━━━━━━╸─────  71%   │ │ lcom          ▇▃▂▁ ▁ ▁  orders::OrderService                              5 │
+│ typescript ━━━━━─────────────  29%   │ │ afferent      ▇▅▂▁▁  ▁  catalog::model                                   61 │
+│                                      │ │ efferent      ▇▆▄▂▁▁ ▁  shop_api::routes                                 38 │
+╰──────────────────────────────────────╯ │ instability   ▂▃▄▆▇▆▄▃  shop_api::routes                               0.94 │
+╭─ Alerts ─────────────────────────────╮ │ distance      ▅▆▇▅▃▂▁▁  shop::billing                                  0.41 │
+│ 2 error   27 warning                 │ │ cycle size    ▇ ▃       cart, checkout, session                           3 │
+│                                      │ │ churn         ▇▅▃▂▁▁▁▁  src/billing/invoice.rs                           47 │
+│ !   23  Very complex function        │ │ hotspot       ▇▄▂▁▁▁ ▁  src/billing/invoice.rs                         1.00 │
+│ !!  2   Low cohesion in core         │ │                                                                             │
+│ !   4   Far from the main line       │ ╰─────────────────────────────────────────────────────────────────────────────╯
+│                                      │ ╭─ Highest by hotspot ────────────────────────────────────────────────────────╮
+╰──────────────────────────────────────╯ │ file                                churn     cx hotspot                    │
+╭─ Analysis ───────────────────────────╮ │ src/billing/invoice.rs                 47     84    1.00  ━━━━━━━━━━━━━━━━━ │
+│ Syntax  fresh                        │ │ src/orders/checkout.rs                 41     68    0.71  ━━━━━━━━━━━━───── │
+│ Precise 38%               ▄██▄       │ │ src/catalog/pricing.rs                 29     65    0.48  ━━━━━━━━───────── │
+│ ━━━━━━───────────     ▄▄████████▄▄   │ │ storefront/src/cart/reducer.ts         26     53    0.35  ━━━━━╸─────────── │
+│ rust-analyzer        ██▀▀▀▀▀████▀██  │ │ src/billing/tax.rs                     22     52    0.29  ━━━━╸──────────── │
+│ Exact   71%         ████████████████ │ │ src/orders/service.rs                  24     39    0.24  ━━━━───────────── │
+│ Problems 2           ██▀▀▀▀▀████▀██  │ │ shop-api/src/routes/orders.rs          19     41    0.20  ━━━────────────── │
+│ Tests   left out     ████▀▀▀▀▀▀████  │ │ storefront/src/checkout/steps.tsx      17     36    0.16  ━━╸────────────── │
+│                       ▀▀▀▀▀▀▀▀▀▀▀▀   │ │                                                                             │
+│ Space s details                      │ │ This list follows the selected metric.   Space f rank all 842               │
+│ Keep browsing.                       │ │                                                                             │
+╰──────────────────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────╯
+ NORMAL  metric hotspot  filter none  tests off  layer syntax                       29 alerts  2 problems  indexing 38%
+ j k pick metric  Tab next pane  Enter open  M metric  f filter  Ctrl-p jump                        Space menu   ? keys

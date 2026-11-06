@@ -1,0 +1,86 @@
+# Precise Analysis
+
+Back to the [specification index](../README.md).
+
+The syntax layer understands code, but it cannot always know what a name refers to.
+Precise analysis uses each language's compiler tooling to replace guessed
+[relations](../model/relations.md) with exact ones.
+
+| Language               | Indexer           | Needs                                |
+| ---------------------- | ----------------- | ------------------------------------ |
+| Rust                   | `rust-analyzer`   | rust-analyzer and a Cargo toolchain  |
+| TypeScript, JavaScript | `scip-typescript` | Node, and the project's dependencies |
+
+Precise analysis is slow because it covers the whole project, and indexing a Rust
+project may run its build scripts and proc macros. So it only runs when asked.
+
+## When it runs
+
+`semantic.mode` is `off`, `manual`, or `always`. As
+[configuration](../project/configuration.md#what-the-file-cannot-do) explains, `always`
+is only accepted from your own file, a flag or the environment.
+
+[//]: # "import Spec.Fixtures"
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation        | workspace | steps                                     | indexers run? | problems?                                        |
+| ------------------ | --------- | ----------------------------------------- | ------------- | ------------------------------------------------ |
+| By default         | rust-shop |                                           | no            | none                                             |
+| Asked for          | rust-shop | `precise analysis`                        | yes           | none                                             |
+| Always             | rust-shop | `env CYCLOPS_SEMANTIC_MODE always`        | yes           | none                                             |
+| Turned off         | rust-shop | `set semantic.mode off`                   | no            | none                                             |
+| Asked for, but off | rust-shop | `set semantic.mode off; precise analysis` | no            | Precise analysis is turned off for this project. |
+
+## What it changes
+
+An exact answer replaces a guess. See how relations are
+[guessed without it](../model/relations.md#calls).
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation        | workspace     | steps              | from                       | to                              | confidence? |
+| ------------------ | ------------- | ------------------ | -------------------------- | ------------------------------- | ----------- |
+| Without it         | rust-shop     |                    | shop::orders::Order::total | shop::billing::Invoice::total   | ambiguous   |
+| With it            | rust-shop     | `precise analysis` | shop::orders::Order::total | shop::billing::Invoice::total   | exact       |
+| A wrong candidate  | rust-shop     | `precise analysis` | shop::orders::Order::total | shop::orders::Order::total      | none        |
+| A single candidate | rust-shop     | `precise analysis` | shop::orders::Order::total | shop::billing::Invoice::is_free | exact       |
+| TypeScript         | ts-shop       | `precise analysis` | src/orders::Order::total   | src/billing::Invoice::total     | exact       |
+| A Rust re-export   | rust-reexport | `precise analysis` | reexport::app::make        | reexport::inner::Thing          | exact       |
+
+Metrics never need it. Complexity, size and duplication come from the syntax layer,
+so they do not change.
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation | workspace | steps              | subject                    | cyclomatic? |
+| ----------- | --------- | ------------------ | -------------------------- | ----------- |
+| Without it  | rust-shop |                    | shop::orders::Order::total | 3           |
+| With it     | rust-shop | `precise analysis` | shop::orders::Order::total | 3           |
+
+## Results that are out of date
+
+An index belongs to the code it was made from. Relations from a file that has changed
+since then go back to what the syntax layer found, until the next precise analysis.
+Cyclops never presents old data as current.
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation          | workspace | steps                                                    | from                       | to                            | confidence? | index current? |
+| -------------------- | --------- | -------------------------------------------------------- | -------------------------- | ----------------------------- | ----------- | -------------- |
+| Still current        | rust-shop | `precise analysis`                                       | shop::orders::Order::total | shop::billing::Invoice::total | exact       | yes            |
+| That file changed    | rust-shop | `precise analysis; edit src/orders.rs`                   | shop::orders::Order::total | shop::billing::Invoice::total | ambiguous   | no             |
+| Another file changed | rust-shop | `precise analysis; edit src/notes.rs`                    | shop::orders::Order::total | shop::billing::Invoice::total | exact       | no             |
+| Indexed again        | rust-shop | `precise analysis; edit src/orders.rs; precise analysis` | shop::orders::Order::total | shop::billing::Invoice::total | exact       | yes            |
+
+## When a tool is missing
+
+A missing tool is never fatal. Cyclops says what is missing, keeps the syntax layer's
+results, and still uses the indexers it can.
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation      | workspace | steps                                         | analyzed? | problems?                                                   |
+| ---------------- | --------- | --------------------------------------------- | --------- | ----------------------------------------------------------- |
+| No rust-analyzer | rust-shop | `remove tool rust-analyzer; precise analysis` | yes       | Precise analysis skipped for Rust: rust-analyzer not found. |
+| No Node          | ts-shop   | `remove tool node; precise analysis`          | yes       | Precise analysis skipped for TypeScript: Node not found.    |
+| Not asked for    | rust-shop | `remove tool rust-analyzer`                   | yes       | none                                                        |

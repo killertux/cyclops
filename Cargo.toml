@@ -1,0 +1,49 @@
+[workspace]
+members = ["fixtures"]
+
+[package]
+name = "cyclops"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+# Lint groups. Priority -1 lets the individual lints below override them.
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+# Code must not panic: return a Result or Option instead.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+
+# Errors must not be silently dropped.
+let_underscore_must_use = "deny"
+unused_result_ok = "deny"
+
+# Cleanup must run: these skip destructors.
+exit = "deny"
+mem_forget = "deny"
+
+# Debug leftovers.
+dbg_macro = "deny"
+
+# Lint overrides must use #[expect] and state a reason.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+
+# If unsafe is ever approved, each block needs a SAFETY comment.
+undocumented_unsafe_blocks = "deny"

@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ storefront › cart › Cart                                                                     class · selected LineItem
+╭─ Neighbors of Cart ──────────────────────────────────────────────────────────────╮╭─ Selected: LineItem ─────────────╮
+│ level type   depth 1   relations all   overlay cyclomatic                        ││ LineItem                         │
+│                                                                                  ││ class · src/cart/line.ts:4       │
+│                                                         ╭──────────────────────╮ ││                                  │
+│ ╭──────────────────────╮    ┏━━━━━━━━━━━━━━━━━━━━━━┓ ┌─▷│ Store              4 │ ││  Metrics H L sections            │
+│ │ Checkout          18 │    ┃ Cart ! @          22 ┃ │  ├──────────────────────┤ ││                                  │
+│ ├──────────────────────┤    ┠──────────────────────┨ │  │ + load()           4 │ ││ metric       value among 612     │
+│ │ + submit() !      18 │┄┐  ┃ - items          n/a ┃─┘  │ +12 more             │ ││ cyclomatic       3 #340          │
+│ │ + quote()          7 │ ┆  ┃ - coupon         n/a ┃    ╰──────────────────────╯ ││ cognitive        4 #301          │
+│ │ +4 more              │ ┆  ┃ # status         n/a ┃    ╭──────────────────────╮ ││ lcom             1 #212          │
+│ ╰──────────────────────╯ ┆  ┠──────────────────────┨    │ «interface»          │ ││ members          4 #388          │
+│                          ┆  ┃ + reduce() !      22 ┃───○│ Persisted          2 │ ││                                  │
+│                          └┄>┃ + total()          9 ┃    ├──────────────────────┤ ││ Relations                        │
+│ ╭──────────────────────╮    ┃ + apply()          6 ┃    │ + save()           2 │ ││ ◆ composed by Cart               │
+│ │ CartView           3 │    ┃ - merge()          4 ┃◆─┐ ╰──────────────────────╯ ││ > used by CartView ~             │
+│ ├──────────────────────┤  ┌>┃ +9 more              ┃╌┐│ ╭──────────────────────╮ ││                                  │
+│ │ + render()         3 │╌╌┘ ┗━━━━━━━━━━━━━━━━━━━━━━┛ ╎└─│▸LineItem           3 │ ││ The diagram stays on Cart.       │
+│ │ +2 more              │                             ╎  ├──────────────────────┤ ││ c center on LineItem             │
+│ ╰──────────────────────╯                             ╎  │ + qty            n/a │ ││                                  │
+│                                                      ╎  │ +3 more              │ ││                                  │
+│                                                      ╎  ╰──────────────────────╯ ││                                  │
+│                                                      ╎  ╭──────────────────────╮ ││                                  │
+│                                                      ╎  │ «alias»              │ ││                                  │
+│                                                      └╌>│ Money                │ ││                                  │
+│                                                         ╰──────────────────────╯ ││                                  │
+│                                                                                  ││                                  │
+│                                                                                  ││                                  │
+│                                                                                  ││                                  │
+│ ────── exact  ╌╌╌╌╌╌ inferred  ┄┄┄┄┄┄ ambiguous  ━━━━━━ cycle                    ││                                  │
+│ > uses, imports, calls  ▷ inherits  ○ implements  ◆ composes                     ││                                  │
+│ + public  # restricted  - private   ! alert  @ module in a cycle                 ││                                  │
+╰──────────────────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
+ NORMAL  metric cyclomatic  filter none  tests off  layer syntax                           29 alerts  2 problems  fresh
+ hjkl move  Enter expand  c center  < > depth  r relations  M overlay  gd why                       Space menu   ? keys

@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ New rule from Invoice::reconcile                                                           prefilled from cognitive 58
+╭─ New rule ─────────────────────────────────────────╮╭─ Preview: would fire on 2 symbols ─────────────────────────────╮
+│                                                    ││                                                                │
+│ name       Tangled billing logic                   ││ Spread of cognitive in src/billing/**                          │
+│ metric     cognitive                               ││                     │> 30                                      │
+│ scope      function                                ││ ▇▇▆▅▄▄▃▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                               │
+│ when       > 30                                    ││                     │                                          │
+│ severity   warning                                 ││                                                                │
+│ paths      src/billing/**                          ││ !  Invoice::reconcile                        58                │
+│ enabled    true                                    ││ !  tax::apply_rules                          33                │
+│                                                    ││                                                                │
+│ i edit field   Tab next field                      ││ Next closest: Ledger::post at 24. The line sits in a clear gap.│
+│ :w save rule  :w user keep it yours  :q discard    ││                                                                │
+│ Checked as you type. A rule that could             ││                                                                │
+│ never work shows the reason here.                  ││                                                                │
+╰────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+╭─ Writes to .cyclops/config.toml, which the team shares ──────────────────────────────────────────────────────────────╮
+│ 42  severity = "error"                                                                                               │
+│ 43  paths = ["src/core/**"]                                                                                          │
+│ 44                                                                                                                   │
+│ 45  + [[alerts]]                                                                                                     │
+│ 46  + name = "Tangled billing logic"                                                                                 │
+│ 47  + metric = "cognitive"                                                                                           │
+│ 48  + scope = "function"                                                                                             │
+│ 49  + when = "> 30"                                                                                                  │
+│ 50  + severity = "warning"                                                                                           │
+│ 51  + paths = ["src/billing/**"]                                                                                     │
+│                                                                                                                      │
+│ Nothing is saved until :w. Existing lines and comments stay as they are.                                             │
+│                                                                                                                      │
+│ :w user writes to ~/.config/cyclops/config.toml instead. It shows in your views, and cyclops check leaves it out.    │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ EDIT  metric cognitive  filter none  tests off  layer syntax                              29 alerts  2 problems  fresh
+ :w

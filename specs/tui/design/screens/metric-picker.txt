@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › billing                                                                                                  module
+╭─ Neighbors of billing ───────────────────────────────────────────────────────────────────────────────────────────────╮
+│ level module   depth 1   relations all   overlay cyclomatic                                                          │
+│                                                                                                                      │
+│                           ╭──────────────────────────────────────────────────────────────╮                           │
+│  ╭──────────────────╮     │ Metric                                                       │                           │
+│  │ orders @         │     │ >                                                            │                           │
+│  │ cyclomatic 27    │     │                                                              │                           │
+│  ╰──────────────────╯     │ cyclomatic      Paths through code                           │                           │
+│                           │ cognitive       Difficulty to follow                         │                           │
+│                           │ max_nesting     Deepest control flow                         │                           │
+│  ╭──────────────────╮     │ lines           Lines of code                                │     ╭──────────────────╮  │
+│  │ api::routes !    │     │ comment_lines   Lines of comments                    neutral │     │ inventory        │  │
+│  │ cyclomatic 19    │     │ blank_lines     Blank lines                          neutral │     │ cyclomatic 13    │  │
+│  ╰──────────────────╯     │ parameters      Function parameters                          │     ╰──────────────────╯  │
+│                           │ members         Fields and methods                           │                           │
+│                           │ duplication     Share of copied lines                        │                           │
+│  ╭──────────────────╮     │ lcom            Unrelated method groups                      │                           │
+│  │ +3 more  Enter   │     │ afferent        Modules depending on it              neutral │                           │
+│  ╰──────────────────╯     │ efferent        Modules it depends on                neutral │                           │
+│                           │ instability     Share of outgoing dependencies       neutral │                           │
+│                           │ abstractness    Share of interfaces                  neutral │                           │
+│                           │ distance        Imbalance of the two                         │                           │
+│                           │ cycle size      Modules in its cycle                         │                           │
+│                           │ churn           Commits changing it                  neutral │                           │
+│                           │ hotspot         Churn and complexity                         │                           │
+│                           │                                                              │                           │
+│                           │ Type to narrow. Neutral metrics have no heat.                │                           │
+│                           ╰──────────────────────────────────────────────────────────────╯                           │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ NORMAL  metric cyclomatic  filter none  tests off  layer syntax                           29 alerts  2 problems  fresh
+ Enter pick  Esc close

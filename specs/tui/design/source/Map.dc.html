@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Map</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const tile = (x, y, w, h, name, val, t, on) => [
+      ['f', x, y, w, h, t],
+      ['t', x + 1, y, on ? '▸ ' + name + ' ' : name, on ? 'on' : t],
+      ['t', x + 1, y + 1, val, t],
+    ];
+    const head = (x, y, s) => ['t', x, y, s, 'dim'];
+    const ops = [
+      ['sh', { v: 'Map', crumb: '⟦b|shop⟧', side: 'project · selected invoice.rs', metric: 'hotspot', hint: [['hjkl', 'move between tiles'], ['Enter', 'zoom in'], ['-', 'zoom out'], ['M', 'color by'], ['K', 'inspect'], ['gd', 'why']] }],
+      ['b', 0, 2, 62, 31, 'shop  rust  52,180 lines'],
+      ['b', 62, 2, 58, 19, 'storefront  typescript  27,960 lines'],
+      ['b', 62, 21, 33, 12, 'shop-api  10,840'],
+      ['b', 95, 21, 25, 12, 'shop-jobs  5,430'],
+      head(2, 3, 'billing ⟦h2|@ !⟧'), head(33, 3, 'orders ⟦h2|@ !⟧'), head(2, 19, 'catalog ⟦h2|!⟧'), head(33, 19, 'inventory'), head(51, 19, 'notes'),
+      head(64, 3, 'cart'), head(92, 3, 'checkout'), head(64, 13, 'session'), head(92, 13, 'forms'),
+      head(64, 22, 'routes'), head(97, 22, 'export'),
+    ].concat(
+      tile(2, 4, 16, 9, 'invoice.rs', '1.00', 't4', true), tile(19, 4, 12, 9, 'tax.rs', '0.29', 't2'),
+      tile(2, 14, 16, 4, 'ledger.rs', '0.14', 't1'), tile(19, 14, 12, 4, 'rates.rs', '0.06', 't1'),
+      tile(33, 4, 17, 14, 'checkout.rs', '0.71', 't4'), tile(51, 4, 9, 8, 'service', '0.24', 't2'), tile(51, 13, 9, 5, 'state', '0.09', 't1'),
+      tile(2, 20, 16, 12, 'pricing.rs', '0.48', 't3'), tile(19, 20, 12, 7, 'search.rs', '0.11', 't1'), tile(19, 28, 12, 4, 'model.rs', '0.03', 't1'),
+      tile(33, 20, 17, 12, 'stock.rs', '0.12', 't1'), tile(51, 20, 9, 12, 'notes.rs', '0.01', 't1'),
+      tile(64, 4, 16, 8, 'reducer.ts', '0.35', 't2'), tile(81, 4, 9, 8, 'hooks.ts', '0.08', 't1'),
+      tile(92, 4, 14, 8, 'steps.tsx', '0.16', 't1'), tile(107, 4, 11, 8, 'payment', '0.10', 't1'),
+      tile(64, 14, 14, 6, 'auth.ts', '0.13', 't1'), tile(79, 14, 11, 6, 'store.ts', '0.04', 't1'),
+      tile(92, 14, 14, 6, 'fields.tsx', '0.07', 't1'), tile(107, 14, 11, 6, 'validate', 'n/a', 't0'),
+      tile(64, 23, 14, 9, 'orders.rs', '0.20', 't2'), tile(79, 23, 14, 5, 'users.rs', '0.09', 't1'), tile(79, 29, 14, 3, 'admin.rs', '0.02', 't1'),
+      tile(97, 23, 12, 9, 'run_all.rs', '0.12', 't1'), tile(110, 23, 9, 9, 'csv.rs', '0.03', 't1'),
+      [
+        ['t', 1, 33, 'area ⟦fg|lines⟧   color ⟦fg|hotspot⟧', 'dim'],
+        ['t', 30, 33, ' n/a ', 't0'], ['t', 35, 33, ' quiet ', 't1'], ['t', 42, 33, ' mild ', 't2'], ['t', 48, 33, ' high ', 't3'], ['t', 54, 33, ' severe ', 't4'],
+        ['r', 118, 33, 'invoice.rs: 3,412 lines', 'dim'],
+      ]
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

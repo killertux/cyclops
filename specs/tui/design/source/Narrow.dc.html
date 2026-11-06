@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Small terminal</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 720px; height: 480px">
+<dc-import name="Term" ops="{{ops}}" cols="{{cols}}" rows="{{rows}}" theme="{{theme}}" mono="{{mono}}" hint-size="720px,480px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":720,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const tree = [
+      [0, '▾', 'shop', '', 31], [1, '▾', 'billing', '@', 31], [2, '▾', 'invoice', '!', 31], [3, '▾', 'Invoice', '!', 31],
+      [4, ' ', 'reconcile', '!', 31], [4, ' ', 'apply_credit', '', 14], [4, ' ', 'finalize', '', 11], [4, ' ', 'total', '', 6],
+      [2, '▸', 'tax', '!', 22], [2, '▸', 'ledger', '!!', 12], [1, '▸', 'orders', '@', 27], [1, '▸', 'catalog', '!', 24],
+      [0, '▸', 'storefront', '!', 22],
+    ];
+    const heat = (v) => (v > 24 ? 'h3' : v > 15 ? 'h2' : v > 9 ? 'h1' : 'h0');
+    const ops = [
+      ['sh', { v: 'Explore', proj: '', crumb: '… › Invoice › ⟦b|reconcile⟧', side: 'method', lens: '⟦chipa|cyclomatic⟧  no filter  tests off', right: '⟦chiph|29 !⟧  2 problems', hint: [['hjkl', 'move'], ['Enter', 'open'], ['K', 'full inspector'], ['gd', 'why']] }],
+      ['b', 0, 2, 80, 20, 'Structure', 'a'],
+    ].concat(
+      tree.flatMap(([d, c, name, mark, v], i) => [
+        ['t', 2 + d * 2, 3 + i, c + ' ' + name, d === 0 ? 'b' : 'fg'],
+        ['t', 58, 3 + i, mark, mark === '!!' ? 'h3' : 'h2'],
+        ['r', 63, 3 + i, v, heat(v)],
+        ['bar', 65, 3 + i, 12, v / 31, heat(v)],
+      ]),
+      [
+        ['h', 1, 7, 78],
+        ['l', 2, 17, 77, 17, 's', 'faint'],
+        ['t', 2, 18, '⟦b|reconcile⟧  cyclomatic ⟦h3|31⟧  #1 of 3,204  cognitive ⟦h3|58⟧  lines ⟦h2|168⟧', 'dim'],
+        ['t', 2, 19, '⟦h2|!⟧ Very complex function', 'fg'],
+      ]
+    );
+    return { ops, cols: 80, rows: 24, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

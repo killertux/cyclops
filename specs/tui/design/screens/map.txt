@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop                                                                                     project · selected invoice.rs
+╭─ shop  rust  52,180 lines ─────────────────────────────────╮╭─ storefront  typescript  27,960 lines ─────────────────╮
+│ billing @ !                    orders @ !                  ││ cart                        checkout                   │
+│  ▸ invoice.rs     tax.rs        checkout.rs       service  ││  reducer.ts       hooks.ts   steps.tsx      payment    │
+│  1.00             0.29          0.71              0.24     ││  0.35             0.08       0.16           0.10       │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                   state    ││ session                     forms                      │
+│  ledger.rs        rates.rs                        0.09     ││  auth.ts        store.ts     fields.tsx     validate   │
+│  0.14             0.06                                     ││  0.13           0.04         0.07           n/a        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│                                                            ││                                                        │
+│ catalog !                      inventory         notes     ││                                                        │
+│  pricing.rs       search.rs     stock.rs          notes.rs │╰────────────────────────────────────────────────────────╯
+│  0.48             0.11          0.12              0.01     │╭─ shop-api  10,840 ────────────╮╭─ shop-jobs  5,430 ────╮
+│                                                            ││ routes                        ││ export                │
+│                                                            ││  orders.rs      users.rs      ││  run_all.rs   csv.rs  │
+│                                                            ││  0.20           0.09          ││  0.12         0.03    │
+│                                                            ││                               ││                       │
+│                                                            ││                               ││                       │
+│                                                            ││                               ││                       │
+│                   model.rs                                 ││                               ││                       │
+│                   0.03                                     ││                 admin.rs      ││                       │
+│                                                            ││                 0.02          ││                       │
+│                                                            ││                               ││                       │
+╰────────────────────────────────────────────────────────────╯╰───────────────────────────────╯╰───────────────────────╯
+ area lines   color hotspot    n/a  quiet  mild  high  severe                                   invoice.rs: 3,412 lines
+ NORMAL  metric hotspot  filter none  tests off  layer syntax                              29 alerts  2 problems  fresh
+ hjkl move between tiles  Enter zoom in  - zoom out  M color by  K inspect  gd why                  Space menu   ? keys

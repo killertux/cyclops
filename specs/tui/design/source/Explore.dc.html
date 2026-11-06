@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Explore</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const heat = (v) => (v >= 20 ? 'h3' : v >= 10 ? 'h2' : v >= 5 ? 'h1' : 'h0');
+    const tree = [
+      [0, '▾', 'shop', '', 31], [1, '▾', 'billing', '@', 31], [2, '▾', 'invoice', '!', 31], [3, '▾', 'Invoice', '!', 31],
+      [4, ' ', 'reconcile', '!', 31], [4, ' ', 'apply_credit', '', 14], [4, ' ', 'finalize', '', 11], [4, ' ', 'total', '', 6],
+      [3, '▸', 'LineItem', '', 4], [2, '▸', 'tax', '!', 22], [2, '▸', 'ledger', '!!', 12], [2, '▸', 'rates', '', 5],
+      [1, '▾', 'orders', '@', 27], [2, '▸', 'checkout', '!', 27], [2, '▸', 'service', '!!', 19], [2, '▸', 'state', '', 9],
+      [1, '▸', 'catalog', '!', 24], [1, '▸', 'inventory', '', 13], [1, '▸', 'notes', '', 1],
+      [0, '▸', 'storefront', '!', 22], [0, '▸', 'shop-api', '!', 19], [0, '▸', 'shop-jobs', '', 15],
+    ];
+    const treeOps = tree.flatMap(([d, caret, name, mark, v], i) => {
+      const y = 4 + i;
+      return [
+        ['t', 2 + d * 2, y, caret + ' ' + name, d === 0 ? 'b' : 'fg'],
+        ['t', 43, y, mark, mark === '!!' ? 'h3' : 'h2'],
+        ['r', 48, y, v, heat(v)],
+        ['bar', 50, y, 10, v / 31, heat(v)],
+      ];
+    });
+    const metrics = [
+      ['metric', 'value', 'among 188 modules'],
+      ['cyclomatic', '⟦h3|31⟧', '#1'],
+      ['cognitive', '⟦h3|58⟧', '#1'],
+      ['lines', '18,204', '#1'],
+      ['duplication', '⟦h1|6.2%⟧', '#48'],
+      ['afferent', '6', '#31'],
+      ['efferent', '5', '#44'],
+      ['instability', '0.45', '#102'],
+      ['distance', '⟦h1|0.41⟧', '#1'],
+      ['hotspot', '⟦h3|1.00⟧', '#1'],
+      ['lcom', '⟦dim|n/a⟧', '⟦dim|types only⟧'],
+    ];
+    const spreads = [[8, 6, 3, 2, 1, 1, 0, 1], [8, 5, 3, 2, 1, 1, 1, 1], [8, 6, 3, 2, 1, 1, 1, 1], [8, 4, 2, 1, 1, 1, 0, 1], [8, 5, 2, 1, 1, 0, 0, 1], [8, 6, 4, 2, 1, 1, 0, 1], [2, 3, 4, 6, 8, 6, 4, 3], [5, 6, 8, 5, 3, 2, 1, 1], [8, 4, 2, 1, 1, 1, 0, 1]];
+    const marks = [7, 7, 7, 2, 2, 2, 3, 2, 7];
+    const ops = [
+      ['sh', { v: 'Explore', crumb: 'shop › ⟦b|billing⟧', side: 'module · trail 2/2', hint: [['hjkl', 'move'], ['Enter', 'open'], ['K', 'inspector'], ['H L', 'sections'], ['gd', 'why'], ['gr', 'impact'], ['M', 'metric'], ['f', 'filter']] }],
+      ['b', 0, 2, 62, 32, 'Structure', 'a'],
+      ['t', 2, 3, 'name', 'faint'], ['r', 60, 3, 'cyclomatic (highest inside)', 'faint'],
+    ].concat(treeOps, [
+      ['h', 1, 5, 60],
+      ['b', 62, 2, 58, 32, 'Inspector'],
+      ['t', 64, 3, 'billing', 'b'], ['r', 117, 3, 'module', 'dim'],
+      ['t', 64, 4, 'src/billing/', 'dim'],
+      ['t', 64, 6, ' Metrics ', 'on'], ['t', 75, 6, 'Why   Relations   Clones   Impact', 'dim'],
+      ['tb', 64, 8, [12, -6, 17], metrics, { head: 1 }],
+      ['t', 102, 8, 'spread', 'faint'],
+    ], spreads.map((s, i) => ['sp', 102, 9 + i, s, 'dim', marks[i], ['h3', 'h3', 'b', 'h1', 'b', 'b', 'b', 'h1', 'h3'][i]]), [
+      ['l', 64, 20, 117, 20, 's', 'faint'],
+      ['t', 64, 21, 'Alerts inside', 'faint'],
+      ['t', 64, 22, '⟦h3|1⟧ error   ⟦h2|8⟧ warning   ⟦dim|of 29 in the project⟧'],
+      ['t', 64, 24, 'Cycle', 'faint'],
+      ['t', 64, 25, '⟦h2|@⟧ billing, orders   ⟦dim|size 2⟧'],
+      ['t', 64, 27, 'Relations', 'faint'],
+      ['t', 64, 28, '⟦fg|52 exact⟧   ⟦fg|14 inferred⟧   ⟦h1|4 ambiguous ~⟧', 'dim'],
+      ['t', 64, 30, '⟦acc|]a⟧ step through its alerts   ⟦acc|gr⟧ see its impact', 'dim'],
+    ]);
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

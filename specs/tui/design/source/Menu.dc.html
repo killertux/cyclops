@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Right-click menu</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const tree = [
+      [0, '▾', 'shop', 31], [1, '▾', 'billing', 31], [2, '▾', 'invoice', 31], [3, '▾', 'Invoice', 31],
+      [4, ' ', 'reconcile', 31], [4, ' ', 'apply_credit', 14], [4, ' ', 'finalize', 11], [4, ' ', 'total', 6],
+      [3, '▸', 'LineItem', 4], [2, '▸', 'tax', 22], [2, '▸', 'ledger', 12], [2, '▸', 'rates', 5],
+      [1, '▸', 'orders', 27], [1, '▸', 'catalog', 24], [1, '▸', 'inventory', 13], [1, '▸', 'notes', 1],
+      [0, '▸', 'storefront', 22], [0, '▸', 'shop-api', 19], [0, '▸', 'shop-jobs', 15],
+    ];
+    const menu = [['Why is it high?', 'gd'], ['What depends on it?', 'gr'], ['Clones', 'gc'], ['Open in editor', 'gf'], ['Show in diagram', 'Space d'], ['New alert from here', 'A'], ['Mark this symbol', 'm'], ['Copy symbol path', 'yy']];
+    const ops = [
+      ['sh', { v: 'Explore', crumb: 'shop › billing › invoice › Invoice › ⟦b|reconcile⟧', side: 'method', hint: [['j k', 'move in menu'], ['Enter', 'run'], ['Esc', 'close']], menu: false }],
+      ['b', 0, 2, 120, 32, 'Structure', 'a'],
+    ].concat(
+      tree.flatMap(([d, c, name, v], i) => [['t', 2 + d * 2, 3 + i, c + ' ' + name, d === 0 ? 'b' : 'fg'], ['r', 117, 3 + i, v, v > 24 ? 'h3' : v > 15 ? 'h2' : v > 9 ? 'h1' : 'h0']]),
+      [
+        ['h', 1, 7, 118],
+        ['b', 24, 8, 38, 11, '', 'p'],
+        ['t', 26, 9, 'reconcile', 'popb'],
+      ],
+      menu.map(([label], i) => ['t', 26, 10 + i, label, i === 0 ? 'pops' : 'pop']),
+      menu.map(([, key], i) => ['r', 59, 10 + i, key, i === 0 ? 'pops' : 'popk']),
+      [['h', 25, 10, 36]]
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

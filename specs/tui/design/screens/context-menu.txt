@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › billing › invoice › Invoice › reconcile                                                                  method
+╭─ Structure ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▾ shop                                                                                                            31 │
+│   ▾ billing                                                                                                       31 │
+│     ▾ invoice                                                                                                     31 │
+│       ▾ Invoice                                                                                                   31 │
+│           reconcile                                                                                               31 │
+│           apply_credit╭────────────────────────────────────╮                                                      14 │
+│           finalize    │ reconcile                          │                                                      11 │
+│           total       │ Why is it high?                 gd │                                                       6 │
+│       ▸ LineItem      │ What depends on it?             gr │                                                       4 │
+│     ▸ tax             │ Clones                          gc │                                                      22 │
+│     ▸ ledger          │ Open in editor                  gf │                                                      12 │
+│     ▸ rates           │ Show in diagram            Space d │                                                       5 │
+│   ▸ orders            │ New alert from here              A │                                                      27 │
+│   ▸ catalog           │ Mark this symbol                 m │                                                      24 │
+│   ▸ inventory         │ Copy symbol path                yy │                                                      13 │
+│   ▸ notes             ╰────────────────────────────────────╯                                                       1 │
+│ ▸ storefront                                                                                                      22 │
+│ ▸ shop-api                                                                                                        19 │
+│ ▸ shop-jobs                                                                                                       15 │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ NORMAL  metric cyclomatic  filter none  tests off  layer syntax                           29 alerts  2 problems  fresh
+ j k move in menu  Enter run  Esc close

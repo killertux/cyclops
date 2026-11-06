@@ -1,0 +1,24 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status
+ … › Invoice › reconcile                                                 method
+╭─ Structure ──────────────────────────────────────────────────────────────────╮
+│ ▾ shop                                                      31 ━━━━━━━━━━━━  │
+│   ▾ billing                                             @   31 ━━━━━━━━━━━━  │
+│     ▾ invoice                                           !   31 ━━━━━━━━━━━━  │
+│       ▾ Invoice                                         !   31 ━━━━━━━━━━━━  │
+│           reconcile                                     !   31 ━━━━━━━━━━━━  │
+│           apply_credit                                      14 ━━━━━───────  │
+│           finalize                                          11 ━━━━────────  │
+│           total                                              6 ━━──────────  │
+│     ▸ tax                                               !   22 ━━━━━━━━╸───  │
+│     ▸ ledger                                            !!  12 ━━━━╸───────  │
+│   ▸ orders                                              @   27 ━━━━━━━━━━──  │
+│   ▸ catalog                                             !   24 ━━━━━━━━━───  │
+│ ▸ storefront                                            !   22 ━━━━━━━━╸───  │
+│                                                                              │
+│ ──────────────────────────────────────────────────────────────────────────── │
+│ reconcile  cyclomatic 31  #1 of 3,204  cognitive 58  lines 168               │
+│ ! Very complex function                                                      │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+ NORMAL  cyclomatic  no filter  tests off                      29 !  2 problems
+ hjkl move  Enter open  K full inspector  gd why            Space menu   ? keys

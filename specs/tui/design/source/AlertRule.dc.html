@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New alert rule</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const field = (y, label, value, on) => [
+      ['t', 2, y, label, 'dim'],
+      ['t', 13, y, value, on ? 'b' : 'fg'],
+    ];
+    const ops = [
+      ['sh', { v: 'Alerts', crumb: 'New rule from ⟦b|Invoice::reconcile⟧', side: 'prefilled from cognitive 58', metric: 'cognitive', cmd: ' :w', mode: 'EDIT', mk: 'on' }],
+      ['b', 0, 2, 54, 15, 'New rule', 'a'],
+    ].concat(
+      field(4, 'name', 'Tangled billing logic'),
+      field(5, 'metric', 'cognitive'),
+      field(6, 'scope', 'function'),
+      field(7, 'when', '> 30', true),
+      field(8, 'severity', 'warning'),
+      field(9, 'paths', 'src/billing/**'),
+      field(10, 'enabled', 'true'),
+      [
+        ['h', 1, 7, 52],
+        ['t', 2, 12, '⟦acc|i⟧ edit field   ⟦acc|Tab⟧ next field', 'dim'],
+        ['t', 2, 13, '⟦acc|:w⟧ save rule  ⟦acc|:w user⟧ keep it yours  ⟦acc|:q⟧ discard', 'dim'],
+        ['t', 2, 14, 'Checked as you type. A rule that could', 'dim'],
+        ['t', 2, 15, 'never work shows the reason here.', 'dim'],
+        ['b', 54, 2, 66, 15, 'Preview: would fire on 2 symbols'],
+        ['t', 56, 4, 'Spread of cognitive in src/billing/**', 'faint'],
+        ['sp', 56, 6, [8, 7, 6, 5, 4, 4, 3, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'dim', 31, 'h3'],
+        ['l', 76, 5, 76, 7, 's', 'h2'], ['t', 77, 5, '> 30', 'h2'],
+        ['tb', 56, 9, [2, 38, -5], [['⟦h2|!⟧', 'Invoice::reconcile', '⟦h3|58⟧'], ['⟦h2|!⟧', 'tax::apply_rules', '⟦h2|33⟧']]],
+        ['t', 56, 12, 'Next closest: Ledger::post at 24. The line sits in a clear gap.', 'dim'],
+        ['b', 0, 17, 120, 17, 'Writes to .cyclops/config.toml, which the team shares'],
+        ['tb', 2, 18, [3, 60], [
+          ['⟦faint|42⟧', '⟦faint|severity = "error"⟧'],
+          ['⟦faint|43⟧', '⟦faint|paths = ["src/core/**"]⟧'],
+          ['⟦faint|44⟧', ''],
+          ['⟦acc|45⟧', '⟦acc|+ [[alerts]]⟧'],
+          ['⟦acc|46⟧', '⟦acc|+ name = "Tangled billing logic"⟧'],
+          ['⟦acc|47⟧', '⟦acc|+ metric = "cognitive"⟧'],
+          ['⟦acc|48⟧', '⟦acc|+ scope = "function"⟧'],
+          ['⟦acc|49⟧', '⟦acc|+ when = "> 30"⟧'],
+          ['⟦acc|50⟧', '⟦acc|+ severity = "warning"⟧'],
+          ['⟦acc|51⟧', '⟦acc|+ paths = ["src/billing/**"]⟧'],
+        ]],
+        ['t', 2, 29, 'Nothing is saved until ⟦acc|:w⟧. Existing lines and comments stay as they are.', 'dim'],
+        ['t', 2, 31, '⟦acc|:w user⟧ writes to ~/.config/cyclops/config.toml instead. It shows in your views, and cyclops check leaves it out.', 'dim'],
+      ]
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

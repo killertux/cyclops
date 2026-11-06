@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › billing                                                                                      module · trail 5/5
+╭─ Neighbors of billing ───────────────────────────────────────────────────────────╮╭─ Inspector ──────────────────────╮
+│ level module   depth 1   relations all   overlay cyclomatic                      ││ billing                          │
+│                                                                                  ││ module · 18,204 lines            │
+│  depends on billing           focus                        billing depends on    ││                                  │
+│  ╭──────────────────╮                                      ╭──────────────────╮  ││  Impact  H L sections            │
+│  │ orders @         │<━┓                              ┌───>│ catalog::model   │  ││                                  │
+│  │ cyclomatic 27    │  ┃                              │    │ cyclomatic 4     │  ││ If billing changes               │
+│  ╰──────────────────╯  ┃                              │    ╰──────────────────╯  ││ distance 1    6 ━━─────────────  │
+│                        ┃                              │                          ││ distance 2   23 ━━━━━━━━───────  │
+│                        ┃                              │                          ││ distance 3   41 ━━━━━━━━━━━━━━━  │
+│  ╭──────────────────╮  ┃      ┏━━━━━━━━━━━━━━━━━━┓    │    ╭──────────────────╮  ││                                  │
+│  │ api::routes !    │  ┗━━━━━>┃▸billing @        ┃────┘    │ inventory        │  ││ 70 of 188 modules                │
+│  │ cyclomatic 19    │─────┬──>┃ cyclomatic 31    ┃┬─┬─────>│ cyclomatic 13    │  ││ 3 of 4 packages                  │
+│  ╰──────────────────╯     │   ┗━━━━━━━━━━━━━━━━━━┛┆ ╎      ╰──────────────────╯  ││                                  │
+│                           │                       ┆ ╎                            ││ How sure                         │
+│                           │                       ┆ ╎                            ││ exact        52                  │
+│  ╭──────────────────╮     │                       ┆ ╎      ╭──────────────────╮  ││ inferred     14                  │
+│  │ jobs::export     │─────┤                       ┆ └╌╌╌╌╌>│ catalog::pricing │  ││ ambiguous     4                  │
+│  │ cyclomatic 15    │     ╎                       ┆        │ cyclomatic 24    │  ││ 18 of these are guesses.         │
+│  ╰──────────────────╯     ╎                       ┆        ╰──────────────────╯  ││ Space p settles them             │
+│                           ╎                       ┆                              ││                                  │
+│                           ╎                       ┆                              ││ Nearest dependents               │
+│  ╭──────────────────╮     ╎                       ┆        ╭──────────────────╮  ││ orders                  exact    │
+│  │ +3 more  Enter   │╌╌╌╌╌┘                       └┄┄┄┄┄┄┄>│ api::auth        │  ││ api::routes             exact    │
+│  ╰──────────────────╯                                      │ cyclomatic 8     │  ││ jobs::export            exact    │
+│                                                            ╰──────────────────╯  ││ api::admin              exact    │
+│                                                                                  ││ notes::digest           exact    │
+│                                                                                  ││ inventory::audit ~   inferred    │
+│ ────── exact  ╌╌╌╌╌╌ inferred  ┄┄┄┄┄┄ ambiguous  ━━━━━━ cycle                    ││                                  │
+│ > uses, imports, calls  ▷ inherits  ○ implements  ◆ composes                     ││                                  │
+│ ! alert   @ in a cycle   Numbers are the overlay metric.                         ││                                  │
+╰──────────────────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
+ NORMAL  metric cyclomatic  filter none  tests off  layer syntax                           29 alerts  2 problems  fresh
+ hjkl move  Enter drill in  c center  < > depth  r relations  M overlay  :export save view          Space menu   ? keys

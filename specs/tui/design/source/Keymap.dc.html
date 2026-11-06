@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Keys and mouse</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+kbd{font-family:'JetBrains Mono',Menlo,monospace;font-size:13px;color:#6CC4E8;font-weight:700}
+</style>
+</helmet>
+<div style="width: 1480px; height: 940px; box-sizing: border-box; padding: 48px 64px; background: #0F1216; color: #D5DAE1; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 26px">
+<div style="display: flex; justify-content: space-between; align-items: end; gap: 48px">
+<h1 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 40px; line-height: 44px; color: #F1F4F8">Vim grammar, mouse as a teacher</h1>
+<p style="margin: 0; max-width: 560px; color: #AEB6C2"><kbd>Space</kbd> is the leader: it opens a menu of what comes next right away. Other prefixes like <kbd>g</kbd> and <kbd>]</kbd> show theirs after a short pause. Counts like <kbd>5j</kbd> stay free.</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px 36px; align-items: start">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="8">
+<section style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0 0 4px; padding-bottom: 6px; border-bottom: 1px solid #323A45; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 16px; color: #F1F4F8">{{g.title}}</h2>
+<sc-for list="{{g.rows}}" as="r" hint-placeholder-count="5">
+<div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px">
+<kbd>{{r.k}}</kbd>
+<span style="color: #AEB6C2">{{r.d}}</span>
+</div>
+</sc-for>
+</section>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1480,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const g = (title, list) => ({ title, rows: list.map(([k, d]) => ({ k, d })) });
+    return {
+      groups: [
+        g('Move', [['h j k l', 'Left, down, up, right'], ['gg  G', 'First, last'], ['Ctrl-d  Ctrl-u', 'Half page'], ['l  Enter', 'Open or drill in'], ['h  -', 'Close or go up'], ['za zR zM', 'Fold, open all, close all'], ['Tab', 'Next pane'], ['Ctrl-w hjkl', 'Move between panes']]),
+        g('After Space', [['o m e d', 'Overview, Map, Explore, Diagram'], ['f a s', 'Find, Alerts, Status'], ['r', 'Refresh what changed'], ['p', 'Precise analysis'], ['t', 'Test code on or off'], ['x', 'Export this view'], ['?  q', 'All keys, quit'], ['Esc', 'Close the menu']]),
+        g('Follow a symbol', [['gd', 'Why: source and reasons'], ['gr', 'Impact: what depends on it'], ['gc', 'Clones of it'], ['gf', 'Open in $EDITOR'], ['Ctrl-o Ctrl-n', 'Back, forward on the trail'], ['m{a-z}', 'Mark this symbol'], ["'{a-z}", 'Jump to a mark'], ['Ctrl-p', 'Jump to any symbol']]),
+        g('Change the lens', [['M', 'Pick a metric'], [']m  [m', 'Next, previous metric'], ['f', 'Edit the filter'], ['F', 'Clear the filter'], ['gt  gT', 'Next, previous view'], ['/  n  N', 'Search this view'], ['K', 'Inspector on or off'], ['H  L', 'Inspector sections']]),
+        g('Step through findings', [[']a  [a', 'Next, previous alert'], [']c  [c', 'Next, previous cycle'], [']d  [d', 'Next, previous clone'], [']p  [p', 'Next, previous problem']]),
+        g('In one view', [['< >  c  r', 'Diagram: depth, center, relations'], ['Enter  -', 'Diagram: drill in, back up'], ['s', 'Find: sort by a column'], ['e  x  v', 'Alerts: edit, disable, group']]),
+        g('Act', [['A', 'New alert from here'], ['yy', 'Copy symbol path'], ['yf', 'Copy filter'], ['yc', 'Copy as a CLI command']]),
+        g('Commands', [[':', 'Command line'], [':w  :q', 'Save, discard a rule'], [':set bg', 'Theme: dark, light, auto'], ['?', 'Keys for this view'], ['q', 'Close pane']]),
+      ].concat([
+        g('Mouse', [['Click', 'Select a symbol, tab, chip, breadcrumb or column'], ['Double-click', 'Same as Enter'], ['Right-click', 'Menu of actions, each with its key'], ['Wheel', 'Scroll, or pan the diagram'], ['Ctrl-wheel', 'Change diagram depth'], ['Drag', 'Resize panes, pan the diagram'], ['Hover', 'Preview in the hint line'], ['Shift-drag', 'Select text in your terminal']]),
+      ]),
+    };
+  }
+}
+</script>
+</body>
+</html>

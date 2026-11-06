@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › find                                                                               filter stays on across views
+╭─ Filter ─────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ > kind = function and cyclomatic > 15 and c                                Unfinished: showing the last valid result │
+╰─────────────────────────────────────────╭────────────────────────────────────────────────────────╮───────────────────╯
+ 23 of 3,204 functions   sorted by cogniti│ churn          commits within the window               │
+╭─ Results ───────────────────────────────│ cognitive      how hard it is to follow                │───────────────────╮
+│    symbol                               │ comment_lines  lines of comments                       │hurn               │
+│ !  shop::billing::invoice::Invoice::reco│ cyclomatic     independent paths through it            │  47               │
+│ !  shop::orders::checkout::place_order  │ Tab complete                                           │  41               │
+│ !  shop::catalog::pricing::resolve_price╰────────────────────────────────────────────────────────╯  29               │
+│ !  storefront/src/cart/reducer::cartReducer             function          22          37    118     26               │
+│ !  shop::billing::tax::apply_rules                      function          22          33     96     22               │
+│ !  shop::orders::service::OrderService::submit          method            19          30     88     24               │
+│ !  shop_api::routes::orders::create                     function          19          27     84     19               │
+│ !  storefront/src/checkout/steps::nextStep              function          18          26     72     17               │
+│ !  shop_jobs::export::run_all                           function          18          25    214      9               │
+│ !  shop::billing::ledger::Ledger::post                  method            17          24     69     14               │
+│ !  shop::catalog::search::rank                          function          17          23     64      6               │
+│ !  shop::inventory::stock::reserve                      function          17          22     71      8               │
+│ !  storefront/src/session/auth::refresh                 function          16          22     58     11               │
+│ !  shop_api::routes::users::update                      function          16          21     60      7               │
+│ !  shop::orders::state::transition                      function          16          20     55     10               │
+│ !  storefront/src/forms/fields::validateAll             function          16          19     62      5               │
+│                                                                                                                      │
+│ 7 more below                                                                                                         │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ Same query in a script   yc copy                                                                                     │
+│ cyclops query 'kind = function and cyclomatic > 15' --sort 'cognitive desc'                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ FILTER  metric cognitive  filter kind = function and cyclomatic > 15  tests off  layer syn29 alerts  2 problems  fresh
+ Enter apply  Tab complete  Up Down history  Esc back to results

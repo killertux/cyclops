@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Why</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const code = [
+      ['', 'pub fn reconcile(&mut self, batch: &Batch) -> Result<Summary> {'],
+      ['', '    let (mut summary, ledger) = self.begin(batch)?;'],
+      [1, '    for entry in &batch.entries {'],
+      [2, '        if entry.is_void() {'],
+      ['', '            continue;'],
+      ['', '        }'],
+      [2, '        match entry.kind {'],
+      ['', '            Kind::Credit => {'],
+      [3, '                if let Some(line) = self.find_line(entry.id) {'],
+      [5, '                    if line.amount != entry.amount && !forced {'],
+      [5, '                        for tax in line.taxes.iter_mut() {'],
+      [6, '                            if tax.rate_changed(batch.date) {'],
+      ['', '                                tax.recompute(ledger)?;'],
+      ['', '                            }'],
+      ['', '                        }'],
+      ['', '                    }'],
+      [1, '                } else if entry.allow_orphan {'],
+      ['', '                    summary.orphans += 1;'],
+      ['', '                }'],
+      ['', '            }'],
+      [1, '            Kind::Debit if self.locked => {'],
+      ['', '                return Err(Error::Locked(entry.id));'],
+      ['', '            }'],
+      ['', '            Kind::Debit => ledger.post(entry)?,'],
+      ['', '            Kind::Refund => {'],
+      [3, '                if self.refund_window(entry).is_none() {'],
+      ['', '                    summary.skipped += 1;'],
+      ['', '                }'],
+      ['', '            }'],
+      ['', '        }'],
+    ];
+    const kw = (s) => s.replace(/\b(pub|fn|if|else|let|mut|for|in|match|return|continue|self)\b/g, '⟦kw|$1⟧');
+    const inc = (n) => (n >= 5 ? 'h3' : n >= 3 ? 'h2' : 'h1');
+    const src = code.flatMap(([n, line], i) => {
+      const y = 3 + i;
+      const out = [['r', 5, y, 212 + i, 'faint'], ['t', 11, y, kw(line)]];
+      if (n !== '') out.push(['r', 9, y, '+' + n, inc(n)]);
+      return out;
+    });
+    const parts = [['if, else', 17], ['match', 3], ['loops', 5], ['&& and ||', 5]];
+    const commits = [
+      ['a41f9c2', '3d', 'Fix credit rounding'], ['7be02d1', '6d', 'Handle orphan refunds'], ['c90e13a', '2w', 'Lock during month end'],
+      ['1fd77b0', '3w', 'Recompute tax on rate c…'], ['e2a4c65', '1mo', 'Add refund window'], ['58c1d3e', '1mo', 'Split debit paths'],
+      ['0db6aa9', '2mo', 'Skip void entries early'],
+    ];
+    const ops = [
+      ['sh', { v: 'Explore', crumb: 'shop › billing › invoice › Invoice › ⟦b|reconcile⟧ › why', side: 'method · trail 4/4', metric: 'cognitive', hint: [['j k', 'scroll'], ['n N', 'next decision'], ['Tab', 'next pane'], ['gr', 'impact'], ['gf', 'open line in editor'], ['Ctrl-o', 'back']] }],
+      ['b', 0, 2, 80, 32, 'src/billing/invoice.rs   gutter: cognitive points', 'a'],
+    ].concat(src, [
+      ['h', 1, 14, 78],
+      ['b', 80, 2, 40, 14, 'Why cognitive is 58'],
+    ], parts.flatMap(([name, v], i) => [
+      ['t', 82, 4 + i, name], ['r', 102, 4 + i, v, 'fg'], ['bar', 104, 4 + i, 13, v / 17, 'dim'],
+    ]), [
+      ['t', 82, 9, 'Decision points'], ['r', 102, 9, '30', 'b'],
+      ['t', 82, 10, 'Added by nesting'], ['r', 102, 10, '+28', 'b'],
+      ['t', 82, 12, 'Half of the score is nesting.', 'fg'],
+      ['t', 82, 13, 'Deepest: 6 levels, at line 223.', 'dim'],
+      ['b', 80, 16, 40, 18, 'Why hotspot is 1.00'],
+      ['t', 82, 18, 'Churn'], ['r', 106, 18, '47', 'fg'], ['t', 108, 18, 'commits', 'dim'],
+      ['t', 82, 19, 'Complexity'], ['r', 106, 19, '84', 'h3'], ['t', 108, 19, 'in file', 'dim'],
+      ['t', 82, 20, 'Highest in the project on both.', 'dim'],
+      ['t', 82, 22, 'Recent commits to this file', 'faint'],
+      ['tb', 82, 23, [7, 3, 25], commits.map(([h, a, m]) => ['⟦acc|' + h + '⟧', '⟦dim|' + a + '⟧', m])],
+      ['t', 82, 31, 'Last 12 months', 'faint'],
+      ['sp', 82, 32, [2, 3, 2, 4, 3, 5, 4, 3, 6, 5, 7, 8], 'dim'],
+    ]);
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

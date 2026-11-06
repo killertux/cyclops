@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ Rule › Very complex function                                                                   by rule · v by location
+╭─ Rules ────────────────────────────────────────╮╭─ 23 hits, worst first ─────────────────────────────────────────────╮
+│    hits name                                   ││ symbol                       cc where                              │
+│ !    23 Very complex function                  ││ Invoice::reconcile           31 src/billing/invoice.rs:212         │
+│ !!    2 Low cohesion in core                   ││ checkout::place_order        27 src/orders/checkout.rs:88          │
+│ !     4 Far from the main line                 ││ pricing::resolve_price       24 src/catalog/pricing.rs:140         │
+│ !     0 Tangled billing logic (yours)          ││ cart/reducer::cartReducer    22 storefront/src/cart/reducer.ts:31  │
+│ -     0 Long parameter lists (disabled)        ││ tax::apply_rules             22 src/billing/tax.rs:57              │
+│ ────────────────────────────────────────────── ││ OrderService::submit         19 src/orders/service.rs:203          │
+│ Very complex function                          ││ routes::orders::create       19 shop-api/src/routes/orders.rs:44   │
+│ metric     cyclomatic                          ││ steps::nextStep              18 storefront/src/checkout/steps.tsx… │
+│ scope      function                            ││ export::run_all              18 shop-jobs/src/export/run_all.rs:12 │
+│ when       > 15                                ││ Ledger::post                 17 src/billing/ledger.rs:118          │
+│ severity   warning                             ││ search::rank                 17 src/catalog/search.rs:62           │
+│ paths      all                                 ││ stock::reserve               17 src/inventory/stock.rs:95          │
+│                                                ││                                                                    │
+│ Defined in .cyclops/config.toml                ││ 11 more below                                                      │
+│                                                ││                                                                    │
+╰────────────────────────────────────────────────╯│ ────────────────────────────────────────────────────────────────── │
+╭─ If CI ran now ────────────────────────────────╮│ Spread of cyclomatic across all functions                          │
+│ cyclops check                                  ││               │> 15                                                │
+│                                                ││ ▇▇▇▆▅▅▄▃▃▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                                    │
+│ fail_on      error                             ││               │                                                    │
+│ errors       2                                 ││ 3,181 functions are under the line. 23 are over it.                │
+│ warnings     27                                ││                                                                    │
+│ Exit code 1: this would fail the build.        ││ e edit the rule: the line and hit count move as you type           │
+│ Leaves out 1 rule of yours.                    ││                                                                    │
+│                                                ││                                                                    │
+│ Both errors are in Low cohesion in core:       ││                                                                    │
+│ !! orders::OrderService   lcom 5               ││                                                                    │
+│ !! billing::Ledger        lcom 4               ││                                                                    │
+│                                                ││                                                                    │
+╰────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────────────────╯
+ NORMAL  metric cyclomatic  filter none  tests off  layer syntax                           29 alerts  2 problems  fresh
+ j k move  Enter go to symbol  ]a next hit  A new rule  e edit  x disable  v group                  Space menu   ? keys

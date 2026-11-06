@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Diagram of types</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // A class box: an optional stereotype, the name, then compartments of member rows.
+    const W = 24;
+    const classBox = (x, y, o) => {
+      const rows = [];
+      let cy = y + 1;
+      if (o.stereotype) { rows.push(['t', x + 2, cy, '«' + o.stereotype + '»', 'dim']); cy += 1; }
+      rows.push(['t', x + 2, cy, o.name, o.mode === 'f' ? 'accb' : 'b']);
+      if (o.value !== undefined) rows.push(['r', x + W - 3, cy, o.value]);
+      const nameRow = cy;
+      cy += 1;
+      for (const group of o.groups ?? []) {
+        rows.push(['hr', x, cy, W, o.mode]);
+        cy += 1;
+        for (const [text, value] of group) {
+          rows.push(['t', x + 2, cy, text, text.startsWith('+') && text.includes('more') ? 'faint' : 'fg']);
+          if (value !== undefined) rows.push(['r', x + W - 3, cy, value]);
+          cy += 1;
+        }
+      }
+      return { h: cy - y + 1, nameRow, rows };
+    };
+    const place = (x, y, o) => {
+      const b = classBox(x, y, o);
+      return [['b', x, y, W, b.h, '', o.mode]].concat(b.rows);
+    };
+    const head = (x, y, s) => [['t', x, y, s, 'fg'], ['h', x, y, 1, 'ground']];
+    const ops = [
+      ['sh', { v: 'Diagram', crumb: 'storefront › cart › ⟦b|Cart⟧', side: 'class · selected LineItem', hint: [['hjkl', 'move'], ['Enter', 'expand'], ['c', 'center'], ['< >', 'depth'], ['r', 'relations'], ['M', 'overlay'], ['gd', 'why']] }],
+      ['b', 0, 2, 84, 32, 'Neighbors of Cart', 'a'],
+      ['t', 2, 3, 'level ⟦accb|type⟧   depth ⟦accb|1⟧   relations ⟦accb|all⟧   overlay ⟦accb|cyclomatic⟧', 'dim'],
+      ['l', 26, 9, 27, 9, 'o', 'fg'], ['l', 27, 9, 27, 14, 'o', 'fg'], ['l', 27, 14, 29, 14, 'o', 'fg'],
+      ['l', 26, 18, 28, 18, 'd', 'fg'], ['l', 28, 18, 28, 17, 'd', 'fg'], ['l', 28, 17, 29, 17, 'd', 'fg'],
+      ['l', 54, 9, 55, 9, 's', 'fg'], ['l', 55, 9, 55, 6, 's', 'fg'], ['l', 55, 6, 56, 6, 's', 'fg'],
+      ['l', 54, 13, 56, 13, 's', 'fg'],
+      ['l', 55, 16, 56, 16, 's', 'fg'], ['l', 56, 16, 56, 18, 's', 'fg'], ['l', 56, 18, 57, 18, 's', 'fg'],
+      ['l', 54, 17, 55, 17, 'd', 'fg'], ['l', 55, 17, 55, 25, 'd', 'fg'], ['l', 55, 25, 56, 25, 'd', 'fg'],
+    ].concat(
+      place(2, 6, { name: 'Checkout', value: '⟦h2|18⟧', groups: [[['+ submit() ⟦h2|!⟧', '⟦h2|18⟧'], ['+ quote()', '⟦h1|7⟧'], ['+4 more']]] }),
+      place(2, 15, { name: 'CartView', value: '⟦h0|3⟧', groups: [[['+ render()', '⟦h0|3⟧'], ['+2 more']]] }),
+      place(30, 6, { name: 'Cart ⟦h2|! @⟧', value: '⟦h3|22⟧', mode: 'f', groups: [[['- items', '⟦dim|n/a⟧'], ['- coupon', '⟦dim|n/a⟧'], ['# status', '⟦dim|n/a⟧']], [['+ reduce() ⟦h2|!⟧', '⟦h3|22⟧'], ['+ total()', '⟦h1|9⟧'], ['+ apply()', '⟦h1|6⟧'], ['- merge()', '⟦h0|4⟧'], ['+9 more']]] }),
+      place(58, 5, { name: 'Store', value: '⟦h0|4⟧', groups: [[['+ load()', '⟦h0|4⟧'], ['+12 more']]] }),
+      place(58, 11, { stereotype: 'interface', name: 'Persisted', value: '⟦h0|2⟧', groups: [[['+ save()', '⟦h0|2⟧']]] }),
+      place(58, 17, { name: 'LineItem', value: '⟦h0|3⟧', groups: [[['+ qty', '⟦dim|n/a⟧'], ['+3 more']]] }),
+      place(58, 23, { stereotype: 'alias', name: 'Money' }),
+      head(29, 14, '>'), head(29, 17, '>'),
+      head(57, 6, '▷'), head(57, 13, '○'), head(54, 16, '◆'), head(57, 25, '>'),
+      [
+        ['t', 59, 18, '▸', 'accb'], ['h', 59, 18, 22],
+        ['l', 2, 30, 7, 30, 's', 'fg'], ['t', 9, 30, 'exact', 'dim'],
+        ['l', 16, 30, 21, 30, 'd', 'fg'], ['t', 23, 30, 'inferred', 'dim'],
+        ['l', 33, 30, 38, 30, 'o', 'fg'], ['t', 40, 30, 'ambiguous', 'dim'],
+        ['l', 51, 30, 56, 30, 'B', 'h3'], ['t', 58, 30, 'cycle', 'dim'],
+        ['t', 2, 31, '⟦fg|>⟧ uses, imports, calls  ⟦fg|▷⟧ inherits  ⟦fg|○⟧ implements  ⟦fg|◆⟧ composes', 'dim'],
+        ['t', 2, 32, '⟦fg|+⟧ public  ⟦fg|#⟧ restricted  ⟦fg|-⟧ private   ⟦h2|!⟧ alert  ⟦h2|@⟧ module in a cycle', 'dim'],
+        ['b', 84, 2, 36, 32, 'Selected: LineItem'],
+        ['t', 86, 3, 'LineItem', 'b'], ['t', 86, 4, 'class · src/cart/line.ts:4', 'dim'],
+        ['t', 86, 6, ' Metrics ', 'on'], ['t', 95, 6, '⟦acc|H L⟧ sections', 'dim'],
+        ['tb', 86, 8, [12, -5, 13], [['metric', 'value', 'among 612'], ['cyclomatic', '⟦h0|3⟧', '#340'], ['cognitive', '⟦h0|4⟧', '#301'], ['lcom', '⟦h0|1⟧', '#212'], ['members', '⟦h0|4⟧', '#388']], { head: 1 }],
+        ['t', 86, 14, 'Relations', 'faint'],
+        ['t', 86, 15, '◆ composed by Cart'],
+        ['t', 86, 16, '> used by CartView ⟦dim|~⟧'],
+        ['t', 86, 18, 'The diagram stays on Cart.', 'dim'],
+        ['t', 86, 19, '⟦acc|c⟧ center on LineItem', 'dim'],
+      ]
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

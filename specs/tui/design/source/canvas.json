@@ -1,0 +1,376 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-11-06T12:00:00Z"
+  },
+  "title": "Cyclops TUI Design",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1480,
+      "h": 940,
+      "title": "The plan"
+    },
+    "Keymap.dc.html": {
+      "x": 1560,
+      "y": 0,
+      "w": 1480,
+      "h": 940,
+      "title": "Keys and mouse"
+    },
+    "Term.dc.html": {
+      "x": 3120,
+      "y": 0,
+      "w": 1080,
+      "h": 720,
+      "title": "Visual language",
+      "radius": 10
+    },
+    "Mascot.dc.html": {
+      "x": 4280,
+      "y": 0,
+      "w": 1080,
+      "h": 720,
+      "title": "Mascot",
+      "radius": 10
+    },
+    "Overview.dc.html": {
+      "x": 0,
+      "y": 1300,
+      "w": 1080,
+      "h": 720,
+      "title": "Overview: where to look first",
+      "radius": 10
+    },
+    "Map.dc.html": {
+      "x": 1160,
+      "y": 1300,
+      "w": 1080,
+      "h": 720,
+      "title": "Map: size and risk at a glance",
+      "radius": 10
+    },
+    "Explore.dc.html": {
+      "x": 2320,
+      "y": 1300,
+      "w": 1080,
+      "h": 720,
+      "title": "Explore: tree and inspector",
+      "radius": 10
+    },
+    "Why.dc.html": {
+      "x": 3480,
+      "y": 1300,
+      "w": 1080,
+      "h": 720,
+      "title": "Why: the reason behind a number",
+      "radius": 10
+    },
+    "Diagram.dc.html": {
+      "x": 4640,
+      "y": 1300,
+      "w": 1080,
+      "h": 720,
+      "title": "Diagram: neighbors and impact",
+      "radius": 10
+    },
+    "Find.dc.html": {
+      "x": 0,
+      "y": 2380,
+      "w": 1080,
+      "h": 720,
+      "title": "Find: filter and rank",
+      "radius": 10
+    },
+    "Alerts.dc.html": {
+      "x": 1160,
+      "y": 2380,
+      "w": 1080,
+      "h": 720,
+      "title": "Alerts: rules and hits",
+      "radius": 10
+    },
+    "AlertRule.dc.html": {
+      "x": 2320,
+      "y": 2380,
+      "w": 1080,
+      "h": 720,
+      "title": "New rule: preview before saving",
+      "radius": 10
+    },
+    "Status.dc.html": {
+      "x": 3480,
+      "y": 2380,
+      "w": 1080,
+      "h": 720,
+      "title": "Status: how far to trust this",
+      "radius": 10
+    },
+    "FirstRun.dc.html": {
+      "x": 0,
+      "y": 3460,
+      "w": 1080,
+      "h": 720,
+      "title": "First run: Overview filling in",
+      "radius": 10
+    },
+    "Keys.dc.html": {
+      "x": 1160,
+      "y": 3460,
+      "w": 1080,
+      "h": 720,
+      "title": "Space menu",
+      "radius": 10
+    },
+    "Menu.dc.html": {
+      "x": 2320,
+      "y": 3460,
+      "w": 1080,
+      "h": 720,
+      "title": "Right-click menu",
+      "radius": 10
+    },
+    "Narrow.dc.html": {
+      "x": 3480,
+      "y": 3460,
+      "w": 720,
+      "h": 480,
+      "title": "Small terminal: 80 x 24",
+      "radius": 10
+    },
+    "OverviewLight.dc.html": {
+      "x": 0,
+      "y": 4540,
+      "w": 1080,
+      "h": 720,
+      "title": "Overview, light",
+      "radius": 10
+    },
+    "MapLight.dc.html": {
+      "x": 1160,
+      "y": 4540,
+      "w": 1080,
+      "h": 720,
+      "title": "Map, light",
+      "radius": 10
+    },
+    "ExploreLight.dc.html": {
+      "x": 2320,
+      "y": 4540,
+      "w": 1080,
+      "h": 720,
+      "title": "Explore, light",
+      "radius": 10
+    },
+    "WhyLight.dc.html": {
+      "x": 3480,
+      "y": 4540,
+      "w": 1080,
+      "h": 720,
+      "title": "Why, light",
+      "radius": 10
+    },
+    "DiagramLight.dc.html": {
+      "x": 4640,
+      "y": 4540,
+      "w": 1080,
+      "h": 720,
+      "title": "Diagram, light",
+      "radius": 10
+    },
+    "FindLight.dc.html": {
+      "x": 0,
+      "y": 5380,
+      "w": 1080,
+      "h": 720,
+      "title": "Find, light",
+      "radius": 10
+    },
+    "AlertsLight.dc.html": {
+      "x": 1160,
+      "y": 5380,
+      "w": 1080,
+      "h": 720,
+      "title": "Alerts, light",
+      "radius": 10
+    },
+    "AlertRuleLight.dc.html": {
+      "x": 2320,
+      "y": 5380,
+      "w": 1080,
+      "h": 720,
+      "title": "New rule, light",
+      "radius": 10
+    },
+    "StatusLight.dc.html": {
+      "x": 3480,
+      "y": 5380,
+      "w": 1080,
+      "h": 720,
+      "title": "Status, light",
+      "radius": 10
+    },
+    "FirstRunLight.dc.html": {
+      "x": 4640,
+      "y": 5380,
+      "w": 1080,
+      "h": 720,
+      "title": "First run, light",
+      "radius": 10
+    },
+    "KeysLight.dc.html": {
+      "x": 0,
+      "y": 6220,
+      "w": 1080,
+      "h": 720,
+      "title": "Space menu, light",
+      "radius": 10
+    },
+    "MenuLight.dc.html": {
+      "x": 1160,
+      "y": 6220,
+      "w": 1080,
+      "h": 720,
+      "title": "Right-click menu, light",
+      "radius": 10
+    },
+    "TermLight.dc.html": {
+      "x": 2320,
+      "y": 6220,
+      "w": 1080,
+      "h": 720,
+      "title": "Visual language, light",
+      "radius": 10
+    },
+    "MascotLight.dc.html": {
+      "x": 3480,
+      "y": 6220,
+      "w": 1080,
+      "h": 720,
+      "title": "Mascot, light",
+      "radius": 10
+    },
+    "NarrowLight.dc.html": {
+      "x": 4640,
+      "y": 6220,
+      "w": 720,
+      "h": 480,
+      "title": "Small terminal, light",
+      "radius": 10
+    },
+    "DiagramTypes.dc.html": {
+      "x": 5800,
+      "y": 1300,
+      "w": 1080,
+      "h": 720,
+      "title": "Diagram of types: class boxes",
+      "radius": 10
+    },
+    "WhyCohesion.dc.html": {
+      "x": 6960,
+      "y": 1300,
+      "w": 1080,
+      "h": 720,
+      "title": "Why, for cohesion",
+      "radius": 10
+    },
+    "WhyForms.dc.html": {
+      "x": 8120,
+      "y": 1300,
+      "w": 1080,
+      "h": 720,
+      "title": "Why, for metrics with no source",
+      "radius": 10
+    },
+    "Popups.dc.html": {
+      "x": 4360,
+      "y": 3460,
+      "w": 1080,
+      "h": 720,
+      "title": "Pickers and +N more",
+      "radius": 10
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Keymap.dc.html",
+    "Term.dc.html",
+    "Mascot.dc.html",
+    "Overview.dc.html",
+    "Map.dc.html",
+    "Explore.dc.html",
+    "Why.dc.html",
+    "Diagram.dc.html",
+    "Find.dc.html",
+    "Alerts.dc.html",
+    "AlertRule.dc.html",
+    "Status.dc.html",
+    "FirstRun.dc.html",
+    "Keys.dc.html",
+    "Menu.dc.html",
+    "Narrow.dc.html",
+    "OverviewLight.dc.html",
+    "MapLight.dc.html",
+    "ExploreLight.dc.html",
+    "WhyLight.dc.html",
+    "DiagramLight.dc.html",
+    "FindLight.dc.html",
+    "AlertsLight.dc.html",
+    "AlertRuleLight.dc.html",
+    "StatusLight.dc.html",
+    "FirstRunLight.dc.html",
+    "KeysLight.dc.html",
+    "MenuLight.dc.html",
+    "TermLight.dc.html",
+    "MascotLight.dc.html",
+    "NarrowLight.dc.html",
+    "DiagramTypes.dc.html",
+    "WhyCohesion.dc.html",
+    "WhyForms.dc.html",
+    "Popups.dc.html"
+  ],
+  "notes": {
+    "rowPlan": {
+      "x": 0,
+      "y": -260,
+      "text": "The plan",
+      "kind": "title1",
+      "maxW": 5360
+    },
+    "rowLoop": {
+      "x": 0,
+      "y": 1040,
+      "text": "The investigation loop",
+      "kind": "title1",
+      "maxW": 9200
+    },
+    "rowManage": {
+      "x": 0,
+      "y": 2120,
+      "text": "Query, govern, trust",
+      "kind": "title1",
+      "maxW": 4560
+    },
+    "rowStates": {
+      "x": 0,
+      "y": 3200,
+      "text": "States and edges",
+      "kind": "title1",
+      "maxW": 4200
+    },
+    "rowLight": {
+      "x": 0,
+      "y": 4280,
+      "text": "Light theme",
+      "kind": "title1",
+      "maxW": 5720
+    }
+  },
+  "designSystems": []
+}

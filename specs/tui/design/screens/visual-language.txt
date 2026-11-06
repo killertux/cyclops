@@ -1,0 +1,36 @@
+
+  Visual language
+  Warm means risk. Cool means the interface. Nothing relies on color alone.
+
+ ╭─ Metric heat ─────────────────────────────────────────╮  ╭─ Confidence and cycles ─────────────────────────────────╮
+ │                                                       │  │                                                         │
+ │                                                       │  │  ─────────── exact: in the code, or proven              │
+ │  n/a       quiet     mild      high      severe       │  │  ╌╌╌╌╌╌╌╌╌╌╌ inferred: one symbol fits                  │
+ │                                                       │  │  ┄┄┄┄┄┄┄┄┄┄┄ ambiguous: several symbols fit             │
+ │                                                       │  │                                                         │
+ │ Heat is a fixed level per metric. Values are printed. │  │  ━━━━━━━━━━━ part of a dependency cycle                 │
+ │                                                       │  │                                                         │
+ ╰───────────────────────────────────────────────────────╯  ╰─────────────────────────────────────────────────────────╯
+
+ ╭─ Marks work without color ────────────────────────────╮  ╭─ Interface ─────────────────────────────────────────────╮
+ │                                                       │  │                                                         │
+ │ !     warning alert                                   │  │   Explore   current view                                │
+ │ !!    error alert                                     │  │  Diagram    underlined letter: Space then d             │
+ │ @     in a dependency cycle                           │  │  selected   current row                                 │
+ │ ~     relation is a guess, not proven                 │  │   tests off status chip, click to change                │
+ │ n/a   metric does not apply here                      │  │  ▸ node     selection: cursor and background            │
+ │ *     stale: file changed since the index             │  │  ────────── pane with the keyboard                      │
+ │                                                       │  │  ━━━━━━━━━━ focus: heavy border on a node               │
+ ╰───────────────────────────────────────────────────────╯  ╰─────────────────────────────────────────────────────────╯
+
+ ╭─ Numbers come with context ───────────────────────────╮  ╭─ Relation kinds and members ────────────────────────────╮
+ │                                                       │  │                                                         │
+ │ cyclomatic  31    #1 of 3,204  ▇▅▃▂▁▁▁▁               │  │  >  uses, imports, calls   ▷  inherits                  │
+ │ lines       168   ━━━━━━━━━━━━━━━──────               │  │  ○  implements             ◆  composes, at the owner    │
+ │ instability 0.94  neutral: no heat, never warm        │  │                                                         │
+ │ lcom        n/a   does not apply: never 0             │  │  +  public   #  restricted   -  private                 │
+ │                                                       │  │                                                         │
+ │                                                       │  │                                                         │
+ ╰───────────────────────────────────────────────────────╯  ╰─────────────────────────────────────────────────────────╯
+
+

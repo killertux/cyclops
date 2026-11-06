@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › billing › invoice › Invoice › reconcile › why                                                method · trail 4/4
+╭─ src/billing/invoice.rs   gutter: cognitive points ──────────────────────────╮╭─ Why cognitive is 58 ────────────────╮
+│  212     pub fn reconcile(&mut self, batch: &Batch) -> Result<Summary> {     ││                                      │
+│  213         let (mut summary, ledger) = self.begin(batch)?;                 ││ if, else           17 ━━━━━━━━━━━━━  │
+│  214  +1     for entry in &batch.entries {                                   ││ match               3 ━━───────────  │
+│  215  +2         if entry.is_void() {                                        ││ loops               5 ━━━╸─────────  │
+│  216                 continue;                                               ││ && and ||           5 ━━━╸─────────  │
+│  217             }                                                           ││                                      │
+│  218  +2         match entry.kind {                                          ││ Decision points    30                │
+│  219                 Kind::Credit => {                                       ││ Added by nesting  +28                │
+│  220  +3                 if let Some(line) = self.find_line(entry.id) {      ││                                      │
+│  221  +5                     if line.amount != entry.amount && !forced {     ││ Half of the score is nesting.        │
+│  222  +5                         for tax in line.taxes.iter_mut() {          ││ Deepest: 6 levels, at line 223.      │
+│  223  +6                             if tax.rate_changed(batch.date) {       ││                                      │
+│  224                                     tax.recompute(ledger)?;             │╰──────────────────────────────────────╯
+│  225                                 }                                       │╭─ Why hotspot is 1.00 ────────────────╮
+│  226                             }                                           ││                                      │
+│  227                         }                                               ││ Churn                  47 commits    │
+│  228  +1                 } else if entry.allow_orphan {                      ││ Complexity             84 in file    │
+│  229                         summary.orphans += 1;                           ││ Highest in the project on both.      │
+│  230                     }                                                   ││                                      │
+│  231                 }                                                       ││ Recent commits to this file          │
+│  232  +1             Kind::Debit if self.locked => {                         ││ a41f9c2 3d  Fix credit rounding      │
+│  233                     return Err(Error::Locked(entry.id));                ││ 7be02d1 6d  Handle orphan refunds    │
+│  234                 }                                                       ││ c90e13a 2w  Lock during month end    │
+│  235                 Kind::Debit => ledger.post(entry)?,                     ││ 1fd77b0 3w  Recompute tax on rate c… │
+│  236                 Kind::Refund => {                                       ││ e2a4c65 1mo Add refund window        │
+│  237  +3                 if self.refund_window(entry).is_none() {            ││ 58c1d3e 1mo Split debit paths        │
+│  238                         summary.skipped += 1;                           ││ 0db6aa9 2mo Skip void entries early  │
+│  239                     }                                                   ││                                      │
+│  240                 }                                                       ││ Last 12 months                       │
+│  241             }                                                           ││ ▂▃▂▄▃▅▄▃▆▅▇▇                         │
+╰──────────────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────╯
+ NORMAL  metric cognitive  filter none  tests off  layer syntax                            29 alerts  2 problems  fresh
+ j k scroll  n N next decision  Tab next pane  gr impact  gf open line in editor  Ctrl-o back       Space menu   ? keys

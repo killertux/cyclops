@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mascot</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const top = ['.......HH.......', '......HHHH......', '....BBBBBBBB....', '..BBBBBBBBBBBB..'];
+    const low = ['.BBBBBBBBBBBBBB.', '.BBBBMWMMWMBBBB.', '..BBBBBBBBBBBB..', '...DD......DD...'];
+    const art = (eye) => top.concat(eye, low);
+    const watching = art(['.BBBWWWWWWWWBBB.', '.BBWWWIIIIWWWBB.', 'BBBWWIIPPIIWWBBB', 'BBBWWIIPPIIWWBBB', '.BBWWWIIIIWWWBB.', '.BBBWWWWWWWWBBB.']);
+    const scanning = art(['.BBBWWWWWWWWBBB.', '.BBWIIIIWWWWWBB.', 'BBBIIPPIIWWWWBBB', 'BBBIIPPIIWWWWBBB', '.BBWIIIIWWWWWBB.', '.BBBWWWWWWWWBBB.']);
+    const blink = art(['.BBBBBBBBBBBBBB.', '.BBBBBBBBBBBBBB.', 'BBBBBBBBBBBBBBBB', 'BBBDDDDDDDDDDBBB', '.BBBBBBBBBBBBBB.', '.BBBBBBBBBBBBBB.']);
+    const found = art(['.BBWWWWWWWWWWBB.', '.BBWWOOOOOOWWBB.', 'BBBWOOPPPPOOWBBB', 'BBBWOOPPPPOOWBBB', '.BBWWOOOOOOWWBB.', '.BBWWWWWWWWWWBB.']);
+    const empty = art(['.BBBBBBBBBBBBBB.', '.BBLLLLLLLLLLBB.', 'BBBWWIIPPIIWWBBB', 'BBBWWIIPPIIWWBBB', '.BBWWWWWWWWWWBB.', '.BBBWWWWWWWWBBB.']);
+    const mark = ['..BBBB..', '.BWIIWB.', 'BWIPPIWB', 'BWIPPIWB', '.BWIIWB.', '..BBBB..'];
+    const pose = (x, y, a, name, when) => [
+      ['px', x, y, a],
+      ['t', x, y + 8, name, 'b'],
+      ['t', x, y + 9, when, 'dim'],
+    ];
+    const ops = [
+      ['t', 3, 1, 'The watcher', 'b'],
+      ['t', 3, 2, 'One eye, always on the code.', 'dim'],
+      ['px', 5, 4, watching, 3],
+      ['t', 3, 27, 'It shows what the analysis is doing.', 'fg'],
+      ['t', 3, 28, 'Lives in the Analysis panel on Overview.', 'dim'],
+      ['t', 3, 29, 'The iris turns warm only when alerts fire.', 'dim'],
+      ['t', 3, 31, 'Built from half-block cells, 16 x 7 at its', 'dim'],
+      ['t', 3, 32, 'normal size, so it runs in any terminal.', 'dim'],
+      ['t', 58, 2, 'Poses', 'b'],
+    ].concat(
+      pose(58, 4, watching, 'Watching', 'analysis is idle'),
+      pose(78, 4, scanning, 'Scanning', 'while analyzing'),
+      pose(98, 4, blink, 'Blink', 'now and then'),
+      pose(58, 18, found, 'Found', 'new alerts fired'),
+      pose(78, 18, empty, 'Nothing here', 'no source files'),
+      [['px', 98, 19, mark, 2], ['t', 98, 26, 'Eye mark', 'b'], ['t', 98, 27, 'tab bar', 'dim']]
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

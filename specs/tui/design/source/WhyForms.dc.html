@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Why, for metrics with no source</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const pane = (x, title, meaning, body) => [
+      ['b', x, 3, 40, 31, 'Inspector: Why'],
+      ['t', x + 2, 5, title, 'b'],
+      ['t', x + 2, 6, meaning[0], 'fg'],
+      ['t', x + 2, 7, meaning[1] ?? '', 'dim'],
+    ].concat(body.map(([y, text, k]) => ['t', x + 2, y, text, k ?? 'fg']));
+    const ops = [
+      ['t', 1, 0, 'The Why section, when a metric has no lines to point at', 'b'],
+      ['t', 1, 1, 'Each form shares one layout: the value, what it means, a list, and keys. Enter jumps to the row.', 'dim'],
+    ].concat(
+      pane(0, 'Why efferent is 5', ['The modules on each side of billing.', ''], [
+        [9, 'Depends on 5', 'faint'],
+        [10, 'catalog::model'], [11, 'inventory'], [12, 'orders ⟦h2|@⟧'],
+        [13, 'catalog::pricing ⟦dim|~⟧'], [14, 'api::auth ⟦dim|~⟧'],
+        [16, 'Depended on by 6', 'faint'],
+        [17, 'orders ⟦h2|@⟧'], [18, 'api::routes'], [19, 'jobs::export'],
+        [20, 'api::admin'], [21, 'notes::digest'], [22, 'inventory::audit ⟦dim|~⟧'],
+        [24, 'Instability 5 / (5 + 6) = 0.45', 'dim'],
+        [32, '⟦acc|Enter⟧ jump   ⟦acc|gr⟧ impact', 'dim'],
+      ]),
+      pane(40, 'Why cycle size is ⟦h1|3⟧', ['The way around the cycle.', 'Removing one link breaks it.'], [
+        [9, 'cart ⟦h2|@⟧'],
+        [10, '  > checkout   ⟦dim|imports, exact⟧'],
+        [11, '  > session    ⟦dim|imports, exact⟧'],
+        [12, '  > cart       ⟦dim|imports, inferred ~⟧'],
+        [32, '⟦acc|Enter⟧ jump   ⟦acc|]c⟧ next cycle', 'dim'],
+      ]),
+      pane(80, 'Why duplication is ⟦h2|23.4%⟧', ['Where the copies of export are.', ''], [
+        [9, 'Copy 1   ⟦dim|38 lines⟧', 'faint'],
+        [10, 'src/export/csv.rs:14'],
+        [11, 'src/export/json.rs:9'],
+        [13, 'Copy 2   ⟦dim|21 lines⟧', 'faint'],
+        [14, 'src/export/csv.rs:88'],
+        [15, 'src/export/xml.rs:40'],
+        [16, 'src/export/json.rs:71'],
+        [32, '⟦acc|Enter⟧ jump   ⟦acc|]d⟧ next clone', 'dim'],
+      ])
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>First run</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const scanning = [
+      '.......HH.......', '......HHHH......', '....BBBBBBBB....', '..BBBBBBBBBBBB..',
+      '.BBBWWWWWWWWBBB.', '.BBWIIIIWWWWWBB.', 'BBBIIPPIIWWWWBBB', 'BBBIIPPIIWWWWBBB', '.BBWIIIIWWWWWBB.', '.BBBWWWWWWWWBBB.',
+      '.BBBBBBBBBBBBBB.', '.BBBBMWMMWMBBBB.', '..BBBBBBBBBBBB..', '...DD......DD...',
+    ];
+    const ready = [
+      ['cyclomatic', 'Invoice::reconcile', '⟦h3|31⟧'], ['cognitive', 'Invoice::reconcile', '⟦h3|58⟧'], ['max_nesting', 'Invoice::reconcile', '⟦h3|6⟧'],
+      ['lines', 'pricing::resolve_price', '⟦h3|121⟧'], ['parameters', 'pricing::resolve_price', '⟦h3|9⟧'],
+    ];
+    const waiting = [
+      ['duplication', 'waiting for every file'], ['lcom', 'waiting for link'], ['afferent', 'waiting for link'], ['efferent', 'waiting for link'],
+      ['instability', 'waiting for link'], ['distance', 'waiting for link'], ['cycle size', 'waiting for link'], ['churn', 'waiting for git history'], ['hotspot', 'waiting for git history'],
+    ];
+    const ops = [
+      ['sh', { v: 'Overview', mode: 'ANALYZING', mk: 'on', proj: 'shop · first run', crumb: '⟦b|shop⟧', right: '⟦chipa|514 of 842 files⟧', hint: [['j k', 'pick metric'], ['Tab', 'next pane'], ['Enter', 'open'], ['Ctrl-p', 'jump'], [':init', 'save settings']] }],
+      ['b', 0, 2, 40, 12, 'shop'],
+      ['tb', 2, 3, [12, -8], [['Packages', '4'], ['Modules', '⟦faint|...⟧'], ['Types', '⟦faint|...⟧'], ['Functions', '⟦faint|...⟧'], ['Files', '842'], ['Lines', '⟦faint|...⟧']]],
+      ['t', 2, 10, 'rust', 'fg'], ['bar', 13, 10, 18, 0.71, 'acc'], ['t', 33, 10, '71%', 'dim'],
+      ['t', 2, 11, 'typescript', 'fg'], ['bar', 13, 11, 18, 0.29, 'acc'], ['t', 33, 11, '29%', 'dim'],
+      ['b', 0, 14, 40, 8, 'Alerts'],
+      ['t', 2, 15, 'Waiting for analysis.', 'dim'],
+      ['b', 0, 22, 40, 12, 'Analysis', 'a'],
+      ['t', 2, 23, 'Extract ⟦accb|61%⟧', 'dim'],
+      ['bar', 2, 24, 17, 0.61, 'acc'],
+      ['t', 2, 25, '514 of 842 files', 'faint'],
+      ['t', 2, 27, 'Then', 'faint'],
+      ['t', 2, 28, 'link, history,', 'faint'],
+      ['t', 2, 29, 'analyze, evaluate', 'faint'],
+      ['t', 2, 31, 'Keep browsing.', 'fg'],
+      ['px', 22, 24, scanning],
+      ['b', 41, 2, 79, 18, 'Metrics'],
+      ['t', 43, 3, 'metric', 'faint'], ['t', 67, 3, 'highest so far', 'faint'], ['r', 117, 3, 'value', 'faint'],
+    ].concat(
+      ready.flatMap((m, i) => [['t', 43, 4 + i, m[0]], ['t', 67, 4 + i, m[1]], ['r', 117, 4 + i, m[2]]]),
+      waiting.flatMap((m, i) => [['t', 43, 9 + i, m[0], 'dim'], ['t', 67, 9 + i, m[1], 'faint']]),
+      [
+        ['h', 42, 4, 77],
+        ['b', 41, 20, 79, 14, 'Highest by cyclomatic, so far'],
+        ['tb', 43, 21, [52, 9, -10], [
+          ['symbol', 'kind', 'cyclomatic'],
+          ['shop::billing::invoice::Invoice::reconcile', '⟦dim|method⟧', '⟦h3|31⟧'],
+          ['shop::catalog::pricing::resolve_price', '⟦dim|function⟧', '⟦h3|24⟧'],
+          ['shop::billing::tax::apply_rules', '⟦dim|function⟧', '⟦h3|22⟧'],
+          ['shop::orders::service::OrderService::submit', '⟦dim|method⟧', '⟦h2|19⟧'],
+          ['shop_api::routes::orders::create', '⟦dim|function⟧', '⟦h2|19⟧'],
+        ], { head: 1 }],
+        ['t', 43, 28, 'From 514 files. This list will change.', 'dim'],
+        ['t', 43, 30, 'No project settings yet: defaults, local cache only.', 'dim'],
+        ['t', 43, 31, '⟦acc|:init⟧ saves settings for the team.', 'dim'],
+      ]
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

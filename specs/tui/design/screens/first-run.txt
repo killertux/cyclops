@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                                     shop · first run
+ shop
+╭─ shop ───────────────────────────────╮ ╭─ Metrics ───────────────────────────────────────────────────────────────────╮
+│ Packages            4                │ │ metric                  highest so far                                value │
+│ Modules           ...                │ │ cyclomatic              Invoice::reconcile                               31 │
+│ Types             ...                │ │ cognitive               Invoice::reconcile                               58 │
+│ Functions         ...                │ │ max_nesting             Invoice::reconcile                                6 │
+│ Files             842                │ │ lines                   pricing::resolve_price                          121 │
+│ Lines             ...                │ │ parameters              pricing::resolve_price                            9 │
+│                                      │ │ duplication             waiting for every file                              │
+│ rust       ━━━━━━━━━━━━╸─────  71%   │ │ lcom                    waiting for link                                    │
+│ typescript ━━━━━─────────────  29%   │ │ afferent                waiting for link                                    │
+│                                      │ │ efferent                waiting for link                                    │
+╰──────────────────────────────────────╯ │ instability             waiting for link                                    │
+╭─ Alerts ─────────────────────────────╮ │ distance                waiting for link                                    │
+│ Waiting for analysis.                │ │ cycle size              waiting for link                                    │
+│                                      │ │ churn                   waiting for git history                             │
+│                                      │ │ hotspot                 waiting for git history                             │
+│                                      │ │                                                                             │
+│                                      │ ╰─────────────────────────────────────────────────────────────────────────────╯
+│                                      │ ╭─ Highest by cyclomatic, so far ─────────────────────────────────────────────╮
+╰──────────────────────────────────────╯ │ symbol                                               kind      cyclomatic   │
+╭─ Analysis ───────────────────────────╮ │ shop::billing::invoice::Invoice::reconcile           method            31   │
+│ Extract 61%                          │ │ shop::catalog::pricing::resolve_price                function          24   │
+│ ━━━━━━━━━━───────         ▄██▄       │ │ shop::billing::tax::apply_rules                      function          22   │
+│ 514 of 842 files      ▄▄████████▄▄   │ │ shop::orders::service::OrderService::submit          method            19   │
+│                      ██▀▀▀▀▀████▀██  │ │ shop_api::routes::orders::create                     function          19   │
+│ Then                ████████████████ │ │                                                                             │
+│ link, history,       ██▀▀▀▀▀████▀██  │ │ From 514 files. This list will change.                                      │
+│ analyze, evaluate    ████▀▀▀▀▀▀████  │ │                                                                             │
+│                       ▀▀▀▀▀▀▀▀▀▀▀▀   │ │ No project settings yet: defaults, local cache only.                        │
+│ Keep browsing.                       │ │ :init saves settings for the team.                                          │
+│                                      │ │                                                                             │
+╰──────────────────────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────────╯
+ ANALYZING  metric cyclomatic  filter none  tests off  layer syntax                                    514 of 842 files
+ j k pick metric  Tab next pane  Enter open  Ctrl-p jump  :init save settings                       Space menu   ? keys

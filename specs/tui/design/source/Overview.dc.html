@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Overview</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"indexing":{"editor":"enum","options":["elapsed","percent","idle"],"default":"elapsed"},"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const state = this.props.indexing ?? 'elapsed';
+    const indexing = state !== 'idle';
+    const neutral = ['afferent', 'efferent', 'instability', 'churn'];
+    const heat = (v) => (v >= 0.7 ? 'h3' : v >= 0.4 ? 'h2' : v >= 0.2 ? 'h1' : 'h0');
+    const top = ['.......HH.......', '......HHHH......', '....BBBBBBBB....', '..BBBBBBBBBBBB..'];
+    const low = ['.BBBBBBBBBBBBBB.', '.BBBBMWMMWMBBBB.', '..BBBBBBBBBBBB..', '...DD......DD...'];
+    const scanning = top.concat(['.BBBWWWWWWWWBBB.', '.BBWIIIIWWWWWBB.', 'BBBIIPPIIWWWWBBB', 'BBBIIPPIIWWWWBBB', '.BBWIIIIWWWWWBB.', '.BBBWWWWWWWWBBB.'], low);
+    const watching = top.concat(['.BBBWWWWWWWWBBB.', '.BBWWWIIIIWWWBB.', 'BBBWWIIPPIIWWBBB', 'BBBWWIIPPIIWWBBB', '.BBWWWIIIIWWWBB.', '.BBBWWWWWWWWBBB.'], low);
+    const spots = [
+      ['src/billing/invoice.rs', 47, 84, 1.0], ['src/orders/checkout.rs', 41, 68, 0.71], ['src/catalog/pricing.rs', 29, 65, 0.48],
+      ['storefront/src/cart/reducer.ts', 26, 53, 0.35], ['src/billing/tax.rs', 22, 52, 0.29], ['src/orders/service.rs', 24, 39, 0.24],
+      ['shop-api/src/routes/orders.rs', 19, 41, 0.2], ['storefront/src/checkout/steps.tsx', 17, 36, 0.16],
+    ];
+    const metrics = [
+      ['cyclomatic', [8, 6, 3, 2, 1, 1, 0, 1], 'Invoice::reconcile', '⟦h3|31⟧'],
+      ['cognitive', [8, 5, 3, 2, 1, 1, 1, 1], 'Invoice::reconcile', '⟦h3|58⟧'],
+      ['max_nesting', [8, 7, 4, 2, 1, 0, 0, 1], 'Invoice::reconcile', '⟦h3|6⟧'],
+      ['lines', [8, 6, 3, 2, 1, 1, 0, 1], 'export::run_all', '⟦h3|214⟧'],
+      ['parameters', [8, 7, 5, 2, 1, 0, 0, 1], 'pricing::resolve_price', '⟦h3|9⟧'],
+      ['duplication', [8, 4, 2, 1, 1, 1, 0, 1], 'shop_jobs::export', '⟦h2|23.4%⟧'],
+      ['lcom', [8, 3, 2, 1, 0, 1, 0, 1], 'orders::OrderService', '⟦h3|5⟧'],
+      ['afferent', [8, 5, 2, 1, 1, 0, 0, 1], 'catalog::model', '61'],
+      ['efferent', [8, 6, 4, 2, 1, 1, 0, 1], 'shop_api::routes', '38'],
+      ['instability', [2, 3, 4, 6, 8, 6, 4, 3], 'shop_api::routes', '0.94'],
+      ['distance', [5, 6, 8, 5, 3, 2, 1, 1], 'shop::billing', '⟦h1|0.41⟧'],
+      ['cycle size', [8, 0, 3, 0, 0, 0, 0, 0], 'cart, checkout, session', '⟦h1|3⟧'],
+      ['churn', [8, 5, 3, 2, 1, 1, 1, 1], 'src/billing/invoice.rs', '47'],
+      ['hotspot', [8, 4, 2, 1, 1, 1, 0, 1], 'src/billing/invoice.rs', '⟦h3|1.00⟧'],
+    ];
+    const ops = [
+      ['sh', { v: 'Overview', crumb: '⟦b|shop⟧', side: 'project', metric: 'hotspot', right: '⟦chiph|29 alerts⟧  2 problems  ' + (indexing ? '⟦chipa|indexing ' + (state === 'percent' ? '38%' : '3m 12s') + '⟧' : '⟦chipd|fresh⟧'), hint: [['j k', 'pick metric'], ['Tab', 'next pane'], ['Enter', 'open'], ['M', 'metric'], ['f', 'filter'], ['Ctrl-p', 'jump']] }],
+      ['b', 0, 2, 40, 12, 'shop'],
+      ['tb', 2, 3, [12, -8], [['Packages', '4'], ['Modules', '188'], ['Types', '612'], ['Functions', '3,204'], ['Files', '842'], ['Lines', '96,410']]],
+      ['t', 25, 8, 'tests left out', 'faint'],
+      ['t', 2, 10, 'rust'], ['bar', 13, 10, 18, 0.71, 'acc'], ['t', 33, 10, '71%', 'dim'],
+      ['t', 2, 11, 'typescript'], ['bar', 13, 11, 18, 0.29, 'acc'], ['t', 33, 11, '29%', 'dim'],
+      ['b', 0, 14, 40, 8, 'Alerts'],
+      ['t', 2, 15, '⟦h3|2⟧ error   ⟦h2|27⟧ warning'],
+      ['tb', 2, 17, [3, 3, 28], [['⟦h2|!⟧', '23', 'Very complex function'], ['⟦h3|!!⟧', '2', 'Low cohesion in core'], ['⟦h2|!⟧', '4', 'Far from the main line']]],
+      ['b', 0, 22, 40, 12, 'Analysis'],
+      ['t', 2, 23, 'Syntax  ⟦fg|fresh⟧', 'dim'],
+      ['t', 2, 24, 'Precise ' + (state === 'percent' ? '⟦accb|38%⟧' : state === 'elapsed' ? '⟦accb|running⟧' : '⟦fg|no index⟧'), 'dim'],
+      state === 'percent' ? ['bar', 2, 25, 17, 0.38, 'acc'] : ['t', 2, 25, state === 'elapsed' ? 'for 3m 12s' : '', 'faint'],
+      ['t', 2, 26, indexing ? 'rust-analyzer' : '', 'faint'],
+      ['t', 2, 27, 'Exact   ⟦fg|71%⟧', 'dim'],
+      ['t', 2, 28, 'Problems ⟦fg|2⟧', 'dim'],
+      ['t', 2, 29, 'Tests   ⟦fg|left out⟧', 'dim'],
+      ['t', 2, 31, '⟦acc|Space s⟧ details', 'dim'],
+      ['t', 2, 32, indexing ? 'Keep browsing.' : '⟦acc|Space p⟧ precise', 'dim'],
+      ['px', 22, 24, indexing ? scanning : watching],
+      ['b', 41, 2, 79, 18, 'Metrics', 'a'],
+      ['t', 43, 3, 'metric', 'faint'], ['t', 57, 3, 'spread', 'faint'], ['t', 67, 3, 'highest', 'faint'], ['r', 117, 3, 'value', 'faint'],
+    ].concat(
+      metrics.flatMap((m, i) => [['t', 43, 4 + i, m[0]], ['sp', 57, 4 + i, m[1], 'dim', 7, neutral.includes(m[0]) ? 'b' : m[3].slice(1, 3)], ['t', 67, 4 + i, m[2]], ['r', 117, 4 + i, m[3]]]),
+      [
+        ['h', 42, 17, 77],
+        ['b', 41, 20, 79, 14, 'Highest by hotspot'],
+        ['tb', 43, 21, [34, -6, -6, -7], [['file', 'churn', 'cx', 'hotspot']].concat(spots.map((r) => [r[0], r[1], r[2], '⟦' + heat(r[3]) + '|' + r[3].toFixed(2) + '⟧'])), { head: 1 }],
+      ],
+      spots.map((r, i) => ['bar', 101, 22 + i, 17, r[3], heat(r[3])]),
+      [['t', 43, 31, 'This list follows the selected metric.   ⟦acc|Space f⟧ rank all 842', 'dim']]
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

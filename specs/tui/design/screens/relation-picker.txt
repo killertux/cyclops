@@ -1,0 +1,36 @@
+  ◉ cyclops  Overview  Map  Explore  Diagram  Find  Alerts  Status                      shop · 842 files · 96,410 lines
+ shop › billing                                                                                                  module
+╭─ Neighbors of billing ───────────────────────────────────────────────────────────────────────────────────────────────╮
+│ level module   depth 1   relations all   overlay cyclomatic                                                          │
+│                                                                                                                      │
+│                                                                                                                      │
+│  ╭──────────────────╮                                                                                                │
+│  │ orders @         │                                                                                                │
+│  │ cyclomatic 27    │       ╭──────────────────────────────────────────────────────────╮                             │
+│  ╰──────────────────╯       │ Relations to draw                                        │                             │
+│                             │ >                                                        │                             │
+│                             │                                                          │                             │
+│  ╭──────────────────╮       │ [x] > imports         A module depends on another        │       ╭──────────────────╮  │
+│  │ api::routes !    │       │ [x] ○ implements      A type implements an interface     │       │ inventory        │  │
+│  │ cyclomatic 19    │       │ [x] ▷ inherits        A class extends a class            │       │ cyclomatic 13    │  │
+│  ╰──────────────────╯       │ [x] ◆ composes        A type has a field of another      │       ╰──────────────────╯  │
+│                             │ [ ] > uses            A function mentions a type         │                             │
+│                             │ [x] > calls           A function calls another           │                             │
+│  ╭──────────────────╮       │                                                          │                             │
+│  │ +3 more  Enter   │       │ Type to narrow.   Space tick   Enter apply               │                             │
+│  ╰──────────────────╯       ╰──────────────────────────────────────────────────────────╯                             │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ NORMAL  metric cyclomatic  filter none  tests off  layer syntax                           29 alerts  2 problems  fresh
+ Space tick  Enter apply  Esc close

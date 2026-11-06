@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Find</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const heat = (v, a, b, c) => (v >= c ? 'h3' : v >= b ? 'h2' : v >= a ? 'h1' : 'h0');
+    const rows = [
+      ['!', 'shop::billing::invoice::Invoice::reconcile', 'method', 31, 58, 168, 47],
+      ['!', 'shop::orders::checkout::place_order', 'function', 27, 41, 133, 41],
+      ['!', 'shop::catalog::pricing::resolve_price', 'function', 24, 39, 121, 29],
+      ['!', 'storefront/src/cart/reducer::cartReducer', 'function', 22, 37, 118, 26],
+      ['!', 'shop::billing::tax::apply_rules', 'function', 22, 33, 96, 22],
+      ['!', 'shop::orders::service::OrderService::submit', 'method', 19, 30, 88, 24],
+      ['!', 'shop_api::routes::orders::create', 'function', 19, 27, 84, 19],
+      ['!', 'storefront/src/checkout/steps::nextStep', 'function', 18, 26, 72, 17],
+      ['!', 'shop_jobs::export::run_all', 'function', 18, 25, 214, 9],
+      ['!', 'shop::billing::ledger::Ledger::post', 'method', 17, 24, 69, 14],
+      ['!', 'shop::catalog::search::rank', 'function', 17, 23, 64, 6],
+      ['!', 'shop::inventory::stock::reserve', 'function', 17, 22, 71, 8],
+      ['!', 'storefront/src/session/auth::refresh', 'function', 16, 22, 58, 11],
+      ['!', 'shop_api::routes::users::update', 'function', 16, 21, 60, 7],
+      ['!', 'shop::orders::state::transition', 'function', 16, 20, 55, 10],
+      ['!', 'storefront/src/forms/fields::validateAll', 'function', 16, 19, 62, 5],
+    ];
+    const table = [['', 'symbol', 'kind', 'cyclomatic', 'cognitive ↓', 'lines', 'churn']].concat(
+      rows.map((r) => [
+        '⟦h2|' + r[0] + '⟧', r[1], '⟦dim|' + r[2] + '⟧',
+        '⟦' + heat(r[3], 5, 10, 20) + '|' + r[3] + '⟧', '⟦' + heat(r[4], 8, 15, 25) + '|' + r[4] + '⟧',
+        '⟦' + heat(r[5], 30, 60, 100) + '|' + r[5] + '⟧', r[6],
+      ])
+    );
+    const ops = [
+      ['sh', { v: 'Find', mode: 'FILTER', mk: 'on', crumb: 'shop › ⟦b|find⟧', side: 'filter stays on across views', metric: 'cognitive', filter: 'kind = function and cyclomatic > 15', menu: false, hint: [['Enter', 'apply'], ['Tab', 'complete'], ['Up Down', 'history'], ['Esc', 'back to results']] }],
+      ['b', 0, 2, 120, 3, 'Filter', 'a'],
+      ['t', 2, 3, '⟦acc|>⟧ kind = function and cyclomatic > 15 and c', 'fg'],
+      ['t', 45, 3, ' ', 'on'],
+      ['r', 117, 3, 'Unfinished: showing the last valid result', 'dim'],
+      ['t', 1, 5, '⟦b|23⟧ of 3,204 functions   sorted by cognitive, highest first', 'dim'],
+      ['b', 0, 6, 120, 28, 'Results'],
+      ['tb', 2, 7, [2, 52, 9, -10, -11, -6, -6], table, { head: 1, sel: 1 }],
+      ['t', 2, 25, '7 more below', 'faint'],
+      ['l', 2, 30, 117, 30, 's', 'faint'],
+      ['t', 2, 31, 'Same query in a script   ⟦acc|yc⟧ copy', 'faint'],
+      ['t', 2, 32, "cyclops query 'kind = function and cyclomatic > 15' --sort 'cognitive desc'", 'acc'],
+      ['b', 42, 4, 58, 7, '', 'p'],
+      ['t', 44, 5, 'churn          ⟦popd|commits within the window⟧', 'pop'],
+      ['t', 44, 6, 'cognitive      how hard it is to follow', 'pops'], ['h', 43, 6, 56],
+      ['t', 44, 7, 'comment_lines  ⟦popd|lines of comments⟧', 'pop'],
+      ['t', 44, 8, 'cyclomatic     ⟦popd|independent paths through it⟧', 'pop'],
+      ['t', 44, 9, '⟦popk|Tab⟧ complete', 'popd'],
+    ];
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>

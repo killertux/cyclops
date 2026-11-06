@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Diagram</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1080px; height: 720px">
+<dc-import name="Term" ops="{{ops}}" theme="{{theme}}" mono="{{mono}}" hint-size="1080px,720px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"mono":{"editor":"boolean","default":false},"$preview":{"width":1080,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const node = (x, y, name, val, mode) => [
+      ['b', x, y, 20, 4, '', mode],
+      ['t', x + 2, y + 1, name, mode ? 'accb' : 'b'],
+      ['t', x + 2, y + 2, val, 'dim'],
+    ];
+    const head = (x, y, s, k) => [['t', x, y, s, k], ['h', x, y, 1, 'ground']];
+    const ops = [
+      ['sh', { v: 'Diagram', crumb: 'shop › ⟦b|billing⟧', side: 'module · trail 5/5', hint: [['hjkl', 'move'], ['Enter', 'drill in'], ['c', 'center'], ['< >', 'depth'], ['r', 'relations'], ['M', 'overlay'], [':export', 'save view']] }],
+      ['b', 0, 2, 84, 32, 'Neighbors of billing', 'a'],
+      ['t', 2, 3, 'level ⟦accb|module⟧   depth ⟦accb|1⟧   relations ⟦accb|all⟧   overlay ⟦accb|cyclomatic⟧', 'dim'],
+      ['t', 3, 5, 'depends on billing', 'faint'], ['t', 32, 5, 'focus', 'faint'], ['t', 61, 5, 'billing depends on', 'faint'],
+      ['l', 22, 7, 25, 7, 'B', 'h3'], ['l', 25, 7, 25, 13, 'B', 'h3'], ['l', 25, 13, 32, 13, 'B', 'h3'],
+      ['l', 22, 14, 32, 14, 's', 'fg'],
+      ['l', 22, 19, 28, 19, 's', 'fg'], ['l', 28, 19, 28, 14, 's', 'fg'],
+      ['l', 22, 25, 28, 25, 'd', 'fg'], ['l', 28, 25, 28, 19, 'd', 'fg'],
+      ['l', 51, 13, 56, 13, 's', 'fg'], ['l', 56, 13, 56, 7, 's', 'fg'], ['l', 56, 7, 61, 7, 's', 'fg'],
+      ['l', 51, 14, 61, 14, 's', 'fg'],
+      ['l', 54, 14, 54, 19, 'd', 'fg'], ['l', 54, 19, 61, 19, 'd', 'fg'],
+      ['l', 52, 14, 52, 25, 'o', 'fg'], ['l', 52, 25, 61, 25, 'o', 'fg'],
+    ].concat(
+      node(3, 6, 'orders ⟦h2|@⟧', 'cyclomatic ⟦h3|27⟧'),
+      node(3, 12, 'api::routes ⟦h2|!⟧', 'cyclomatic ⟦h2|19⟧'),
+      node(3, 18, 'jobs::export', 'cyclomatic ⟦h2|15⟧'),
+      node(32, 12, 'billing ⟦h2|@⟧', 'cyclomatic ⟦h3|31⟧', 'f'),
+      node(61, 6, 'catalog::model', 'cyclomatic ⟦h0|4⟧'),
+      node(61, 12, 'inventory', 'cyclomatic ⟦h2|13⟧'),
+      node(61, 18, 'catalog::pricing', 'cyclomatic ⟦h3|24⟧'),
+      node(61, 24, 'api::auth', 'cyclomatic ⟦h1|8⟧'),
+      [['b', 3, 24, 20, 3, ''], ['t', 5, 25, '+3 more  ⟦acc|Enter⟧', 'dim']],
+      head(23, 7, '<', 'h3'), head(31, 13, '>', 'h3'), head(31, 14, '>', 'fg'),
+      head(60, 7, '>', 'fg'), head(60, 14, '>', 'fg'), head(60, 19, '>', 'fg'), head(60, 25, '>', 'fg'),
+      [
+        ['t', 33, 13, '▸', 'accb'], ['h', 33, 13, 18],
+        ['l', 2, 30, 7, 30, 's', 'fg'], ['t', 9, 30, 'exact', 'dim'],
+        ['l', 16, 30, 21, 30, 'd', 'fg'], ['t', 23, 30, 'inferred', 'dim'],
+        ['l', 33, 30, 38, 30, 'o', 'fg'], ['t', 40, 30, 'ambiguous', 'dim'],
+        ['l', 51, 30, 56, 30, 'B', 'h3'], ['t', 58, 30, 'cycle', 'dim'],
+        ['t', 2, 31, '⟦fg|>⟧ uses, imports, calls  ⟦fg|▷⟧ inherits  ⟦fg|○⟧ implements  ⟦fg|◆⟧ composes', 'dim'],
+        ['t', 2, 32, '⟦h2|!⟧ alert   ⟦h2|@⟧ in a cycle   Numbers are the overlay metric.', 'dim'],
+        ['b', 84, 2, 36, 32, 'Inspector'],
+        ['t', 86, 3, 'billing', 'b'], ['t', 86, 4, 'module · 18,204 lines', 'dim'],
+        ['t', 86, 6, ' Impact ', 'on'], ['t', 95, 6, '⟦acc|H L⟧ sections', 'dim'],
+        ['t', 86, 8, 'If billing changes', 'faint'],
+        ['tb', 86, 9, [11, -3], [['distance 1', '6'], ['distance 2', '23'], ['distance 3', '41']]],
+        ['bar', 102, 9, 15, 6 / 41, 'acc'], ['bar', 102, 10, 15, 23 / 41, 'acc'], ['bar', 102, 11, 15, 1, 'acc'],
+        ['t', 86, 13, '70 of 188 modules', 'fg'], ['t', 86, 14, '3 of 4 packages', 'fg'],
+        ['t', 86, 16, 'How sure', 'faint'],
+        ['tb', 86, 17, [11, -3], [['exact', '52'], ['inferred', '14'], ['ambiguous', '⟦h1|4⟧']]],
+        ['t', 86, 20, '18 of these are guesses.', 'fg'],
+        ['t', 86, 21, '⟦acc|Space p⟧ settles them', 'dim'],
+        ['t', 86, 23, 'Nearest dependents', 'faint'],
+        ['tb', 86, 24, [20, -8], [['orders', '⟦dim|exact⟧'], ['api::routes', '⟦dim|exact⟧'], ['jobs::export', '⟦dim|exact⟧'], ['api::admin', '⟦dim|exact⟧'], ['notes::digest', '⟦dim|exact⟧'], ['inventory::audit ~', '⟦dim|inferred⟧']]],
+      ]
+    );
+    return { ops, theme: this.props.theme ?? 'dark', mono: !!this.props.mono };
+  }
+}
+</script>
+</body>
+</html>
