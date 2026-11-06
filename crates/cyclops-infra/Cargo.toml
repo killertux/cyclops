@@ -1,0 +1,15 @@
+[package]
+name = "cyclops-infra"
+description = "File access for Cyclops"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+cyclops-application.workspace = true
+cyclops-domain.workspace = true
+ignore.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

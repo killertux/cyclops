@@ -1,11 +1,15 @@
 [package]
 name = "cyclops-fixtures"
-version = "0.1.0"
-edition = "2024"
 description = "The Slim server that runs the Cyclops specification"
+version.workspace = true
+edition.workspace = true
 publish = false
 
 [dependencies]
+cyclops-application.workspace = true
+cyclops-cli.workspace = true
+cyclops-domain.workspace = true
+cyclops-infra.workspace = true
 rust_slim = { version = "0.3.1", features = ["macros"] }
 
 [lints]

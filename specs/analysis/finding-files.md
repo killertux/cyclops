@@ -54,7 +54,7 @@ The extension of a file decides its language.
 
 A project with no source code is not an error.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation    | workspace | analyzed? | files? | problems?              |
 | -------------- | --------- | --------- | ------ | ---------------------- |

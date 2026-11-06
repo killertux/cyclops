@@ -98,8 +98,10 @@ output in the **SCIP** format:
 | Rust | `rust-analyzer scip` | rust-analyzer and a Cargo toolchain |
 | TypeScript, JavaScript | `scip-typescript` | Node and the project's dependencies installed |
 
-SCIP records where each symbol is defined and referenced, and relationships such
-as "implements". Relations backed by it become `Confidence::Exact`.
+SCIP records where each symbol is defined and referenced. Relations backed by it become
+`Confidence::Exact`. `scip-typescript` also records "implements" as a relationship, but
+`rust-analyzer` does not, so for Rust it has to be read from the symbol's name, as in
+`catalog/impl#[Item][Priced]price()`. See the [spike results](#indexer-spike-results).
 
 SCIP was chosen over the alternatives because it fits the language-agnostic goal:
 
@@ -581,7 +583,7 @@ their adapter crates, so an upgrade cannot reach the rest of the system.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Indexers don't scale or are unmaintained | Precise analysis is too slow or breaks | Spike in milestone 1; the syntax layer stands alone; revisit `ra_ap_hir` and the TS 7 API |
+| Indexers don't scale or are unmaintained | Precise analysis is too slow or breaks | [Spike done](#indexer-spike-results); the syntax layer stands alone; revisit `ra_ap_hir` and the TS 7 API |
 | `scip-typescript` needs the project's dependencies installed | Precise analysis is unavailable on a fresh clone | Report it through `availability`; fall back to the syntax layer |
 | Rust macros are opaque to the syntax layer | Logic inside macro calls is undercounted | Document it; flag affected functions in diagnostics |
 | Parser crate API churn | Upgrades take work | Exact pins, contained in adapter crates |
@@ -610,7 +612,25 @@ their snoozes, so `grep -rn 'snooze until 2099' specs` always shows what is left
 | 11. TUI drawing | Map, diagram and mouse | `tui/map`, `diagram`, `mouse` | Scores on structure work in a terminal |
 | 12. Finish | The mascot, and matching every design screen | `tui/design` | The interface matches the design |
 
-The indexer spike runs both indexers on a real repository and checks output quality,
-progress reporting and maintenance status, because the semantic layer depends on it.
+### Indexer spike results
+
+Run in November 2026, in batch 1. Both indexers are viable, so the semantic layer stands.
+
+| | `rust-analyzer scip` 1.99.1 | `scip-typescript` 0.6.1 |
+|---|---|---|
+| Real repository | 49 files, 43,336 occurrences | 242 files, 45,092 occurrences |
+| Time and peak memory | 10 s, 2.2 GB | 7 s, 1.2 GB |
+| Method calls on inferred types | Exact: `invoice.total()` reaches `Invoice::total` | Exact |
+| "Implements" | No relationships. Read it from the symbol's name | Recorded as a relationship |
+| Progress | Named stages on stderr, no percentage | One line per `tsconfig`, no percentage |
+| Maintenance | Weekly releases, ships with rustup | Active, last release this month |
+| Needs | The `rust-analyzer` rustup component | Node, and the project's `node_modules` |
+
+- Neither reports a percentage, so `Precise running` shows the time it has been running.
+- `rust-analyzer` warns about duplicate symbols, such as one crate that is both a library
+  and a binary. The index is still written, and the reader must tolerate duplicates.
+- Memory is the main concern. `rust-analyzer` used 1 GB on a 4,000 line workspace and
+  2.2 GB on the repository above, so it does not stay flat. Very large repositories were
+  not measured, which is left for the benchmarks.
 
 Benchmarks on large repositories come later.

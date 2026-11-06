@@ -18,7 +18,7 @@ A trait is an `interface`, so that it means the same as in TypeScript. Methods b
 to their type, whichever `impl` block they are in.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation         | language | code                                                                 | symbol | kind?     | parent? |
 | ------------------- | -------- | -------------------------------------------------------------------- | ------ | --------- | ------- |
@@ -61,7 +61,7 @@ along is not a symbol, and counts as part of the function around it.
 
 ## Closures
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation    | language   | code                                           | symbol | found? |
 | -------------- | ---------- | ---------------------------------------------- | ------ | ------ |
@@ -107,7 +107,7 @@ them. An `index` file is the module of its folder.
 
 Children are listed in alphabetical order.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | subject               | children?                                                                           |
 | ----------- | --------- | --------------------- | ----------------------------------------------------------------------------------- |

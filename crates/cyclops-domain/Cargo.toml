@@ -1,0 +1,11 @@
+[package]
+name = "cyclops-domain"
+description = "The Cyclops model: symbols, facts, and metrics"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true

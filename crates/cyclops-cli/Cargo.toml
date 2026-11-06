@@ -1,0 +1,21 @@
+[package]
+name = "cyclops-cli"
+description = "The cyclops binary, and the place where everything is composed"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "cyclops"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+cyclops-application.workspace = true
+cyclops-domain.workspace = true
+cyclops-infra.workspace = true
+cyclops-lang-rust.workspace = true
+
+[lints]
+workspace = true

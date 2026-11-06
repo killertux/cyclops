@@ -11,7 +11,7 @@ Shorthand operators are branches too, because they can skip code: `&&`, `||`, `?
 ## Rust
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation             | language | code                                                        | cyclomatic? |
 | ----------------------- | -------- | ----------------------------------------------------------- | ----------- |

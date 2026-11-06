@@ -1,0 +1,14 @@
+[package]
+name = "cyclops-application"
+description = "Cyclops use cases: the ports, the pipeline, and the analyzers"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+cyclops-domain.workspace = true
+rayon.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

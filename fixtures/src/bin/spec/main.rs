@@ -1,14 +1,21 @@
 //! The Slim server that runs the specification in `specs/`.
 //!
-//! No fixture exists yet, so every snoozed table reports as snoozed. Register each
-//! fixture here as its behavior is built. See `specs/writing-specs.md`.
+//! See `specs/writing-specs.md` for how the fixtures are used. Fixtures grow as behavior
+//! is built, and a snoozed table may use what is not here yet.
 
+mod fixtures;
+mod read;
+mod scratch;
+
+use fixtures::{Core, Snippet};
 use rust_slim::PortSlimServer;
 use std::env::args;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let server = PortSlimServer::listen_from_args(args().skip(1))?;
+    let mut server = PortSlimServer::listen_from_args(args().skip(1))?;
+    server.add_fixture::<Snippet>();
+    server.add_fixture::<Core>();
     server.run()?;
     Ok(())
 }

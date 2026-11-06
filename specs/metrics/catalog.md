@@ -36,7 +36,7 @@ is why `instability` is neutral and `distance` is the one that signals trouble.
 Where these pages say "worst", a neutral metric means its highest value.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | metric        | direction?      |
 | ------------- | --------------- |
@@ -84,7 +84,7 @@ Below `mild`, a value is `quiet`. Neutral metrics and values that are `n/a` have
 `lines` has heat on functions only, because a sum says nothing about a large module.
 A rolled up value has the heat of its value.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation      | metric      | scope    | value | heat?  |
 | ---------------- | ----------- | -------- | ----- | ------ |

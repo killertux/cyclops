@@ -29,7 +29,7 @@ test code too. `role?` can be read whether or not test code is left out.
 | JS `.test.` file    | js-shop   | `add src/a.test.js`                    | src/a.test.js      | test       |
 | Extra paths         | ts-shop   | `add e2e/a.ts; set tests.paths e2e/**` | e2e/a.ts           | test       |
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation      | language | code                                        | symbol        | role?      |
 | ---------------- | -------- | ------------------------------------------- | ------------- | ---------- |
