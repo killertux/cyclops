@@ -64,7 +64,7 @@ A cached result is the same as a fresh one.
 Only commits that are new since the last analysis are read. `commits read?` counts
 them. If the known history was rewritten, all of it is read again.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation       | workspace | steps                                                              | commits read? |
 | ----------------- | --------- | ------------------------------------------------------------------ | ------------- |

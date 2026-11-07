@@ -2,12 +2,15 @@
 
 use crate::language;
 use crate::symbols::Extractor;
-use cyclops_domain::facts::{Export, FileFacts, Import, LineCounts, SymbolFact, is_too_deep};
+use cyclops_domain::facts::{
+    Export, FileFacts, Import, LineCounts, SymbolFact, Token, is_too_deep,
+};
 use cyclops_domain::lines::LineMap;
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::symbol::CodeRole;
 use oxc_allocator::Allocator;
-use oxc_parser::Parser;
+use oxc_parser::config::TokensParserConfig;
+use oxc_parser::{Kind, Parser};
 use oxc_span::SourceType;
 
 /// How many earlier places to try cutting a broken file at.
@@ -15,6 +18,7 @@ const MAX_CUTS: usize = 8;
 
 /// What a parse gives, for the part of a file that parsed.
 struct Parsed {
+    tokens: Vec<Token>,
     symbols: Vec<SymbolFact>,
     imports: Vec<Import>,
     exports: Vec<Export>,
@@ -37,7 +41,9 @@ pub(crate) fn extract(path: &RelativePath, text: &str) -> FileFacts {
 /// parser does not recover from one.
 fn parse(text: &str, part: &str, source_type: SourceType, role: CodeRole) -> Option<Parsed> {
     let allocator = Allocator::default();
-    let parsed = Parser::new(&allocator, part, source_type).parse();
+    let parsed = Parser::new(&allocator, part, source_type)
+        .with_config(TokensParserConfig)
+        .parse();
     if parsed.fatal_error {
         return None;
     }
@@ -53,7 +59,18 @@ fn parse(text: &str, part: &str, source_type: SourceType, role: CodeRole) -> Opt
     let mut extractor = Extractor::new(&lines, part, role);
     extractor.program(&parsed.program);
     let (symbols, imports, exports) = extractor.into_parts();
+    let is_test = role == CodeRole::Test;
+    let tokens = parsed
+        .tokens
+        .iter()
+        .map(|token| Token {
+            kind: token_kind(token.kind()),
+            line: lines.line_of(token.start()),
+            test: is_test,
+        })
+        .collect();
     Some(Parsed {
+        tokens,
         symbols,
         imports,
         exports,
@@ -105,8 +122,17 @@ fn top_level_lines(text: &str) -> Vec<usize> {
 
 fn facts(path: &RelativePath, text: &str, parsed: Option<Parsed>) -> FileFacts {
     let role = language::role(path);
-    let (symbols, imports, exports, comments, syntax_error) = parsed.map_or_else(
-        || (Vec::new(), Vec::new(), Vec::new(), Vec::new(), true),
+    let (symbols, imports, exports, comments, syntax_error, tokens) = parsed.map_or_else(
+        || {
+            (
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                true,
+                Vec::new(),
+            )
+        },
         |parsed| {
             (
                 parsed.symbols,
@@ -114,6 +140,7 @@ fn facts(path: &RelativePath, text: &str, parsed: Option<Parsed>) -> FileFacts {
                 parsed.exports,
                 parsed.comments,
                 parsed.syntax_error,
+                parsed.tokens,
             )
         },
     );
@@ -133,6 +160,20 @@ fn facts(path: &RelativePath, text: &str, parsed: Option<Parsed>) -> FileFacts {
         test_modules: Vec::new(),
         extensions: Vec::new(),
         exports,
+        tokens,
+    }
+}
+
+/// A token's kind, with names and literal values made alike, for finding copies.
+fn token_kind(kind: Kind) -> u16 {
+    match kind {
+        Kind::Ident | Kind::PrivateIdentifier => Token::NAME,
+        Kind::NoSubstitutionTemplate
+        | Kind::TemplateHead
+        | Kind::TemplateMiddle
+        | Kind::TemplateTail => Token::LITERAL,
+        other if other.is_literal() => Token::LITERAL,
+        other => Token::FIRST_OTHER.saturating_add(u16::from(other as u8)),
     }
 }
 
@@ -216,6 +257,26 @@ mod tests {
         for (path, text) in cases {
             assert!(!facts_of(path, text).syntax_error, "{path}: {text}");
         }
+    }
+
+    #[test]
+    fn a_renamed_copy_has_the_same_tokens() {
+        let kinds = |text: &str| {
+            facts_of("a.ts", text)
+                .tokens
+                .iter()
+                .map(|token| token.kind)
+                .collect::<Vec<_>>()
+        };
+        let original = kinds("function a(b: number) { return b + `x${1}`; }");
+        assert_eq!(
+            original,
+            kinds("function q(r: number) { return r + `y${2}`; }")
+        );
+        assert_ne!(
+            original,
+            kinds("function a(b: string) { return b + `x${1}`; }")
+        );
     }
 
     #[test]

@@ -1,14 +1,17 @@
 //! The analysis pipeline: discover, check the cache, extract, link, analyze.
 
-use crate::analysis::{AnalysisInput, AnalyzedFile, ProjectAnalysis};
+use crate::analysis::{AnalysisInput, AnalyzedFile, Extras, ProjectAnalysis};
+use crate::duplication::Duplication;
+use crate::history::{self, churn, start_of};
 use crate::ports::{
-    Analyzer, CacheAccess, CacheEntry, CachedFacts, ContentHash, FactStore, FileSource, FileStamp,
-    LanguageAdapter, SourceError, SourceFile,
+    Analyzer, CacheAccess, CacheEntry, CachedFacts, Commit, ContentHash, FactStore, FileSource,
+    FileStamp, HistoryError, HistorySource, KnownHistory, LanguageAdapter, SourceError, SourceFile,
 };
 use crate::rollups::roll_up;
 use cyclops_domain::facts::FileFacts;
 use cyclops_domain::glob::Glob;
 use cyclops_domain::language::LanguageId;
+use cyclops_domain::metric::{MetricId, Subject};
 use cyclops_domain::model::{ModelView, ProjectModel};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
@@ -16,7 +19,8 @@ use cyclops_domain::settings::Settings;
 use cyclops_domain::symbol::{CodeRole, SymbolId};
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -36,6 +40,51 @@ const WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
 pub struct AnalysisService {
     adapters: Vec<Box<dyn LanguageAdapter>>,
     analyzers: Vec<Box<dyn Analyzer>>,
+}
+
+/// Where an analysis reads from.
+pub struct Sources<'a> {
+    pub files: &'a dyn FileSource,
+    pub cache: CacheAccess<'a>,
+    /// The history of the files, if the project has one.
+    pub history: Option<&'a dyn HistorySource>,
+}
+
+/// The time now, in seconds since 1970.
+fn now() -> i64 {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
+}
+
+/// Every commit there is, from the cache and from what is new. Says how many were new.
+fn read_history(
+    history: Option<&dyn HistorySource>,
+    cache: &mut Option<&mut dyn FactStore>,
+    problems: &mut Vec<Problem>,
+) -> Result<(Vec<Commit>, usize), HistoryError> {
+    let source = history.ok_or(HistoryError::NoHistory)?;
+    let known = match cache.as_deref_mut().map(<dyn FactStore>::load_history) {
+        Some(Ok(known)) => known,
+        Some(Err(error)) => {
+            problems.push(Problem::CacheUnavailable(error.to_string()));
+            KnownHistory::default()
+        }
+        None => KnownHistory::default(),
+    };
+    let new = source.read_since(known.head.as_deref())?;
+    if let Some(store) = cache.as_deref_mut()
+        && let Err(error) = store.save_history(&new)
+    {
+        problems.push(Problem::CacheUnavailable(error.to_string()));
+    }
+    let read = new.commits.len();
+    let mut commits = new.commits;
+    if !new.rewritten {
+        commits.extend(known.commits);
+    }
+    Ok((commits, read))
 }
 
 /// What linking says about files.
@@ -117,19 +166,19 @@ impl AnalysisService {
     }
 
     /// Analyzes a project. One bad file never stops it, and only shows up as a problem.
-    /// Without a cache, or with one that fails, every file is parsed.
+    /// Without a cache, or with one that fails, every file is parsed. Without history,
+    /// the metrics that need it are unavailable, and the rest still works.
     ///
     /// # Errors
     ///
     /// Fails if the project cannot be listed at all.
     pub fn analyze(
         &self,
-        source: &dyn FileSource,
-        cache: CacheAccess<'_>,
+        sources: Sources<'_>,
         settings: &Settings,
     ) -> Result<ProjectAnalysis, AnalysisError> {
         let mut problems = Vec::new();
-        let mut cache = match cache {
+        let mut cache = match sources.cache {
             CacheAccess::Store(store) => Some(store),
             CacheAccess::Unavailable(error) => {
                 problems.push(Problem::CacheUnavailable(error.to_string()));
@@ -137,67 +186,13 @@ impl AnalysisService {
             }
             CacheAccess::None => None,
         };
-        let mut known = match cache.as_mut().map(|store| store.load()) {
-            Some(Ok(known)) => known,
-            Some(Err(error)) => {
-                problems.push(Problem::CacheUnavailable(error.to_string()));
-                cache = None;
-                HashMap::new()
-            }
-            None => HashMap::new(),
-        };
-
-        let discovered = source.discover()?;
-        let present: HashSet<&RelativePath> = discovered.files.iter().collect();
-        let gone: Vec<RelativePath> = known
-            .keys()
-            .filter(|path| !present.contains(path))
-            .cloned()
-            .collect();
-        let candidates = self.candidates(discovered.files.clone(), settings, &mut known);
-        let found_any = !candidates.is_empty();
-        problems.extend(discovered.unreadable.into_iter().map(Problem::Unreadable));
-
-        let workers = ThreadPoolBuilder::new()
-            .stack_size(WORKER_STACK_BYTES)
-            .build()?;
-        let outcomes: Vec<Result<Extracted, Problem>> = workers.install(|| {
-            candidates
-                .into_par_iter()
-                .map(|candidate| Self::extract(candidate, source))
-                .collect()
-        });
-
-        let mut extracted = Vec::new();
-        for outcome in outcomes {
-            match outcome {
-                Ok(file) => {
-                    if file.facts.syntax_error {
-                        problems.push(Problem::SyntaxError(file.facts.path.clone()));
-                    }
-                    extracted.push(file);
-                }
-                Err(problem) => problems.push(problem),
-            }
-        }
-        if !found_any && problems.is_empty() {
-            problems.push(Problem::NoSourceFiles);
-        }
-        let parsed = extracted
-            .iter()
-            .filter(|file| matches!(file.origin, Origin::Parsed(..)))
-            .count();
-        if let Some(store) = cache
-            && let Err(error) = self.remember(store, &extracted, &gone)
-        {
-            problems.push(Problem::CacheUnavailable(error.to_string()));
-        }
-        Problem::sort(&mut problems);
+        let (mut extracted, parsed) =
+            self.gather(sources.files, &mut cache, settings, &mut problems)?;
 
         for file in &mut extracted {
             mark_test_paths(&mut file.facts, &settings.test_paths);
         }
-        let (model, linked) = self.link(&extracted, source);
+        let (model, linked) = self.link(&extracted, sources.files);
         let mut files: Vec<AnalyzedFile> = extracted
             .iter()
             .map(|file| AnalyzedFile::from_facts(&file.facts))
@@ -221,6 +216,33 @@ impl AnalysisService {
         let rolled = roll_up(&input, &measurements);
         measurements.extend(rolled);
 
+        let facts: Vec<&FileFacts> = extracted.iter().map(|file| &file.facts).collect();
+        let duplication = Duplication::find(&input, &facts, settings.min_tokens);
+        measurements.extend(duplication.measure(&input));
+        let mut extras = Extras {
+            duplication,
+            ..Extras::default()
+        };
+        match read_history(sources.history, &mut cache, &mut problems) {
+            Ok((commits, read)) => {
+                extras.commits_read = read;
+                let paths: Vec<&RelativePath> = files.iter().map(|file| &file.path).collect();
+                let since = start_of(settings.hotspots_since, now());
+                let churn = churn(&commits, &paths, since);
+                let complexity: BTreeMap<RelativePath, f64> = measurements
+                    .iter()
+                    .filter(|one| one.metric == MetricId::Cyclomatic)
+                    .filter_map(|one| match &one.subject {
+                        Subject::File(path) => Some((path.clone(), one.value)),
+                        Subject::Symbol(_) => None,
+                    })
+                    .collect();
+                measurements.extend(history::measure(&input, &churn, &complexity));
+            }
+            Err(error) => extras.unavailable.push(format!("churn, hotspot: {error}")),
+        }
+        Problem::sort(&mut problems);
+
         Ok(ProjectAnalysis::new(
             model,
             files,
@@ -228,7 +250,73 @@ impl AnalysisService {
             problems,
             settings.tests,
             parsed,
+            extras,
         ))
+    }
+
+    /// Finds the files, and extracts their facts or takes them from the cache. Says how
+    /// many it parsed.
+    fn gather(
+        &self,
+        source: &dyn FileSource,
+        cache: &mut Option<&mut dyn FactStore>,
+        settings: &Settings,
+        problems: &mut Vec<Problem>,
+    ) -> Result<(Vec<Extracted>, usize), AnalysisError> {
+        let mut known = match cache.as_mut().map(|store| store.load()) {
+            Some(Ok(known)) => known,
+            Some(Err(error)) => {
+                problems.push(Problem::CacheUnavailable(error.to_string()));
+                *cache = None;
+                HashMap::new()
+            }
+            None => HashMap::new(),
+        };
+        let discovered = source.discover()?;
+        let present: HashSet<&RelativePath> = discovered.files.iter().collect();
+        let gone: Vec<RelativePath> = known
+            .keys()
+            .filter(|path| !present.contains(path))
+            .cloned()
+            .collect();
+        let candidates = self.candidates(discovered.files.clone(), settings, &mut known);
+        let found_any = !candidates.is_empty();
+        problems.extend(discovered.unreadable.into_iter().map(Problem::Unreadable));
+
+        let workers = ThreadPoolBuilder::new()
+            .stack_size(WORKER_STACK_BYTES)
+            .build()?;
+        let outcomes: Vec<Result<Extracted, Problem>> = workers.install(|| {
+            candidates
+                .into_par_iter()
+                .map(|candidate| Self::extract(candidate, source))
+                .collect()
+        });
+        let mut extracted = Vec::new();
+        for outcome in outcomes {
+            match outcome {
+                Ok(file) => {
+                    if file.facts.syntax_error {
+                        problems.push(Problem::SyntaxError(file.facts.path.clone()));
+                    }
+                    extracted.push(file);
+                }
+                Err(problem) => problems.push(problem),
+            }
+        }
+        if !found_any && problems.is_empty() {
+            problems.push(Problem::NoSourceFiles);
+        }
+        let parsed = extracted
+            .iter()
+            .filter(|file| matches!(file.origin, Origin::Parsed(..)))
+            .count();
+        if let Some(store) = cache.as_deref_mut()
+            && let Err(error) = self.remember(store, &extracted, &gone)
+        {
+            problems.push(Problem::CacheUnavailable(error.to_string()));
+        }
+        Ok((extracted, parsed))
     }
 
     /// The files to analyze, with the adapter for each and what the cache knows.

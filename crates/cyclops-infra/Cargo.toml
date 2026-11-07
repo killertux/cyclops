@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 cyclops-application.workspace = true
 cyclops-domain.workspace = true
+gix.workspace = true
 ignore.workspace = true
 postcard.workspace = true
 rusqlite.workspace = true

@@ -149,6 +149,20 @@ pub trait FactStore {
     /// Fails if the cache cannot be written.
     fn save(&mut self, changed: &[CacheEntry<'_>], gone: &[RelativePath])
     -> Result<(), CacheError>;
+
+    /// The history read so far.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the cache cannot be read.
+    fn load_history(&mut self) -> Result<KnownHistory, CacheError>;
+
+    /// Adds new commits to the history, or replaces it when it was rewritten.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the cache cannot be written.
+    fn save_history(&mut self, history: &NewHistory) -> Result<(), CacheError>;
 }
 
 /// What an analysis can do about the cache.
@@ -159,4 +173,57 @@ pub enum CacheAccess<'a> {
     Unavailable(CacheError),
     /// Do without, on purpose.
     None,
+}
+
+/// One commit, with the files it changed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Commit {
+    pub id: String,
+    /// When it was made, in seconds since 1970.
+    pub time: i64,
+    pub changes: Vec<FileChange>,
+}
+
+/// A file a commit changed, relative to the project.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileChange {
+    pub path: String,
+    /// What it was called before, if the commit renamed it.
+    pub previous: Option<String>,
+}
+
+/// What the history has that the cache does not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewHistory {
+    pub head: String,
+    /// The commits that are new, newest first.
+    pub commits: Vec<Commit>,
+    /// Whether the history the cache knew is gone, so that every commit is new.
+    pub rewritten: bool,
+}
+
+#[derive(Debug, Error)]
+pub enum HistoryError {
+    #[error("no git history")]
+    NoHistory,
+    #[error("git history cannot be read: {0}")]
+    Unreadable(String),
+}
+
+/// The history of a project's files.
+pub trait HistorySource {
+    /// The commits since `known`, the head the cache saw last.
+    ///
+    /// # Errors
+    ///
+    /// Fails if there is no history, or it cannot be read.
+    fn read_since(&self, known: Option<&str>) -> Result<NewHistory, HistoryError>;
+}
+
+/// The history the cache keeps.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KnownHistory {
+    pub head: Option<String>,
+    /// Every commit it has read, newest first.
+    pub commits: Vec<Commit>,
 }

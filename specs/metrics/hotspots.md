@@ -17,7 +17,7 @@ In `rust-shop`, `src/orders.rs` has a complexity of 4, `src/billing.rs` has 3, a
 `src/catalog.rs` has 1. `git init` is the first commit of every file.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation       | workspace | steps                                                                                                  | subject        | churn? | hotspot? |
 | ----------------- | --------- | ------------------------------------------------------------------------------------------------------ | -------------- | ------ | -------- |
@@ -28,7 +28,7 @@ In `rust-shop`, `src/orders.rs` has a complexity of 4, `src/billing.rs` has 3, a
 
 ## How far back
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace | steps                                                                                        | subject       | churn? |
 | --------------- | --------- | -------------------------------------------------------------------------------------------- | ------------- | ------ |
@@ -39,7 +39,7 @@ In `rust-shop`, `src/orders.rs` has a complexity of 4, `src/billing.rs` has 3, a
 
 A file keeps its history when it is renamed.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps                                                                           | subject          | churn? |
 | ----------- | --------- | ------------------------------------------------------------------------------- | ---------------- | ------ |
@@ -49,7 +49,7 @@ A file keeps its history when it is renamed.
 
 [Test code](../analysis/test-code.md#leaving-it-out) that is left out has no hotspot.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps                                      | subject         | churn? | hotspot? |
 | ----------- | --------- | ------------------------------------------ | --------------- | ------ | -------- |
@@ -61,7 +61,7 @@ Hotspots need history. Without it the metric is unavailable, and everything else
 still works. `unavailable?` lists the metrics that could not be worked out, and why.
 This is a normal state, so it is not listed in `problems?`.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | subject       | churn? | hotspot? | cyclomatic? | unavailable?                   |
 | ----------- | --------- | ------------- | ------ | -------- | ----------- | ------------------------------ |

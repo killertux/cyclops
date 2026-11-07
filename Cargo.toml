@@ -16,6 +16,8 @@ cyclops-lang-typescript = { path = "crates/cyclops-lang-typescript" }
 
 anyhow = "1"
 blake3 = "1"
+# Only reading history: no network, no worktree changes.
+gix = { version = "0.90", default-features = false, features = ["blob-diff", "revision", "sha1"] }
 clap = { version = "4", features = ["derive"] }
 ignore = "0.4"
 # The oxc_* crates break their APIs often, so they are pinned on purpose, all to one version.

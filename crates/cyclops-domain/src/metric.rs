@@ -127,7 +127,11 @@ impl MetricId {
         };
         let ratio = matches!(
             self,
-            Self::Instability | Self::Abstractness | Self::Distance | Self::Hotspot
+            Self::Instability
+                | Self::Abstractness
+                | Self::Distance
+                | Self::Hotspot
+                | Self::Duplication
         );
         let rollup = match self {
             Self::Cyclomatic | Self::Cognitive | Self::MaxNesting | Self::Churn | Self::Hotspot => {
@@ -231,7 +235,7 @@ pub struct MetricDescriptor {
     pub direction: Direction,
     /// Reference values. Neutral metrics have none.
     pub heat: Option<HeatBands>,
-    /// Whether values are ratios, written with two decimal places.
+    /// Whether values are ratios or shares, written with two decimal places.
     pub ratio: bool,
     /// How it appears on larger symbols.
     pub rollup: Rollup,

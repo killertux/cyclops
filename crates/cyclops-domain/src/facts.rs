@@ -28,6 +28,27 @@ pub struct FileFacts {
     /// What this file makes available from other modules, such as a barrel file's
     /// `export { a } from "./a"`.
     pub exports: Vec<Export>,
+    /// Its code as a sequence of tokens, for finding copies.
+    pub tokens: Vec<Token>,
+}
+
+/// One token of code, with names and literal values made alike, so that a renamed copy
+/// still matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Token {
+    pub kind: u16,
+    pub line: u32,
+    /// Whether it is part of test code.
+    pub test: bool,
+}
+
+impl Token {
+    /// Any name.
+    pub const NAME: u16 = 0;
+    /// Any literal value.
+    pub const LITERAL: u16 = 1;
+    /// Where the kinds a language adapter gives its other tokens start.
+    pub const FIRST_OTHER: u16 = 2;
 }
 
 /// A block that adds to a type, wherever the type is written.

@@ -23,6 +23,17 @@ impl LanguageId {
     }
 }
 
+impl LanguageId {
+    /// Copies only match within one family, since other languages read differently.
+    #[must_use]
+    pub const fn family(self) -> u8 {
+        match self {
+            Self::Rust => 0,
+            Self::TypeScript | Self::JavaScript => 1,
+        }
+    }
+}
+
 impl fmt::Display for LanguageId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())

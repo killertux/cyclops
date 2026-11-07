@@ -1,5 +1,6 @@
 //! The result of an analysis, and what analyzers get to work with.
 
+use crate::duplication::Duplication;
 use cyclops_domain::facts::{FileFacts, LineCounts};
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::metric::{Measurement, MetricId, Subject};
@@ -74,6 +75,18 @@ pub struct ProjectAnalysis {
     problems: Vec<Problem>,
     tests: TestCode,
     files_parsed: usize,
+    extras: Extras,
+}
+
+/// What an analysis found besides measurements.
+#[derive(Debug, Clone, Default)]
+pub struct Extras {
+    pub duplication: Duplication,
+    /// The metrics that could not be worked out, and why, such as `churn, hotspot: no
+    /// git history`.
+    pub unavailable: Vec<String>,
+    /// How many commits this analysis read, rather than taking from the cache.
+    pub commits_read: usize,
 }
 
 impl ProjectAnalysis {
@@ -84,6 +97,7 @@ impl ProjectAnalysis {
         problems: Vec<Problem>,
         tests: TestCode,
         files_parsed: usize,
+        extras: Extras,
     ) -> Self {
         let measurements = measurements
             .into_iter()
@@ -96,7 +110,26 @@ impl ProjectAnalysis {
             problems,
             tests,
             files_parsed,
+            extras,
         }
+    }
+
+    /// The copies the project has.
+    #[must_use]
+    pub const fn duplication(&self) -> &Duplication {
+        &self.extras.duplication
+    }
+
+    /// The metrics that could not be worked out, and why.
+    #[must_use]
+    pub fn unavailable(&self) -> &[String] {
+        &self.extras.unavailable
+    }
+
+    /// How many commits this analysis read, rather than taking from the cache.
+    #[must_use]
+    pub const fn commits_read(&self) -> usize {
+        self.extras.commits_read
     }
 
     /// How many files this analysis parsed, rather than taking from the cache.

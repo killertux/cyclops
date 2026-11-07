@@ -10,11 +10,13 @@ use clap::{Args, Parser, Subcommand};
 use cyclops_application::analysis::ProjectAnalysis;
 use cyclops_application::analyzers::{CohesionAnalyzer, ComplexityAnalyzer, SizeAnalyzer};
 use cyclops_application::graph::CouplingAnalyzer;
-use cyclops_application::pipeline::AnalysisService;
-use cyclops_application::ports::{CacheAccess, CacheError, LanguageAdapter};
+use cyclops_application::pipeline::{AnalysisService, Sources};
+use cyclops_application::ports::{CacheAccess, CacheError, HistorySource, LanguageAdapter};
 use cyclops_domain::metric::{MetricId, Subject};
 use cyclops_domain::settings::{Layer, Origin, RawValue, Settings, SettingsError, initial_config};
-use cyclops_infra::{ProjectFiles, ProjectFolder, SqliteFactStore, UserConfig, read_layer};
+use cyclops_infra::{
+    GitHistory, ProjectFiles, ProjectFolder, SqliteFactStore, UserConfig, read_layer,
+};
 use cyclops_lang_rust::RustAdapter;
 use cyclops_lang_typescript::TypeScriptAdapter;
 use std::collections::BTreeMap;
@@ -119,11 +121,21 @@ pub fn analyze_with(
         .map_err(|error| CacheError(error.to_string()))
         .and_then(|()| SqliteFactStore::open(&folder.cache_path()));
     let service = analysis_service(adapters);
-    let analysis = match store {
-        Ok(mut store) => service.analyze(&files, CacheAccess::Store(&mut store), &settings)?,
-        Err(error) => service.analyze(&files, CacheAccess::Unavailable(error), &settings)?,
+    let history = GitHistory::open(root);
+    let history = history
+        .as_ref()
+        .map(|history| history as &dyn HistorySource);
+    let mut store = store;
+    let cache = match &mut store {
+        Ok(store) => CacheAccess::Store(store),
+        Err(error) => CacheAccess::Unavailable(CacheError(error.to_string())),
     };
-    Ok(analysis)
+    let sources = Sources {
+        files: &files,
+        cache,
+        history,
+    };
+    Ok(service.analyze(sources, &settings)?)
 }
 
 /// Creates `.cyclops/` with settings for the languages the project has. It never

@@ -5,8 +5,10 @@ mod cache;
 mod config;
 mod file_source;
 mod folder;
+mod git;
 
 pub use cache::SqliteFactStore;
 pub use config::{UserConfig, read_layer};
 pub use file_source::{ProjectFiles, ProjectNotFound};
 pub use folder::ProjectFolder;
+pub use git::GitHistory;

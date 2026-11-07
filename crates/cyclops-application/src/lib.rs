@@ -3,7 +3,9 @@
 
 pub mod analysis;
 pub mod analyzers;
+pub mod duplication;
 pub mod graph;
+pub mod history;
 pub mod pipeline;
 pub mod ports;
 pub mod rollups;

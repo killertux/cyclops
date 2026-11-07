@@ -1,7 +1,10 @@
 //! The fact cache, in `.cyclops/cache/cyclops.db`. It is disposable: anything wrong with
 //! it is fixed by starting it over.
 
-use cyclops_application::ports::{CacheEntry, CacheError, CachedFacts, FactStore, FileStamp};
+use cyclops_application::ports::{
+    CacheEntry, CacheError, CachedFacts, Commit, FactStore, FileChange, FileStamp, KnownHistory,
+    NewHistory,
+};
 use cyclops_domain::facts::FileFacts;
 use cyclops_domain::path::RelativePath;
 use rusqlite::{Connection, params};
@@ -11,7 +14,7 @@ use std::path::Path;
 
 /// Raise it whenever the layout of the database or of the facts changes. A cache of
 /// another version is started over.
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 pub struct SqliteFactStore {
     connection: Connection,
@@ -33,7 +36,14 @@ fn create(path: &Path) -> Result<Connection, CacheError> {
                 modified INTEGER NOT NULL,
                 hash BLOB NOT NULL,
                 facts BLOB NOT NULL
-            );",
+            );
+            CREATE TABLE IF NOT EXISTS commits (
+                position INTEGER PRIMARY KEY,
+                id TEXT NOT NULL,
+                time INTEGER NOT NULL,
+                changes BLOB NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS head (id TEXT NOT NULL);",
         )
         .map_err(failed)?;
     connection
@@ -128,7 +138,94 @@ impl SqliteFactStore {
     }
 }
 
+/// A commit's changes as the cache keeps them.
+type StoredChanges = Vec<(String, Option<String>)>;
+
+impl SqliteFactStore {
+    fn read_history(&self) -> Result<KnownHistory, rusqlite::Error> {
+        let head = self
+            .connection
+            .query_row("SELECT id FROM head", [], |row| row.get::<_, String>(0))
+            .ok();
+        let mut statement = self
+            .connection
+            .prepare("SELECT id, time, changes FROM commits ORDER BY position DESC")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, Vec<u8>>(2)?,
+            ))
+        })?;
+        let mut commits = Vec::new();
+        for row in rows {
+            let (id, time, changes) = row?;
+            // History that cannot be read is read again from git.
+            let Ok(changes) = postcard::from_bytes::<StoredChanges>(&changes) else {
+                return Ok(KnownHistory::default());
+            };
+            let changes = changes
+                .into_iter()
+                .map(|(path, previous)| FileChange { path, previous })
+                .collect();
+            commits.push(Commit { id, time, changes });
+        }
+        Ok(KnownHistory { head, commits })
+    }
+
+    fn write_history(&mut self, history: &NewHistory) -> Result<(), CacheError> {
+        let transaction = self.connection.transaction().map_err(failed)?;
+        if history.rewritten {
+            transaction
+                .execute("DELETE FROM commits", [])
+                .map_err(failed)?;
+        }
+        let last: i64 = transaction
+            .query_row(
+                "SELECT COALESCE(MAX(position), 0) FROM commits",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(failed)?;
+        {
+            let mut insert = transaction
+                .prepare(
+                    "INSERT INTO commits (position, id, time, changes) VALUES (?1, ?2, ?3, ?4)",
+                )
+                .map_err(failed)?;
+            // The newest commit comes first and gets the highest position.
+            let count = i64::try_from(history.commits.len()).unwrap_or(i64::MAX);
+            for (offset, commit) in (0..count).rev().zip(&history.commits) {
+                let changes: StoredChanges = commit
+                    .changes
+                    .iter()
+                    .map(|change| (change.path.clone(), change.previous.clone()))
+                    .collect();
+                let bytes = postcard::to_stdvec(&changes).map_err(failed)?;
+                insert
+                    .execute(params![last + offset + 1, commit.id, commit.time, bytes])
+                    .map_err(failed)?;
+            }
+        }
+        transaction
+            .execute("DELETE FROM head", [])
+            .map_err(failed)?;
+        transaction
+            .execute("INSERT INTO head (id) VALUES (?1)", params![history.head])
+            .map_err(failed)?;
+        transaction.commit().map_err(failed)
+    }
+}
+
 impl FactStore for SqliteFactStore {
+    fn load_history(&mut self) -> Result<KnownHistory, CacheError> {
+        self.read_history().map_err(failed)
+    }
+
+    fn save_history(&mut self, history: &NewHistory) -> Result<(), CacheError> {
+        self.write_history(history)
+    }
+
     fn load(&mut self) -> Result<HashMap<RelativePath, CachedFacts>, CacheError> {
         self.read_all().map_err(failed)
     }
@@ -197,6 +294,7 @@ mod tests {
             test_modules: Vec::new(),
             extensions: Vec::new(),
             exports: Vec::new(),
+            tokens: Vec::new(),
         }
     }
 
@@ -234,6 +332,58 @@ mod tests {
         let cached = known.get(&RelativePath::new("a.rs")).expect("cached");
         assert_eq!(cached.facts, a);
         assert_eq!(cached.hash, [7; 32]);
+    }
+
+    fn commit(id: &str, time: i64) -> Commit {
+        Commit {
+            id: id.to_owned(),
+            time,
+            changes: vec![FileChange {
+                path: "b.rs".to_owned(),
+                previous: Some("a.rs".to_owned()),
+            }],
+        }
+    }
+
+    #[test]
+    fn history_grows_newest_first_and_starts_over_when_rewritten() {
+        let folder = scratch("history");
+        let path = folder.join("cyclops.db");
+        let mut store = SqliteFactStore::open(&path).expect("opened");
+        let first = NewHistory {
+            head: "b".to_owned(),
+            commits: vec![commit("b", 2), commit("a", 1)],
+            rewritten: false,
+        };
+        store.save_history(&first).expect("saved");
+        let more = NewHistory {
+            head: "c".to_owned(),
+            commits: vec![commit("c", 3)],
+            rewritten: false,
+        };
+        store.save_history(&more).expect("saved");
+        let known = store.load_history().expect("loaded");
+        let ids: Vec<&str> = known
+            .commits
+            .iter()
+            .map(|commit| commit.id.as_str())
+            .collect();
+        assert_eq!(known.head.as_deref(), Some("c"));
+        assert_eq!(ids, ["c", "b", "a"]);
+        assert_eq!(
+            known.commits.first().map(|commit| commit.changes.clone()),
+            Some(commit("c", 3).changes)
+        );
+
+        let rewritten = NewHistory {
+            head: "d".to_owned(),
+            commits: vec![commit("d", 4)],
+            rewritten: true,
+        };
+        store.save_history(&rewritten).expect("saved");
+        let known = store.load_history().expect("loaded");
+        fs::remove_dir_all(&folder).expect("removed");
+        assert_eq!(known.commits.len(), 1);
     }
 
     #[test]

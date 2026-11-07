@@ -15,7 +15,7 @@ the [`clones`](../../samples/clones) sample, `first.rs` and `second.rs` are the 
 else. `web/` has a TypeScript version.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation    | workspace | steps                                     | clones?                                                                                                    |
 | -------------- | --------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -32,7 +32,7 @@ row shows.
 `duplication?` is the percentage of the code lines of a file or module that are part
 of a copy.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation       | workspace | subject        | duplication? |
 | ----------------- | --------- | -------------- | ------------ |
@@ -47,7 +47,7 @@ of a copy.
 
 `copies?` lists where the copies of the subject are, with their lines.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation  | workspace | subject       | copies?                                                      |
 | ------------ | --------- | ------------- | ------------------------------------------------------------ |

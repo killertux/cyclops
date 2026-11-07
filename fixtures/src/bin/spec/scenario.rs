@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table, value};
 
 /// A small valid source file, for the `add` step.
@@ -223,8 +223,63 @@ impl Scenario {
         fs::write(path, existing).map_err(|e| e.to_string())
     }
 
+    /// `PATH N times`, or `PATH N times M months ago`. Each commit changes the file.
+    fn commits(&self, rest: &str) -> Result<(), String> {
+        let words: Vec<&str> = rest.split_whitespace().collect();
+        let (path, times, ago) = match words.as_slice() {
+            [path, times, "times"] => (*path, *times, None),
+            [path, times, "times", months, "months", "ago"] => (*path, *times, Some(*months)),
+            _ => return Err(format!("not a commit step: {rest}")),
+        };
+        let times: u32 = times
+            .parse()
+            .map_err(|_| format!("not a number: {times}"))?;
+        let date = match ago {
+            Some(months) => {
+                let months: u64 = months
+                    .parse()
+                    .map_err(|_| format!("not a number: {months}"))?;
+                let back = Duration::from_secs(months * 30 * 24 * 60 * 60);
+                let when = SystemTime::now()
+                    .checked_sub(back)
+                    .and_then(|when| when.duration_since(UNIX_EPOCH).ok())
+                    .ok_or("a date before 1970")?;
+                Some(format!("@{} +0000", when.as_secs()))
+            }
+            None => None,
+        };
+        let file = self.root().join(path);
+        for change in 0..times {
+            let mut text = fs::read_to_string(&file).map_err(|e| e.to_string())?;
+            text.push_str("// Change ");
+            text.push_str(&change.to_string());
+            text.push_str(".\n");
+            fs::write(&file, text).map_err(|e| e.to_string())?;
+            self.git(&["add", path])?;
+            let message = format!("Change {path}");
+            let mut arguments = vec!["commit", "-q", "-m", message.as_str()];
+            let dated;
+            if let Some(date) = &date {
+                dated = format!("--date={date}");
+                arguments.push(&dated);
+            }
+            self.git_dated(&arguments, date.as_deref())?;
+        }
+        Ok(())
+    }
+
     fn git(&self, arguments: &[&str]) -> Result<(), String> {
-        let output = Command::new("git")
+        self.git_dated(arguments, None)
+    }
+
+    fn git_dated(&self, arguments: &[&str], date: Option<&str>) -> Result<(), String> {
+        let mut command = Command::new("git");
+        if let Some(date) = date {
+            command
+                .env("GIT_COMMITTER_DATE", date)
+                .env("GIT_AUTHOR_DATE", date);
+        }
+        let output = command
             .args(arguments)
             .current_dir(self.root())
             .env("GIT_AUTHOR_NAME", "Spec")
@@ -310,8 +365,23 @@ impl Scenario {
             self.upgraded.push(language.to_owned());
             return Ok(());
         }
+        if let Some(rest) = step.strip_prefix("commit ") {
+            return self.commits(rest).map_err(fail);
+        }
+        if let Some(rest) = step.strip_prefix("rename ") {
+            let (from, to) = rest.split_once(' ').ok_or("rename needs two paths")?;
+            self.git(&["mv", from, to]).map_err(fail)?;
+            return self
+                .git(&["commit", "-q", "-m", &format!("Rename {from}")])
+                .map_err(fail);
+        }
         let done = match step {
             "analyze" => return self.analyze().map(drop).map_err(fail),
+            "rewrite history" => {
+                return self
+                    .git(&["commit", "-q", "--amend", "-m", "Rewritten"])
+                    .map_err(fail);
+            }
             "git init" => {
                 self.git(&["init", "-q"])?;
                 self.git(&["add", "-A"])?;

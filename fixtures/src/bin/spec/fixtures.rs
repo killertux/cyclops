@@ -543,6 +543,74 @@ impl Core {
     }
 
     #[must_use]
+    pub fn churn(&self) -> String {
+        self.subject_metric(MetricId::Churn)
+    }
+
+    #[must_use]
+    pub fn hotspot(&self) -> String {
+        self.subject_metric(MetricId::Hotspot)
+    }
+
+    #[must_use]
+    pub fn duplication(&self) -> String {
+        self.subject_metric(MetricId::Duplication)
+    }
+
+    #[must_use]
+    pub fn unavailable(&self) -> String {
+        self.read(|analysis| list(analysis.unavailable()))
+    }
+
+    #[must_use]
+    pub fn commits_read(&self) -> String {
+        self.read(|analysis| analysis.commits_read().to_string())
+    }
+
+    /// Each group of files that share a copy, separated by semicolons.
+    #[must_use]
+    pub fn clones(&self) -> String {
+        self.read(|analysis| {
+            let groups: Vec<String> = analysis
+                .duplication()
+                .groups
+                .iter()
+                .map(|group| {
+                    group
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .collect();
+            if groups.is_empty() {
+                NONE.into()
+            } else {
+                groups.join("; ")
+            }
+        })
+    }
+
+    /// Where the copies of the subject are, as `FILE:FIRST-LAST`.
+    #[must_use]
+    pub fn copies(&self) -> String {
+        self.read(|analysis| {
+            let path = RelativePath::new(&self.subject);
+            let partners = analysis.duplication().copies.get(&path);
+            let copies: Vec<String> = partners
+                .into_iter()
+                .flatten()
+                .flat_map(|(file, ranges)| {
+                    ranges
+                        .iter()
+                        .map(move |(first, last)| format!("{file}:{first}-{last}"))
+                })
+                .collect();
+            list(&copies)
+        })
+    }
+
+    #[must_use]
     pub fn relation(&self) -> String {
         self.read(|analysis| {
             self.relation_between(analysis)

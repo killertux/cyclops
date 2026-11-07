@@ -4,7 +4,7 @@ use crate::body::{self, Function, path_names, type_references};
 use crate::lines;
 use cyclops_domain::facts::{
     BodyFacts, Extension, FileFacts, Import, LineCounts, MemberFacts, Reference, ReferenceKind,
-    SymbolFact, is_too_deep,
+    SymbolFact, Token, is_too_deep,
 };
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::lines::LineMap;
@@ -59,6 +59,7 @@ fn unparsed(path: &RelativePath, text: &str) -> FileFacts {
         test_modules: Vec::new(),
         extensions: Vec::new(),
         exports: Vec::new(),
+        tokens: Vec::new(),
     }
 }
 
@@ -82,6 +83,7 @@ pub(crate) fn extract(path: &RelativePath, text: &str) -> FileFacts {
         test_lines: LineCounts::default(),
         test_modules: Vec::new(),
         extensions: Vec::new(),
+        test_regions: Vec::new(),
     };
     for item in tree.items() {
         extractor.pending.push_back(Pending::new(item, None, role));
@@ -91,6 +93,7 @@ pub(crate) fn extract(path: &RelativePath, text: &str) -> FileFacts {
     }
 
     let all_lines = lines.counts();
+    let tokens = tokens(tree.syntax(), &lines, role, &extractor.test_regions);
     FileFacts {
         path: path.clone(),
         language: LanguageId::Rust,
@@ -106,7 +109,40 @@ pub(crate) fn extract(path: &RelativePath, text: &str) -> FileFacts {
         test_modules: extractor.test_modules,
         extensions: extractor.extensions,
         exports: Vec::new(),
+        tokens,
     }
+}
+
+/// The tokens of a file, with names and literal values made alike, for finding copies.
+fn tokens(
+    root: &SyntaxNode,
+    lines: &LineMap,
+    role: CodeRole,
+    test_regions: &[(u32, u32)],
+) -> Vec<Token> {
+    root.descendants_with_tokens()
+        .filter_map(NodeOrToken::into_token)
+        .filter(|token| !token.kind().is_trivia())
+        .map(|token| {
+            let kind = match token.kind() {
+                SyntaxKind::IDENT | SyntaxKind::LIFETIME_IDENT => Token::NAME,
+                SyntaxKind::INT_NUMBER
+                | SyntaxKind::FLOAT_NUMBER
+                | SyntaxKind::STRING
+                | SyntaxKind::BYTE_STRING
+                | SyntaxKind::C_STRING
+                | SyntaxKind::CHAR
+                | SyntaxKind::BYTE => Token::LITERAL,
+                other => Token::FIRST_OTHER.saturating_add(u16::from(other)),
+            };
+            let line = lines.line_of(token.text_range().start().into());
+            let test = role == CodeRole::Test
+                || test_regions
+                    .iter()
+                    .any(|(start, end)| (*start..=*end).contains(&line));
+            Token { kind, line, test }
+        })
+        .collect()
 }
 
 /// `tests/` and `benches/` folders hold test code, unless they are inside `src/`.
@@ -246,6 +282,8 @@ struct Extractor<'a> {
     test_lines: LineCounts,
     test_modules: Vec<Vec<String>>,
     extensions: Vec<Extension>,
+    /// The lines of test code, from the first to the last of each piece.
+    test_regions: Vec<(u32, u32)>,
 }
 
 impl Extractor<'_> {
@@ -298,6 +336,7 @@ impl Extractor<'_> {
         let start = self.lines.line_of(range.start().into());
         let end = self.lines.line_of((range.end() - TextSize::new(1)).into());
         self.test_lines = self.test_lines.plus(self.lines.counts_between(start, end));
+        self.test_regions.push((start, end));
     }
 
     fn add(&mut self, symbol: Described<'_>) -> usize {
@@ -761,6 +800,34 @@ mod tests {
         let shallow = SourceFile::parse("fn f() {}", Edition::Edition2024).tree();
         let deep = SourceFile::parse("const A: u8 = 1 + 1 + 1 + 1;", Edition::Edition2024).tree();
         assert!(depth_of(deep.syntax()) > depth_of(shallow.syntax()));
+    }
+
+    #[test]
+    fn a_renamed_copy_has_the_same_tokens() {
+        let kinds = |text: &str| {
+            facts(text)
+                .tokens
+                .iter()
+                .map(|token| token.kind)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            kinds("fn a(b: u8) -> u8 { b + 1 }"),
+            kinds("fn x(y: u8) -> u8 { y + 2 }")
+        );
+        assert_ne!(
+            kinds("fn a(b: u8) -> u8 { b + 1 }"),
+            kinds("fn a(b: u8) -> u8 { b - 1 }")
+        );
+    }
+
+    #[test]
+    fn tokens_in_test_code_are_marked() {
+        let facts = facts("fn f() {}\n#[cfg(test)]\nmod tests {}\n");
+        let test: Vec<bool> = facts.tokens.iter().map(|token| token.test).collect();
+        // `#[cfg(test)]` is seven tokens, and `mod tests {}` four.
+        assert_eq!(test.iter().filter(|test| **test).count(), 7 + 4);
+        assert_eq!(test.first(), Some(&false));
     }
 
     #[test]
