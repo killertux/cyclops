@@ -14,7 +14,7 @@ listed at its nearest distance, and the subject never depends on itself here.
 The cycles samples have `a` and `b` importing each other, and `f` importing `a`.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace   | subject       | distance | dependents?                 |
 | ------------------- | ----------- | ------------- | -------- | --------------------------- |
@@ -32,7 +32,7 @@ The cycles samples have `a` and `b` importing each other, and `f` importing `a`.
 The subject's level decides which relations are followed. A function follows `calls`,
 and a type follows `uses`, `composes`, `implements` and `inherits`.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation   | workspace | subject                       | distance | dependents?                                                 |
 | ------------- | --------- | ----------------------------- | -------- | ----------------------------------------------------------- |
@@ -64,7 +64,7 @@ makes a guessed call to `start`, and `race` calls `drive` exactly.
 `reach?` counts every dependent at any distance, and `packages?` counts the packages
 they are in.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace   | subject       | reach? | packages? |
 | ----------- | ----------- | ------------- | ------ | --------- |
@@ -76,7 +76,7 @@ they are in.
 
 [Test code](../analysis/test-code.md#leaving-it-out) that is left out depends on nothing.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps                    | subject      | distance | dependents?  |
 | ----------- | --------- | ------------------------ | ------------ | -------- | ------------ |

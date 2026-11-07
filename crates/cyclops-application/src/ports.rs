@@ -181,6 +181,8 @@ pub struct Commit {
     pub id: String,
     /// When it was made, in seconds since 1970.
     pub time: i64,
+    /// The first line of its message.
+    pub subject: String,
     pub changes: Vec<FileChange>,
 }
 

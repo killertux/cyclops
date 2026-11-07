@@ -27,20 +27,28 @@ pub fn start_of(period: Period, now: i64) -> i64 {
     )
 }
 
-/// How many commits since `since` changed each current file. A renamed file keeps the
-/// history of its old name.
-#[must_use]
-pub fn churn(
+/// A commit as an explanation shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommitSummary {
+    /// The first seven characters of its id.
+    pub short_id: String,
+    pub time: i64,
+    pub subject: String,
+}
+
+/// Calls `found` once for each file a commit since `since` changed, newest first. A
+/// renamed file keeps the history of its old name.
+fn walk(
     commits: &[Commit],
     current: &[&RelativePath],
     since: i64,
-) -> BTreeMap<RelativePath, u32> {
+    mut found: impl FnMut(&RelativePath, &Commit),
+) {
     // What each name stood for at the point the walk has reached, newest first.
     let mut names: HashMap<String, RelativePath> = current
         .iter()
         .map(|path| (path.as_str().to_owned(), (*path).clone()))
         .collect();
-    let mut counts: BTreeMap<RelativePath, u32> = BTreeMap::new();
     for commit in commits {
         let mut counted: HashSet<RelativePath> = HashSet::new();
         let mut renames = Vec::new();
@@ -49,7 +57,7 @@ pub fn churn(
                 continue;
             };
             if commit.time >= since && counted.insert(file.clone()) {
-                *counts.entry(file.clone()).or_insert(0) += 1;
+                found(&file, commit);
             }
             if let Some(previous) = &change.previous {
                 renames.push((change.path.clone(), previous.clone(), file));
@@ -60,7 +68,38 @@ pub fn churn(
             names.insert(previous, file);
         }
     }
+}
+
+/// How many commits since `since` changed each current file.
+#[must_use]
+pub fn churn(
+    commits: &[Commit],
+    current: &[&RelativePath],
+    since: i64,
+) -> BTreeMap<RelativePath, u32> {
+    let mut counts: BTreeMap<RelativePath, u32> = BTreeMap::new();
+    walk(commits, current, since, |file, _| {
+        *counts.entry(file.clone()).or_insert(0) += 1;
+    });
     counts
+}
+
+/// The commits since `since` that changed each current file, newest first.
+#[must_use]
+pub fn file_commits(
+    commits: &[Commit],
+    current: &[&RelativePath],
+    since: i64,
+) -> BTreeMap<RelativePath, Vec<CommitSummary>> {
+    let mut found: BTreeMap<RelativePath, Vec<CommitSummary>> = BTreeMap::new();
+    walk(commits, current, since, |file, commit| {
+        found.entry(file.clone()).or_default().push(CommitSummary {
+            short_id: commit.id.chars().take(7).collect(),
+            time: commit.time,
+            subject: commit.subject.clone(),
+        });
+    });
+    found
 }
 
 fn share(value: f64, highest: f64) -> f64 {
@@ -134,6 +173,7 @@ mod tests {
         Commit {
             id: time.to_string(),
             time,
+            subject: String::new(),
             changes: changes
                 .iter()
                 .map(|(path, previous)| FileChange {

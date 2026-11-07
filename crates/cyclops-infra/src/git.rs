@@ -121,15 +121,16 @@ impl HistorySource for GitHistory {
                 reached_known = true;
                 break;
             }
-            let time = info
-                .object()
-                .map_err(unreadable)?
-                .time()
-                .map_err(unreadable)?
-                .seconds;
+            let object = info.object().map_err(unreadable)?;
+            let time = object.time().map_err(unreadable)?.seconds;
+            let subject = object
+                .message()
+                .map(|message| message.summary().to_string())
+                .unwrap_or_default();
             commits.push(Commit {
                 id,
                 time,
+                subject,
                 changes: self.changes(&info)?,
             });
         }

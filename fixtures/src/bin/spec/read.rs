@@ -42,3 +42,25 @@ pub fn metric_value(analysis: &ProjectAnalysis, subject: &Subject, metric: Metri
 pub fn symbol<'a>(analysis: &'a ProjectAnalysis, id: &SymbolId) -> Option<&'a Symbol> {
     analysis.model().symbol(id)
 }
+
+/// The groups of methods of a type, separated by semicolons, or the fields each uses.
+pub fn method_groups(analysis: &ProjectAnalysis, id: &SymbolId, fields: bool) -> String {
+    let Some(groups) = analysis.method_groups(id) else {
+        return NONE.into();
+    };
+    let written: Vec<String> = groups
+        .iter()
+        .map(|group| {
+            if fields {
+                group.fields.join(", ")
+            } else {
+                group.methods.join(", ")
+            }
+        })
+        .collect();
+    if written.is_empty() {
+        NONE.into()
+    } else {
+        written.join("; ")
+    }
+}

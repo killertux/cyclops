@@ -66,7 +66,7 @@ to your own file.
 [`cyclops check`](../cli/commands.md#checking-alerts) is the exception. It ignores your own
 file completely, so that it gives the same answer on every machine.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation   | workspace | steps                                                                                                                 | alerts?                                                |
 | ------------- | --------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |

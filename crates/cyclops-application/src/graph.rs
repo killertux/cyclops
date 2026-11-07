@@ -39,6 +39,22 @@ impl ModuleGraph {
         Self { imports }
     }
 
+    /// The modules a module imports, in order.
+    #[must_use]
+    pub fn depends_on(&self, module: &SymbolId) -> Vec<&SymbolId> {
+        self.imports.get(module).into_iter().flatten().collect()
+    }
+
+    /// The modules that import a module, in order.
+    #[must_use]
+    pub fn depended_on_by(&self, module: &SymbolId) -> Vec<&SymbolId> {
+        self.imports
+            .iter()
+            .filter(|(_, targets)| targets.contains(module))
+            .map(|(from, _)| from)
+            .collect()
+    }
+
     fn efferent(&self, module: &SymbolId) -> usize {
         self.imports.get(module).map_or(0, BTreeSet::len)
     }

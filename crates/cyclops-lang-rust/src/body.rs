@@ -1,10 +1,13 @@
 //! Walks the body of a function and describes what makes it complex. It keeps its own
 //! stack of work rather than recursing, so that very deep code cannot overflow.
 
-use cyclops_domain::facts::{BodyFacts, DecisionKind, DecisionPoint, Reference, ReferenceKind};
+use cyclops_domain::facts::{
+    BodyFacts, DecisionKind, DecisionPoint, Deepest, Reference, ReferenceKind,
+};
 use cyclops_domain::lines::LineMap;
 use ra_ap_syntax::ast::{self, AstNode, BinaryOp, ElseBranch, HasName, LogicOp};
 use ra_ap_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, TextSize};
+use std::rc::Rc;
 
 /// The function being walked, for spotting recursion.
 pub(crate) struct Function<'a> {
@@ -50,6 +53,31 @@ fn is_self(expr: Option<ast::Expr>) -> bool {
     expr.is_some_and(|expr| expr.syntax().text() == "self")
 }
 
+/// The control structures around a part of the code, from the inside out.
+struct Link {
+    kind: DecisionKind,
+    outer: Option<Rc<Link>>,
+}
+
+type Trail = Option<Rc<Link>>;
+
+fn path_of(trail: &Trail) -> Vec<DecisionKind> {
+    let mut path = Vec::new();
+    let mut current = trail.as_deref();
+    while let Some(link) = current {
+        path.push(link.kind);
+        current = link.outer.as_deref();
+    }
+    path.reverse();
+    path
+}
+
+/// One structure deeper: its depth, and the structures around what is inside it.
+struct Inside {
+    depth: u32,
+    trail: Trail,
+}
+
 /// A part of the code still to walk.
 struct Step {
     node: SyntaxNode,
@@ -57,6 +85,7 @@ struct Step {
     nesting: u32,
     /// How many control structures are around it.
     depth: u32,
+    trail: Trail,
 }
 
 struct Walker<'a> {
@@ -70,6 +99,10 @@ struct Walker<'a> {
     references: Vec<Reference>,
     fields_used: Vec<String>,
     methods_called: Vec<String>,
+    /// The structures around the step being visited.
+    current: Trail,
+    /// The deepest structure so far: its depth, its line, and what leads there.
+    deepest: Option<(u32, u32, Trail)>,
 }
 
 pub(crate) fn walk(lines: &LineMap, function: Function<'_>, body: &ast::BlockExpr) -> Walked {
@@ -84,6 +117,8 @@ pub(crate) fn walk(lines: &LineMap, function: Function<'_>, body: &ast::BlockExp
         references: Vec::new(),
         fields_used: Vec::new(),
         methods_called: Vec::new(),
+        current: None,
+        deepest: None,
     };
     walker.push(Some(body.syntax()), 0, 0);
     while let Some(step) = walker.steps.pop() {
@@ -101,6 +136,10 @@ pub(crate) fn walk(lines: &LineMap, function: Function<'_>, body: &ast::BlockExp
             max_nesting: walker.max_nesting,
             fields_used: walker.fields_used,
             methods_called: walker.methods_called,
+            deepest: walker.deepest.map(|(_, line, trail)| Deepest {
+                line,
+                path: path_of(&trail),
+            }),
         },
         items: walker.items,
         references: walker.references,
@@ -206,6 +245,19 @@ impl Walker<'_> {
                 node: node.clone(),
                 nesting,
                 depth,
+                trail: self.current.clone(),
+            });
+        }
+    }
+
+    /// Walks the inside of a control structure.
+    fn push_in(&mut self, node: Option<&SyntaxNode>, nesting: u32, inside: &Inside) {
+        if let Some(node) = node {
+            self.steps.push(Step {
+                node: node.clone(),
+                nesting,
+                depth: inside.depth,
+                trail: inside.trail.clone(),
             });
         }
     }
@@ -222,10 +274,26 @@ impl Walker<'_> {
         node.text_range().start()
     }
 
-    /// Goes one control structure deeper, and returns the new depth.
-    fn deeper(&mut self, depth: u32) -> u32 {
-        self.max_nesting = self.max_nesting.max(depth + 1);
-        depth + 1
+    /// Goes one control structure deeper, and keeps the deepest one, the first in the
+    /// code when there are several.
+    fn deeper(&mut self, depth: u32, kind: DecisionKind, offset: TextSize) -> Inside {
+        let inner = depth + 1;
+        self.max_nesting = self.max_nesting.max(inner);
+        let trail = Some(Rc::new(Link {
+            kind,
+            outer: self.current.clone(),
+        }));
+        let line = self.lines.line_of(offset.into());
+        let deeper_than_known = self.deepest.as_ref().is_none_or(|(known, known_line, _)| {
+            inner > *known || (inner == *known && line < *known_line)
+        });
+        if deeper_than_known {
+            self.deepest = Some((inner, line, trail.clone()));
+        }
+        Inside {
+            depth: inner,
+            trail,
+        }
     }
 
     fn visit(&mut self, step: Step) {
@@ -233,7 +301,9 @@ impl Walker<'_> {
             node,
             nesting,
             depth,
+            trail,
         } = step;
+        self.current = trail;
         if is_item(node.kind()) {
             self.items.extend(ast::Item::cast(node));
             return;
@@ -316,16 +386,16 @@ impl Walker<'_> {
 
     fn visit_if(&mut self, expr: &ast::IfExpr, nesting: u32, depth: u32) {
         self.point(DecisionKind::If, Self::at(expr.syntax()), nesting);
-        let inner = self.deeper(depth);
+        let inner = self.deeper(depth, DecisionKind::If, Self::at(expr.syntax()));
         let mut current = expr.clone();
         loop {
             let condition = current.condition();
             self.push(condition.as_ref().map(AstNode::syntax), nesting, depth);
             let then_branch = current.then_branch();
-            self.push(
+            self.push_in(
                 then_branch.as_ref().map(AstNode::syntax),
                 nesting + 1,
-                inner,
+                &inner,
             );
 
             let offset = current.else_token().map_or_else(
@@ -339,7 +409,7 @@ impl Walker<'_> {
                 }
                 Some(ElseBranch::Block(block)) => {
                     self.point(DecisionKind::Else, offset, nesting);
-                    self.push(Some(block.syntax()), nesting + 1, inner);
+                    self.push_in(Some(block.syntax()), nesting + 1, &inner);
                     return;
                 }
                 None => return,
@@ -355,20 +425,20 @@ impl Walker<'_> {
         depth: u32,
     ) {
         self.point(DecisionKind::If, Self::at(let_else.syntax()), nesting);
-        let inner = self.deeper(depth);
+        let inner = self.deeper(depth, DecisionKind::If, Self::at(let_else.syntax()));
         let initializer = stmt.initializer();
         self.push(initializer.as_ref().map(AstNode::syntax), nesting, depth);
         let block = let_else.block_expr();
-        self.push(block.as_ref().map(AstNode::syntax), nesting + 1, inner);
+        self.push_in(block.as_ref().map(AstNode::syntax), nesting + 1, &inner);
     }
 
     /// The header of a loop is outside it, and its body is one level in.
     fn visit_loop(&mut self, kind: DecisionKind, node: &SyntaxNode, nesting: u32, depth: u32) {
         self.point(kind, Self::at(node), nesting);
-        let inner = self.deeper(depth);
+        let inner = self.deeper(depth, DecisionKind::Loop, Self::at(node));
         for child in node.children() {
             if child.kind() == SyntaxKind::BLOCK_EXPR {
-                self.push(Some(&child), nesting + 1, inner);
+                self.push_in(Some(&child), nesting + 1, &inner);
             } else {
                 self.push(Some(&child), nesting, depth);
             }
@@ -377,7 +447,7 @@ impl Walker<'_> {
 
     fn visit_match(&mut self, expr: &ast::MatchExpr, nesting: u32, depth: u32) {
         self.point(DecisionKind::Match, Self::at(expr.syntax()), nesting);
-        let inner = self.deeper(depth);
+        let inner = self.deeper(depth, DecisionKind::Match, Self::at(expr.syntax()));
         let scrutinee = expr.expr();
         self.push(scrutinee.as_ref().map(AstNode::syntax), nesting, depth);
         let arms = expr
@@ -390,10 +460,10 @@ impl Walker<'_> {
             }
             if let Some(guard) = arm.guard() {
                 self.point(DecisionKind::Guard, Self::at(guard.syntax()), nesting);
-                self.push(Some(guard.syntax()), nesting + 1, inner);
+                self.push_in(Some(guard.syntax()), nesting + 1, &inner);
             }
             let body = arm.expr();
-            self.push(body.as_ref().map(AstNode::syntax), nesting + 1, inner);
+            self.push_in(body.as_ref().map(AstNode::syntax), nesting + 1, &inner);
         }
     }
 

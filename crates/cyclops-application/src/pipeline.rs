@@ -8,6 +8,7 @@ use crate::ports::{
     FileStamp, HistoryError, HistorySource, KnownHistory, LanguageAdapter, SourceError, SourceFile,
 };
 use crate::rollups::roll_up;
+use cyclops_domain::alert::AlertRule;
 use cyclops_domain::facts::FileFacts;
 use cyclops_domain::glob::Glob;
 use cyclops_domain::language::LanguageId;
@@ -15,7 +16,7 @@ use cyclops_domain::metric::{MetricId, Subject};
 use cyclops_domain::model::{ModelView, ProjectModel};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
-use cyclops_domain::settings::Settings;
+use cyclops_domain::settings::{Settings, SettingsError};
 use cyclops_domain::symbol::{CodeRole, SymbolId};
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
@@ -29,6 +30,8 @@ pub enum AnalysisError {
     Source(#[from] SourceError),
     #[error("the analysis cannot start its workers: {0}")]
     Workers(#[from] rayon::ThreadPoolBuildError),
+    #[error(transparent)]
+    Settings(#[from] SettingsError),
 }
 
 /// Walking a syntax tree recurses, and a long chain such as `a + b + c` is a deep tree
@@ -177,6 +180,7 @@ impl AnalysisService {
         sources: Sources<'_>,
         settings: &Settings,
     ) -> Result<ProjectAnalysis, AnalysisError> {
+        let rules = AlertRule::all(&settings.alerts)?;
         let mut problems = Vec::new();
         let mut cache = match sources.cache {
             CacheAccess::Store(store) => Some(store),
@@ -229,6 +233,7 @@ impl AnalysisService {
                 let paths: Vec<&RelativePath> = files.iter().map(|file| &file.path).collect();
                 let since = start_of(settings.hotspots_since, now());
                 let churn = churn(&commits, &paths, since);
+                extras.file_commits = history::file_commits(&commits, &paths, since);
                 let complexity: BTreeMap<RelativePath, f64> = measurements
                     .iter()
                     .filter(|one| one.metric == MetricId::Cyclomatic)
@@ -243,7 +248,7 @@ impl AnalysisService {
         }
         Problem::sort(&mut problems);
 
-        Ok(ProjectAnalysis::new(
+        let mut analysis = ProjectAnalysis::new(
             model,
             files,
             measurements,
@@ -251,7 +256,10 @@ impl AnalysisService {
             settings.tests,
             parsed,
             extras,
-        ))
+        );
+        let alerts = analysis.fire(&rules);
+        analysis.set_alerts(alerts);
+        Ok(analysis)
     }
 
     /// Finds the files, and extracts their facts or takes them from the cache. Says how

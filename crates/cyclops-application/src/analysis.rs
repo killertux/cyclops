@@ -1,6 +1,8 @@
 //! The result of an analysis, and what analyzers get to work with.
 
 use crate::duplication::Duplication;
+use crate::history::CommitSummary;
+use crate::queries::Alert;
 use cyclops_domain::facts::{FileFacts, LineCounts};
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::metric::{Measurement, MetricId, Subject};
@@ -87,6 +89,10 @@ pub struct Extras {
     pub unavailable: Vec<String>,
     /// How many commits this analysis read, rather than taking from the cache.
     pub commits_read: usize,
+    /// The commits that changed each file within the hotspot window, newest first.
+    pub file_commits: BTreeMap<RelativePath, Vec<CommitSummary>>,
+    /// The alerts the rules fire.
+    pub alerts: Vec<Alert>,
 }
 
 impl ProjectAnalysis {
@@ -130,6 +136,25 @@ impl ProjectAnalysis {
     #[must_use]
     pub const fn commits_read(&self) -> usize {
         self.extras.commits_read
+    }
+
+    /// The commits that changed a file within the hotspot window, newest first.
+    #[must_use]
+    pub fn commits_of(&self, file: &RelativePath) -> &[CommitSummary] {
+        self.extras
+            .file_commits
+            .get(file)
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// The alerts that fired, in order of severity and then subject.
+    #[must_use]
+    pub fn alerts(&self) -> &[Alert] {
+        &self.extras.alerts
+    }
+
+    pub(crate) fn set_alerts(&mut self, alerts: Vec<Alert>) {
+        self.extras.alerts = alerts;
     }
 
     /// How many files this analysis parsed, rather than taking from the cache.

@@ -50,14 +50,14 @@ Commands work on the current folder, or the one given with `-C`.
 `cyclops report` prints every metric. The default format is a table for people, and
 JSON is for tools. The JSON is one document with no other text around it.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation | workspace | command                        | exit code? | valid json? | stdout text                | stdout includes? |
 | ----------- | --------- | ------------------------------ | ---------- | ----------- | -------------------------- | ---------------- |
 | For people  | rust-shop | `cyclops report`               | 0          | no          | shop::orders::Order::total | yes              |
 | For tools   | rust-shop | `cyclops report --format json` | 0          | yes         | shop::orders::Order::total | yes              |
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation    | workspace | command                       | exit code? | stdout text | stdout includes? | stderr text         | stderr includes? |
 | -------------- | --------- | ----------------------------- | ---------- | ----------- | ---------------- | ------------------- | ---------------- |
@@ -67,7 +67,7 @@ JSON is for tools. The JSON is one document with no other text around it.
 
 `cyclops query` runs a [filter](../explore/filters.md), with one symbol on each line.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation  | workspace | command                                                            | exit code? | stdout text                | stdout includes? | stderr text    | stderr includes? |
 | ------------ | --------- | ------------------------------------------------------------------ | ---------- | -------------------------- | ---------------- | -------------- | ---------------- |
@@ -82,7 +82,7 @@ JSON is for tools. The JSON is one document with no other text around it.
 `cyclops check` evaluates the [alert rules](../explore/alerts.md). It fails when an alert
 reaches `check.fail_on`, or the `--fail-on` flag, which is `error` by default.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation      | workspace | steps                                                                  | command                           | exit code? | stdout text                | stdout includes? |
 | ---------------- | --------- | ---------------------------------------------------------------------- | --------------------------------- | ---------- | -------------------------- | ---------------- |
@@ -94,7 +94,7 @@ reaches `check.fail_on`, or the `--fail-on` flag, which is `error` by default.
 | Stricter by file | rust-shop | `add alert cyclomatic function > 2 warning; set check.fail_on warning` | `cyclops check`                   | 1          | shop::orders::Order::total | yes              |
 | The flag wins    | rust-shop | `add alert cyclomatic function > 2 warning; set check.fail_on warning` | `cyclops check --fail-on error`   | 0          | shop::orders::Order::total | yes              |
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation  | workspace | steps          | command         | exit code? | stderr text                             | stderr includes? |
 | ------------ | --------- | -------------- | --------------- | ---------- | --------------------------------------- | ---------------- |
@@ -103,7 +103,7 @@ reaches `check.fail_on`, or the `--fail-on` flag, which is `error` by default.
 `cyclops check` ignores [your own settings](../project/configuration.md#your-own-settings),
 both rules and settings, so that it gives the same answer on every machine, including CI.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation        | workspace | steps                                                                                                                 | command         | exit code? |
 | ------------------ | --------- | --------------------------------------------------------------------------------------------------------------------- | --------------- | ---------- |
@@ -118,7 +118,7 @@ read. `--level` is `package`, `module`, `type` or `member`, and `module` is the 
 `--focus` and `--depth` choose where to start, and `--overlay` attaches a metric to each
 node.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation | workspace | command                                                                  | exit code? | stdout text   | stdout includes? |
 | ----------- | --------- | ------------------------------------------------------------------------ | ---------- | ------------- | ---------------- |
@@ -130,7 +130,7 @@ node.
 | Members     | rust-shop | `cyclops export --format dot --level member --focus shop::orders::Order` | 0          | invoices      | yes              |
 | Scores      | rust-shop | `cyclops export --format mermaid --overlay cyclomatic`                   | 0          | cyclomatic 3  | yes              |
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation    | workspace | command                                          | exit code? | stdout text | stdout includes? | stderr text              | stderr includes? |
 | -------------- | --------- | ------------------------------------------------ | ---------- | ----------- | ---------------- | ------------------------ | ---------------- |
@@ -145,7 +145,7 @@ At `type` level an export is a real UML class diagram, with the same
 methods and their visibility. Relation kinds use the notation of each format. A guess is
 labelled with its confidence, so that it stays a guess outside Cyclops too.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation       | workspace | command                                                             | exit code? | stdout text     | stdout includes? |
 | ----------------- | --------- | ------------------------------------------------------------------- | ---------- | --------------- | ---------------- |
@@ -166,7 +166,7 @@ labelled with its confidence, so that it stays a guess outside Cyclops too.
 `--tests` and `--no-tests` work with every command that analyzes, as
 [configuration](../project/configuration.md#precedence) describes.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation | workspace | command                                                   | exit code? | stdout text                    | stdout includes? |
 | ----------- | --------- | --------------------------------------------------------- | ---------- | ------------------------------ | ---------------- |

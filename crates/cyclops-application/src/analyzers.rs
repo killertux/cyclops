@@ -209,39 +209,52 @@ mod tests {
 #[derive(Debug, Default)]
 pub struct CohesionAnalyzer;
 
-impl CohesionAnalyzer {
-    /// The groups of methods, or nothing for a type with no fields or no methods.
-    fn groups(fields: &[&str], methods: &[(&str, &BodyFacts)]) -> Option<u32> {
-        if fields.is_empty() || methods.is_empty() {
-            return None;
+/// The groups of methods that have nothing to do with each other, as indexes into
+/// `methods`, or nothing for a type with no fields or no methods. Two methods are in one
+/// group when they use the same field, or one calls the other.
+#[must_use]
+pub fn cohesion_groups(fields: &[&str], methods: &[(&str, &BodyFacts)]) -> Option<Vec<Vec<usize>>> {
+    if fields.is_empty() || methods.is_empty() {
+        return None;
+    }
+    let mut group: Vec<usize> = (0..methods.len()).collect();
+    let find = |group: &mut Vec<usize>, start: usize| {
+        let mut root = start;
+        while let Some(next) = group.get(root).copied().filter(|next| *next != root) {
+            root = next;
         }
-        let mut group: Vec<usize> = (0..methods.len()).collect();
-        let find = |group: &mut Vec<usize>, start: usize| {
-            let mut root = start;
-            while let Some(next) = group.get(root).copied().filter(|next| *next != root) {
-                root = next;
-            }
-            root
-        };
-        for (a, (name_a, body_a)) in methods.iter().enumerate() {
-            for (b, (name_b, body_b)) in methods.iter().enumerate().skip(a + 1) {
-                let shares_a_field = body_a.fields_used.iter().any(|field| {
-                    fields.contains(&field.as_str()) && body_b.fields_used.contains(field)
-                });
-                let calls = body_a.methods_called.iter().any(|called| called == name_b)
-                    || body_b.methods_called.iter().any(|called| called == name_a);
-                if shares_a_field || calls {
-                    let (root_a, root_b) = (find(&mut group, a), find(&mut group, b));
-                    if let Some(slot) = group.get_mut(root_a) {
-                        *slot = root_b;
-                    }
+        root
+    };
+    for (a, (name_a, body_a)) in methods.iter().enumerate() {
+        for (b, (name_b, body_b)) in methods.iter().enumerate().skip(a + 1) {
+            let shares_a_field = body_a.fields_used.iter().any(|field| {
+                fields.contains(&field.as_str()) && body_b.fields_used.contains(field)
+            });
+            let calls = body_a.methods_called.iter().any(|called| called == name_b)
+                || body_b.methods_called.iter().any(|called| called == name_a);
+            if shares_a_field || calls {
+                let (root_a, root_b) = (find(&mut group, a), find(&mut group, b));
+                if let Some(slot) = group.get_mut(root_a) {
+                    *slot = root_b;
                 }
             }
         }
-        let roots: std::collections::HashSet<usize> = (0..methods.len())
-            .map(|method| find(&mut group, method))
-            .collect();
-        u32::try_from(roots.len()).ok()
+    }
+    let mut groups: std::collections::BTreeMap<usize, Vec<usize>> =
+        std::collections::BTreeMap::new();
+    for method in 0..methods.len() {
+        groups
+            .entry(find(&mut group, method))
+            .or_default()
+            .push(method);
+    }
+    Some(groups.into_values().collect())
+}
+
+impl CohesionAnalyzer {
+    /// The groups of methods, or nothing for a type with no fields or no methods.
+    fn groups(fields: &[&str], methods: &[(&str, &BodyFacts)]) -> Option<u32> {
+        cohesion_groups(fields, methods).and_then(|groups| u32::try_from(groups.len()).ok())
     }
 }
 

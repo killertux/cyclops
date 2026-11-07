@@ -252,6 +252,48 @@ pub enum Rollup {
 }
 
 impl MetricDescriptor {
+    /// The scope a metric is measured on, before it rolls up.
+    #[must_use]
+    pub const fn measured_on(&self) -> Scope {
+        match self.id {
+            MetricId::Cyclomatic
+            | MetricId::Cognitive
+            | MetricId::MaxNesting
+            | MetricId::Lines
+            | MetricId::Parameters => Scope::Function,
+            MetricId::Members | MetricId::Lcom => Scope::Type,
+            MetricId::CommentLines
+            | MetricId::BlankLines
+            | MetricId::Duplication
+            | MetricId::Churn
+            | MetricId::Hotspot => Scope::File,
+            MetricId::Afferent
+            | MetricId::Efferent
+            | MetricId::Instability
+            | MetricId::Abstractness
+            | MetricId::Distance
+            | MetricId::CycleSize => Scope::Module,
+        }
+    }
+
+    /// Whether a metric has values at a scope, measured there or rolled up to it.
+    #[must_use]
+    pub fn applies_to(&self, scope: Scope) -> bool {
+        let rolled = match self.id {
+            MetricId::Cyclomatic | MetricId::Lines => {
+                &[Scope::Type, Scope::Module, Scope::File][..]
+            }
+            MetricId::Cognitive | MetricId::MaxNesting => &[Scope::Type, Scope::Module][..],
+            MetricId::CommentLines
+            | MetricId::BlankLines
+            | MetricId::Duplication
+            | MetricId::Churn
+            | MetricId::Hotspot => &[Scope::Module][..],
+            _ => &[][..],
+        };
+        self.measured_on() == scope || rolled.contains(&scope)
+    }
+
     /// The heat of a value of this metric, if it has any.
     #[must_use]
     pub fn heat_of(&self, scope: Scope, value: f64) -> Option<Heat> {

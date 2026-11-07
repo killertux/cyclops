@@ -13,6 +13,20 @@ pub enum RelationKind {
 }
 
 impl RelationKind {
+    pub const ALL: [Self; 6] = [
+        Self::Implements,
+        Self::Inherits,
+        Self::Composes,
+        Self::Uses,
+        Self::Calls,
+        Self::Imports,
+    ];
+
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.name() == name)
+    }
+
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {

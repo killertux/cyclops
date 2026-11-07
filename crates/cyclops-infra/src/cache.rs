@@ -14,7 +14,7 @@ use std::path::Path;
 
 /// Raise it whenever the layout of the database or of the facts changes. A cache of
 /// another version is started over.
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 pub struct SqliteFactStore {
     connection: Connection,
@@ -41,6 +41,7 @@ fn create(path: &Path) -> Result<Connection, CacheError> {
                 position INTEGER PRIMARY KEY,
                 id TEXT NOT NULL,
                 time INTEGER NOT NULL,
+                subject TEXT NOT NULL,
                 changes BLOB NOT NULL
             );
             CREATE TABLE IF NOT EXISTS head (id TEXT NOT NULL);",
@@ -149,17 +150,18 @@ impl SqliteFactStore {
             .ok();
         let mut statement = self
             .connection
-            .prepare("SELECT id, time, changes FROM commits ORDER BY position DESC")?;
+            .prepare("SELECT id, time, subject, changes FROM commits ORDER BY position DESC")?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, i64>(1)?,
-                row.get::<_, Vec<u8>>(2)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Vec<u8>>(3)?,
             ))
         })?;
         let mut commits = Vec::new();
         for row in rows {
-            let (id, time, changes) = row?;
+            let (id, time, subject, changes) = row?;
             // History that cannot be read is read again from git.
             let Ok(changes) = postcard::from_bytes::<StoredChanges>(&changes) else {
                 return Ok(KnownHistory::default());
@@ -168,7 +170,12 @@ impl SqliteFactStore {
                 .into_iter()
                 .map(|(path, previous)| FileChange { path, previous })
                 .collect();
-            commits.push(Commit { id, time, changes });
+            commits.push(Commit {
+                id,
+                time,
+                subject,
+                changes,
+            });
         }
         Ok(KnownHistory { head, commits })
     }
@@ -190,7 +197,7 @@ impl SqliteFactStore {
         {
             let mut insert = transaction
                 .prepare(
-                    "INSERT INTO commits (position, id, time, changes) VALUES (?1, ?2, ?3, ?4)",
+                    "INSERT INTO commits (position, id, time, subject, changes) VALUES (?1, ?2, ?3, ?4, ?5)",
                 )
                 .map_err(failed)?;
             // The newest commit comes first and gets the highest position.
@@ -203,7 +210,13 @@ impl SqliteFactStore {
                     .collect();
                 let bytes = postcard::to_stdvec(&changes).map_err(failed)?;
                 insert
-                    .execute(params![last + offset + 1, commit.id, commit.time, bytes])
+                    .execute(params![
+                        last + offset + 1,
+                        commit.id,
+                        commit.time,
+                        commit.subject,
+                        bytes
+                    ])
                     .map_err(failed)?;
             }
         }
@@ -338,6 +351,7 @@ mod tests {
         Commit {
             id: id.to_owned(),
             time,
+            subject: format!("Change {id}"),
             changes: vec![FileChange {
                 path: "b.rs".to_owned(),
                 previous: Some("a.rs".to_owned()),

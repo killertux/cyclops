@@ -61,6 +61,8 @@ pub enum SettingsError {
     NotPeriod(&'static str),
     PersonalOnly(&'static str, String),
     AlwaysNotAllowed,
+    /// An alert rule that can never work, with the reason.
+    AlertField(String),
 }
 
 impl fmt::Display for SettingsError {
@@ -86,6 +88,7 @@ impl fmt::Display for SettingsError {
                 "{key} must be a number of days, weeks, months or years, such as 12 months."
             ),
             Self::PersonalOnly(key, file) => write!(f, "{key} can only be set in {file}."),
+            Self::AlertField(reason) => f.write_str(reason),
             Self::AlwaysNotAllowed => f.write_str(
                 "semantic.mode can only be always in your own file, a flag or the environment.",
             ),

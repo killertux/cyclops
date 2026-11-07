@@ -182,6 +182,16 @@ pub struct BodyFacts {
     pub fields_used: Vec<String>,
     /// The methods it calls through `self` or `this`.
     pub methods_called: Vec<String>,
+    /// Where nesting is at its deepest, if there is any.
+    pub deepest: Option<Deepest>,
+}
+
+/// The deepest point of a function: its line, and the structures that lead there from
+/// the outside in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Deepest {
+    pub line: u32,
+    pub path: Vec<DecisionKind>,
 }
 
 /// One thing in a function that adds to its complexity.
@@ -224,6 +234,26 @@ pub enum DecisionKind {
 }
 
 impl DecisionKind {
+    /// The name explanations use. A loop is a loop, with or without an exit test.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::If => "if",
+            Self::ElseIf => "else if",
+            Self::Else => "else",
+            Self::Loop | Self::BareLoop => "loop",
+            Self::Match => "match",
+            Self::MatchArm => "match arm",
+            Self::Guard => "guard",
+            Self::Ternary => "ternary",
+            Self::Catch => "catch",
+            Self::Shortcut => "shortcut",
+            Self::LogicalOperator | Self::LogicalRun => "logical operator",
+            Self::Recursion => "recursion",
+            Self::LabeledJump => "jump",
+        }
+    }
+
     /// How many paths it adds, for cyclomatic complexity.
     #[must_use]
     pub const fn paths(self) -> u32 {

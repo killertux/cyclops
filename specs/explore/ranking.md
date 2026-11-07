@@ -14,7 +14,7 @@ is simply its highest value. Symbols that tie share a rank, and the next rank is
 `rank?` is the position and `of?` is how many peers there are.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation    | workspace | subject                       | metric      | rank? | of? |
 | -------------- | --------- | ----------------------------- | ----------- | ----- | --- |
@@ -33,7 +33,7 @@ is simply its highest value. Symbols that tie share a rank, and the next rank is
 `spread?` shows how a metric is distributed across the peers. It is eight equal ranges
 from the lowest value to the highest, with a count for each.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | level    | metric      | spread?                |
 | ----------- | --------- | -------- | ----------- | ---------------------- |
@@ -46,7 +46,7 @@ from the lowest value to the highest, with a count for each.
 to three, then says how many more tie with them. `worst` looks at the level where the
 metric is measured, not at rollups.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation  | workspace       | metric      | worst?                                                       | value? |
 | ------------ | --------------- | ----------- | ------------------------------------------------------------ | ------ |

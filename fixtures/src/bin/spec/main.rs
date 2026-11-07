@@ -5,6 +5,7 @@
 
 mod cli;
 mod fixtures;
+mod json;
 mod read;
 mod scenario;
 mod scratch;

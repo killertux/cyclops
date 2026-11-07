@@ -2,17 +2,17 @@
 //! complex. Everything that is not a symbol counts towards the function around it.
 
 use cyclops_domain::facts::{
-    BodyFacts, DecisionKind, DecisionPoint, Export, Import, MemberFacts, Reference, ReferenceKind,
-    SymbolFact,
+    BodyFacts, DecisionKind, DecisionPoint, Deepest, Export, Import, MemberFacts, Reference,
+    ReferenceKind, SymbolFact,
 };
 use cyclops_domain::lines::LineMap;
 use cyclops_domain::symbol::{CodeRole, Span, SymbolKind, Visibility};
 use oxc_ast::ast::{
-    ArrowFunctionExpression, AssignmentExpression, AssignmentTarget, BindingPattern,
-    BreakStatement, CallExpression, CatchClause, Class, ClassElement, ComputedMemberExpression,
-    ConditionalExpression, ContinueStatement, Declaration, DoWhileStatement,
-    ExportDefaultDeclarationKind, Expression, ForInStatement, ForOfStatement, ForStatement,
-    FormalParameters, Function, FunctionBody, FunctionType, IfStatement,
+    ArrowFunctionExpression, AssignmentExpression, AssignmentTarget, BinaryExpression,
+    BindingPattern, BreakStatement, CallExpression, CatchClause, Class, ClassElement,
+    ComputedMemberExpression, ConditionalExpression, ContinueStatement, Declaration,
+    DoWhileStatement, ExportDefaultDeclarationKind, Expression, ForInStatement, ForOfStatement,
+    ForStatement, FormalParameters, Function, FunctionBody, FunctionType, IfStatement,
     ImportDeclarationSpecifier, LogicalExpression, MethodDefinition, MethodDefinitionKind,
     NewExpression, PrivateFieldExpression, Program, PropertyDefinition, PropertyKey, Statement,
     StaticMemberExpression, SwitchStatement, TSAccessibility, TSInterfaceDeclaration,
@@ -21,7 +21,7 @@ use oxc_ast::ast::{
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_span::GetSpan;
-use oxc_syntax::operator::LogicalOperator;
+use oxc_syntax::operator::{BinaryOperator, LogicalOperator};
 use oxc_syntax::scope::ScopeFlags;
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
@@ -32,6 +32,10 @@ struct Frame {
     is_method: bool,
     fields_used: Vec<String>,
     methods_called: Vec<String>,
+    /// The structures around the walk, from the outside in.
+    trail: Vec<DecisionKind>,
+    /// The deepest structure so far: its depth, its line, and what leads there.
+    deepest: Option<(u32, u32, Vec<DecisionKind>)>,
     decisions: Vec<DecisionPoint>,
     max_nesting: u32,
     /// How deep the walk is for cognitive complexity, which also counts closures.
@@ -609,6 +613,8 @@ impl<'l, 'a> Extractor<'l, 'a> {
             is_method: callable.kind == SymbolKind::Method,
             fields_used: Vec::new(),
             methods_called: Vec::new(),
+            trail: Vec::new(),
+            deepest: None,
             decisions: Vec::new(),
             max_nesting: 0,
             nesting: 0,
@@ -640,6 +646,7 @@ impl<'l, 'a> Extractor<'l, 'a> {
                 max_nesting: frame.max_nesting,
                 fields_used: frame.fields_used,
                 methods_called: frame.methods_called,
+                deepest: frame.deepest.map(|(_, line, path)| Deepest { line, path }),
             });
         }
         if let Some(symbol) = self.symbols.get_mut(index) {
@@ -833,17 +840,27 @@ impl<'l, 'a> Extractor<'l, 'a> {
 }
 
 impl<'a> Extractor<'_, 'a> {
-    /// Walks something one control structure deeper.
-    fn deeper(&mut self, walk: impl FnOnce(&mut Self)) {
+    /// Walks something one control structure deeper, and keeps the deepest structure,
+    /// the first in the code when there are several.
+    fn deeper(&mut self, kind: DecisionKind, offset: u32, walk: impl FnOnce(&mut Self)) {
+        let line = self.lines.line_of(offset);
         if let Some(frame) = &mut self.frame {
             frame.nesting += 1;
             frame.depth += 1;
             frame.max_nesting = frame.max_nesting.max(frame.depth);
+            frame.trail.push(kind);
+            let deeper_than_known = frame.deepest.as_ref().is_none_or(|(known, known_line, _)| {
+                frame.depth > *known || (frame.depth == *known && line < *known_line)
+            });
+            if deeper_than_known {
+                frame.deepest = Some((frame.depth, line, frame.trail.clone()));
+            }
         }
         walk(self);
         if let Some(frame) = &mut self.frame {
             frame.nesting -= 1;
             frame.depth -= 1;
+            frame.trail.pop();
         }
     }
 
@@ -895,7 +912,9 @@ impl<'a> Extractor<'_, 'a> {
     /// The loop part of `for`, `while` and the like.
     fn looping(&mut self, kind: DecisionKind, offset: u32, body: &Statement<'a>) {
         self.point(kind, offset);
-        self.deeper(|walker| walker.visit_statement(body));
+        self.deeper(DecisionKind::Loop, offset, |walker| {
+            walker.visit_statement(body);
+        });
     }
 }
 
@@ -926,6 +945,16 @@ impl<'a> Visit<'a> for Extractor<'_, 'a> {
     fn visit_ts_type_reference(&mut self, reference: &TSTypeReference<'a>) {
         self.reference(ReferenceKind::Type, type_name(&reference.type_name));
         walk::walk_ts_type_reference(self, reference);
+    }
+
+    /// `x instanceof Thing` mentions `Thing`.
+    fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
+        if expression.operator == BinaryOperator::Instanceof
+            && let Some(path) = expression_path(&expression.right)
+        {
+            self.reference(ReferenceKind::Type, path);
+        }
+        walk::walk_binary_expression(self, expression);
     }
 
     fn visit_new_expression(&mut self, expression: &NewExpression<'a>) {
@@ -977,7 +1006,10 @@ impl<'a> Visit<'a> for Extractor<'_, 'a> {
         let mut current = statement;
         loop {
             self.visit_expression(&current.test);
-            self.deeper(|walker| walker.visit_statement(&current.consequent));
+            let start = statement.span.start;
+            self.deeper(DecisionKind::If, start, |walker| {
+                walker.visit_statement(&current.consequent);
+            });
             match &current.alternate {
                 Some(Statement::IfStatement(next)) => {
                     self.point(DecisionKind::ElseIf, next.span.start);
@@ -985,7 +1017,10 @@ impl<'a> Visit<'a> for Extractor<'_, 'a> {
                 }
                 Some(other) => {
                     self.point(DecisionKind::Else, other.span().start);
-                    self.deeper(|walker| walker.visit_statement(other));
+                    let start = statement.span.start;
+                    self.deeper(DecisionKind::If, start, |walker| {
+                        walker.visit_statement(other);
+                    });
                     return;
                 }
                 None => return,
@@ -1033,7 +1068,7 @@ impl<'a> Visit<'a> for Extractor<'_, 'a> {
     fn visit_switch_statement(&mut self, statement: &SwitchStatement<'a>) {
         self.point(DecisionKind::Match, statement.span.start);
         self.visit_expression(&statement.discriminant);
-        self.deeper(|walker| {
+        self.deeper(DecisionKind::Match, statement.span.start, |walker| {
             for case in &statement.cases {
                 if let Some(test) = &case.test {
                     walker.point(DecisionKind::MatchArm, case.span.start);
@@ -1058,13 +1093,15 @@ impl<'a> Visit<'a> for Extractor<'_, 'a> {
 
     fn visit_catch_clause(&mut self, clause: &CatchClause<'a>) {
         self.point(DecisionKind::Catch, clause.span.start);
-        self.deeper(|walker| walker.visit_block_statement(&clause.body));
+        self.deeper(DecisionKind::Catch, clause.span.start, |walker| {
+            walker.visit_block_statement(&clause.body);
+        });
     }
 
     fn visit_conditional_expression(&mut self, expression: &ConditionalExpression<'a>) {
         self.point(DecisionKind::Ternary, expression.span.start);
         self.visit_expression(&expression.test);
-        self.deeper(|walker| {
+        self.deeper(DecisionKind::Ternary, expression.span.start, |walker| {
             walker.visit_expression(&expression.consequent);
             walker.visit_expression(&expression.alternate);
         });

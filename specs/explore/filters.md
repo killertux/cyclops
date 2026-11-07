@@ -11,7 +11,7 @@ Any metric from the [metrics pages](../README.md#metrics) can be compared with `
 `!=`, `>`, `>=`, `<` and `<=`.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace | filter               | results?                                                            |
 | --------------- | --------- | -------------------- | ------------------------------------------------------------------- |
@@ -35,7 +35,7 @@ first row. `kind` narrows the search.
 | `path`     | The file of the symbol. `~` matches a glob pattern.               |
 | `in_cycle` | `true` or `false`.                                                |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace   | steps                    | filter                                   | results?                                                                                                     |
 | --------------- | ----------- | ------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -53,7 +53,7 @@ first row. `kind` narrows the search.
 `and`, `or` and `not` combine conditions, and parentheses group them. `not` binds
 tightest, then `and`, then `or`.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | filter                                                    | results?                                                                                |
 | ----------- | --------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------- |
@@ -69,7 +69,7 @@ Results are in alphabetical order, unless `sort` names a metric followed by `asc
 `desc`. Ties stay in alphabetical order, and symbols with no value go last. `limit`
 keeps the first results.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | filter                             | sort              | limit | results?                                                  |
 | ----------- | --------- | ---------------------------------- | ----------------- | ----- | --------------------------------------------------------- |
@@ -86,7 +86,7 @@ when something inside it does. `kept?` reads this for the `subject`.
 A filter chooses what to look at, and never changes what is measured. A kept module
 still shows its whole rollup, and not only the part that matched.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation    | workspace | filter                             | subject                    | kept? |
 | -------------- | --------- | ---------------------------------- | -------------------------- | ----- |
@@ -102,7 +102,7 @@ still shows its whole rollup, and not only the part that matched.
 A filter that cannot be understood is refused, and says why. It never quietly matches
 nothing.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation       | workspace | filter          | problem?                                 |
 | ----------------- | --------- | --------------- | ---------------------------------------- |

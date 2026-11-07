@@ -21,7 +21,7 @@ how to draw it.
 ## Levels
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation   | workspace | level   | relations | nodes?                                                                                  | edges?                                                                                                                     |
 | ------------- | --------- | ------- | --------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -33,7 +33,7 @@ how to draw it.
 A filter applies to what is inside a node too, so a module stays when one of its methods
 matches.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation   | workspace | level  | filter                             | nodes?                      |
 | ------------- | --------- | ------ | ---------------------------------- | --------------------------- |
@@ -41,7 +41,7 @@ matches.
 
 ## Focusing
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation       | workspace | level  | focus         | depth | nodes?                                     | edges?                                                                                                                     |
 | ----------------- | --------- | ------ | ------------- | ----- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
@@ -54,7 +54,7 @@ matches.
 
 A focus of a higher level than `level` shows what is inside it.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation    | workspace | level  | focus               | depth | nodes?                                                                              |
 | -------------- | --------- | ------ | ------------------- | ----- | ----------------------------------------------------------------------------------- |
@@ -67,7 +67,7 @@ A focus of a higher level than `level` shows what is inside it.
 `overlay value?` reads the `overlay` metric on the `subject` node. Any metric can be
 attached, and a [rollup](../metrics/rollups.md) makes it available on larger symbols.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace | level  | overlay     | subject             | overlay value? |
 | --------------- | --------- | ------ | ----------- | ------------------- | -------------- |
@@ -81,7 +81,7 @@ attached, and a [rollup](../metrics/rollups.md) makes it available on larger sym
 A node says whether it has an alert and whether it is in a cycle. An edge says how
 confident it is, and whether it is part of a cycle.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace   | steps                                       | level  | subject      | alerted? | in cycle? |
 | --------------- | ----------- | ------------------------------------------- | ------ | ------------ | -------- | --------- |
@@ -89,7 +89,7 @@ confident it is, and whether it is part of a cycle.
 | A cycle         | rust-cycles |                                             | module | cycles::a    | no       | true      |
 | Next to a cycle | rust-cycles |                                             | module | cycles::f    | no       | false     |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation  | workspace   | level  | from                       | to                            | edge confidence? | edge in cycle? |
 | ------------ | ----------- | ------ | -------------------------- | ----------------------------- | ---------------- | -------------- |
@@ -104,7 +104,7 @@ At `type` level a node also carries what a class box needs. `stereotype?` is `in
 `enum` or `alias`, and `none` for a struct or a class. `fields?` and `methods?` list its
 members. A method of a trait or an interface counts as a method of it.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation  | workspace | level | subject                | stereotype? | fields?        | methods?       |
 | ------------ | --------- | ----- | ---------------------- | ----------- | -------------- | -------------- |
@@ -113,7 +113,7 @@ members. A method of a trait or an interface counts as a method of it.
 | An interface | rust-shop | type  | shop::catalog::Priced  | interface   | none           | price          |
 | A class      | ts-shop   | type  | src/orders::Order      | none        | invoices       | add, total     |
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation | language | code           | symbol | stereotype? |
 | ----------- | -------- | -------------- | ------ | ----------- |
@@ -138,7 +138,7 @@ or `private`.
 The overlay and the marks are on members too. `member value?` reads the `overlay` on the
 `subject` member, and a member with no value shows `n/a`.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps                                       | overlay    | subject                       | member value? | alerted? |
 | ----------- | --------- | ------------------------------------------- | ---------- | ----------------------------- | ------------- | -------- |
@@ -150,14 +150,14 @@ An edge between members, such as `calls`, joins their types at `type` level, and
 members it came from. `from members?` and `to members?` read them. Like any chain, a joined
 edge is only as sure as its weakest relation.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | level | relations | from                | to                     | from members? | to members?    |
 | ----------- | --------- | ----- | --------- | ------------------- | ---------------------- | ------------- | -------------- |
 | Calls       | rust-shop | type  | calls     | shop::orders::Order | shop::billing::Invoice | total         | is_free, total |
 | Whole types | rust-shop | type  | composes  | shop::orders::Order | shop::billing::Invoice | none          | none           |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation   | workspace | level | relations | from                | to                     | edge confidence? |
 | ------------- | --------- | ----- | --------- | ------------------- | ---------------------- | ---------------- |

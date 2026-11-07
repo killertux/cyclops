@@ -5,12 +5,17 @@ use crate::read::{self, NONE, NOT_APPLICABLE, list, yes_no};
 use crate::scenario::{Scenario, no_cyclops};
 use crate::scratch::Scratch;
 use cyclops_application::analysis::ProjectAnalysis;
+use cyclops_application::diagram::{DiagramRequest, DiagramView, Edge, Level};
 use cyclops_application::graph::ModuleGraph;
+use cyclops_application::queries::{Explanation, Order};
+use cyclops_domain::filter::Filter;
 use cyclops_domain::metric::{MetricId, Scope, Subject};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::relation::{Confidence, RelationKind};
+use cyclops_domain::settings::Severity;
 use cyclops_domain::settings::{SettingKey, Settings};
 use cyclops_domain::symbol::SymbolId;
+use cyclops_domain::symbol::SymbolKind;
 use rust_slim::fixture;
 use std::process::{Command, Output};
 
@@ -217,6 +222,48 @@ impl Snippet {
     }
 
     #[must_use]
+    pub fn kinds(&self) -> String {
+        self.read(|analysis| {
+            analysis.explain(&self.id("f")).map_or_else(
+                || NONE.into(),
+                |explanation| {
+                    let kinds: Vec<String> = explanation
+                        .kinds
+                        .iter()
+                        .map(|(kind, count)| format!("{kind} {count}"))
+                        .collect();
+                    list(&kinds)
+                },
+            )
+        })
+    }
+
+    #[must_use]
+    pub fn groups(&self) -> String {
+        self.read(|analysis| read::method_groups(analysis, &self.id("S"), false))
+    }
+
+    #[must_use]
+    pub fn group_fields(&self) -> String {
+        self.read(|analysis| read::method_groups(analysis, &self.id("S"), true))
+    }
+
+    #[must_use]
+    pub fn stereotype(&self) -> String {
+        self.read(|analysis| {
+            read::symbol(analysis, &self.id("S")).map_or_else(
+                || NOT_APPLICABLE.into(),
+                |symbol| match symbol.kind {
+                    SymbolKind::Interface => "interface".into(),
+                    SymbolKind::Enum => "enum".into(),
+                    SymbolKind::Alias => "alias".into(),
+                    _ => NONE.into(),
+                },
+            )
+        })
+    }
+
+    #[must_use]
     pub fn lines(&self) -> String {
         self.of_file_or_symbol(MetricId::Lines)
     }
@@ -245,6 +292,16 @@ pub struct Core {
     setting: String,
     from: String,
     to: String,
+    filter: String,
+    sort: String,
+    limit: String,
+    alert: String,
+    distance: String,
+    level: String,
+    focus: String,
+    depth: String,
+    relations: String,
+    overlay: String,
     outcome: Option<Outcome>,
     settings: Option<Result<Settings, String>>,
 }
@@ -254,6 +311,14 @@ impl Core {
         let scratch = Scratch::from_sample(&self.workspace).map_err(|e| e.to_string())?;
         let mut scenario = Scenario::new(scratch);
         scenario.steps(&self.steps, &no_cyclops)?;
+        for rule in self
+            .alert
+            .split(';')
+            .map(str::trim)
+            .filter(|rule| !rule.is_empty())
+        {
+            scenario.steps(&format!("add alert {rule}"), &no_cyclops)?;
+        }
         self.settings = Some(scenario.settings());
         scenario.analyze()
     }
@@ -292,6 +357,94 @@ impl Core {
             .filter(|relation| relation.from == from && relation.to == to)
             .map(|relation| (relation.kind, relation.confidence))
             .min()
+    }
+
+    fn parsed_filter(&self) -> Result<Option<Filter>, String> {
+        if self.filter.is_empty() {
+            return Ok(None);
+        }
+        Filter::parse(&self.filter)
+            .map(Some)
+            .map_err(|error| error.to_string())
+    }
+
+    fn matching(&self, analysis: &ProjectAnalysis) -> Result<Vec<String>, String> {
+        let Some(filter) = self.parsed_filter()? else {
+            return Err("no filter".into());
+        };
+        let sort = match self.sort.split_once(' ') {
+            Some((metric, order)) => {
+                let metric = MetricId::parse(metric).ok_or("unknown metric")?;
+                let order = if order == "asc" {
+                    Order::Ascending
+                } else {
+                    Order::Descending
+                };
+                Some((metric, order))
+            }
+            None => None,
+        };
+        let limit = self.limit.parse().ok();
+        Ok(analysis
+            .search(&filter, sort, limit)
+            .iter()
+            .map(|symbol| symbol.id.to_string())
+            .collect())
+    }
+
+    fn request(&self) -> Result<DiagramRequest, String> {
+        let level =
+            Level::parse(&self.level).ok_or_else(|| format!("unknown level {}", self.level))?;
+        let relations = self
+            .relations
+            .split(',')
+            .map(str::trim)
+            .filter(|kind| !kind.is_empty())
+            .map(|kind| RelationKind::parse(kind).ok_or_else(|| format!("unknown relation {kind}")))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(DiagramRequest {
+            level,
+            focus: (!self.focus.is_empty()).then(|| SymbolId::new(&self.focus)),
+            depth: self.depth.parse().unwrap_or(0),
+            relations,
+            overlay: MetricId::parse(&self.overlay),
+            filter: self.parsed_filter()?,
+        })
+    }
+
+    /// Reads something of the diagram the row asks for.
+    fn drawn(&self, reader: impl FnOnce(&DiagramView) -> String) -> String {
+        self.read(|analysis| match self.request() {
+            Ok(request) => reader(&analysis.diagram(&request)),
+            Err(error) => failed(&error),
+        })
+    }
+
+    fn edge<'d>(&self, view: &'d DiagramView) -> Option<&'d Edge> {
+        let (from, to) = (SymbolId::new(&self.from), SymbolId::new(&self.to));
+        view.edges
+            .iter()
+            .filter(|edge| edge.from == from && edge.to == to)
+            .min_by_key(|edge| edge.kind)
+    }
+
+    fn explained(&self, reader: impl FnOnce(&Explanation) -> String) -> String {
+        self.read(|analysis| {
+            analysis
+                .explain(&self.id())
+                .map_or_else(|| NONE.into(), |explanation| reader(&explanation))
+        })
+    }
+
+    fn impact_count(&self, confidence: Confidence) -> String {
+        self.read(|analysis| {
+            let impact = analysis.impact(&self.id());
+            impact
+                .all()
+                .filter(|(_, sure)| *sure == confidence)
+                .count()
+                .to_string()
+        })
     }
 
     fn metric_id(&self) -> Result<MetricId, String> {
@@ -335,6 +488,46 @@ impl Core {
         self.value = value;
     }
 
+    pub fn set_filter(&mut self, filter: String) {
+        self.filter = filter;
+    }
+
+    pub fn set_sort(&mut self, sort: String) {
+        self.sort = sort;
+    }
+
+    pub fn set_limit(&mut self, limit: String) {
+        self.limit = limit;
+    }
+
+    pub fn set_alert(&mut self, alert: String) {
+        self.alert = alert;
+    }
+
+    pub fn set_distance(&mut self, distance: String) {
+        self.distance = distance;
+    }
+
+    pub fn set_level(&mut self, level: String) {
+        self.level = level;
+    }
+
+    pub fn set_focus(&mut self, focus: String) {
+        self.focus = focus;
+    }
+
+    pub fn set_depth(&mut self, depth: String) {
+        self.depth = depth;
+    }
+
+    pub fn set_relations(&mut self, relations: String) {
+        self.relations = relations;
+    }
+
+    pub fn set_overlay(&mut self, overlay: String) {
+        self.overlay = overlay;
+    }
+
     pub fn set_from(&mut self, from: String) {
         self.from = from;
     }
@@ -359,14 +552,458 @@ impl Core {
         yes_no(matches!(self.outcome, Some(Ok(_))))
     }
 
-    /// Why the analysis was refused.
+    /// Why the analysis or the filter was refused.
     #[must_use]
     pub fn problem(&self) -> String {
         match &self.outcome {
             Some(Err(error)) => error.clone(),
-            Some(Ok(_)) => NONE.into(),
+            Some(Ok(_)) => self.parsed_filter().err().unwrap_or_else(|| NONE.into()),
             None => not_run(),
         }
+    }
+
+    #[must_use]
+    pub fn results(&self) -> String {
+        self.read(|analysis| {
+            self.matching(analysis)
+                .map_or_else(|error| failed(&error), |found| list(&found))
+        })
+    }
+
+    #[must_use]
+    pub fn kept(&self) -> String {
+        self.read(|analysis| match self.parsed_filter() {
+            Ok(Some(filter)) => yes_no(analysis.kept(&filter, &self.id())),
+            Ok(None) => failed("no filter"),
+            Err(error) => failed(&error),
+        })
+    }
+
+    #[must_use]
+    pub fn alerts(&self) -> String {
+        self.read(|analysis| {
+            let alerts: Vec<String> = analysis
+                .alerts()
+                .iter()
+                .map(|alert| {
+                    let severity = if alert.severity == Severity::Error {
+                        "error"
+                    } else {
+                        "warning"
+                    };
+                    format!("{severity} {}", alert.subject)
+                })
+                .collect();
+            list(&alerts)
+        })
+    }
+
+    #[must_use]
+    pub fn alerted(&self) -> String {
+        self.read(|analysis| {
+            let subject = read::subject(&self.subject);
+            yes_no(
+                analysis
+                    .alerts()
+                    .iter()
+                    .any(|alert| alert.subject == subject),
+            )
+        })
+    }
+
+    #[must_use]
+    pub fn rank(&self) -> String {
+        self.read(|analysis| {
+            let rank = self
+                .metric_id()
+                .ok()
+                .and_then(|metric| analysis.rank(&read::subject(&self.subject), metric));
+            rank.map_or_else(|| NOT_APPLICABLE.into(), |rank| rank.position.to_string())
+        })
+    }
+
+    #[must_use]
+    pub fn of(&self) -> String {
+        self.read(|analysis| {
+            let rank = self
+                .metric_id()
+                .ok()
+                .and_then(|metric| analysis.rank(&read::subject(&self.subject), metric));
+            rank.map_or_else(|| NOT_APPLICABLE.into(), |rank| rank.of.to_string())
+        })
+    }
+
+    #[must_use]
+    pub fn spread(&self) -> String {
+        self.read(|analysis| {
+            let spread = self
+                .metric_id()
+                .ok()
+                .zip(Scope::parse(&self.level))
+                .and_then(|(metric, scope)| analysis.spread(scope, metric));
+            spread.map_or_else(
+                || NONE.into(),
+                |counts| {
+                    counts
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                },
+            )
+        })
+    }
+
+    /// Up to three names, then how many more tie with them.
+    #[must_use]
+    pub fn worst(&self) -> String {
+        self.read(|analysis| {
+            let Some(worst) = self
+                .metric_id()
+                .ok()
+                .and_then(|metric| analysis.worst(metric))
+            else {
+                return NONE.into();
+            };
+            let names: Vec<String> = worst
+                .subjects
+                .iter()
+                .take(3)
+                .map(ToString::to_string)
+                .collect();
+            let more = worst.subjects.len().saturating_sub(3);
+            if more > 0 {
+                format!("{} and {more} more", names.join(", "))
+            } else {
+                names.join(", ")
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn dependents(&self) -> String {
+        self.read(|analysis| {
+            let distance: usize = self.distance.parse().unwrap_or(1);
+            let impact = analysis.impact(&self.id());
+            let level = distance
+                .checked_sub(1)
+                .and_then(|index| impact.levels.get(index));
+            let ids: Vec<String> = level
+                .into_iter()
+                .flatten()
+                .map(|(id, _)| id.to_string())
+                .collect();
+            list(&ids)
+        })
+    }
+
+    #[must_use]
+    pub fn exact(&self) -> String {
+        self.impact_count(Confidence::Exact)
+    }
+
+    #[must_use]
+    pub fn inferred(&self) -> String {
+        self.impact_count(Confidence::Inferred)
+    }
+
+    #[must_use]
+    pub fn ambiguous(&self) -> String {
+        self.impact_count(Confidence::Ambiguous)
+    }
+
+    #[must_use]
+    pub fn reach(&self) -> String {
+        self.read(|analysis| analysis.impact(&self.id()).all().count().to_string())
+    }
+
+    #[must_use]
+    pub fn packages(&self) -> String {
+        self.read(|analysis| {
+            let view = analysis.view();
+            let packages: std::collections::BTreeSet<SymbolId> = analysis
+                .impact(&self.id())
+                .all()
+                .filter_map(|(id, _)| {
+                    let mut current = view.symbol(id);
+                    while let Some(symbol) = current {
+                        if symbol.kind == SymbolKind::Package {
+                            return Some(symbol.id.clone());
+                        }
+                        current = symbol
+                            .parent
+                            .as_ref()
+                            .and_then(|parent| view.symbol(parent));
+                    }
+                    None
+                })
+                .collect();
+            packages.len().to_string()
+        })
+    }
+
+    #[must_use]
+    pub fn points(&self) -> String {
+        self.explained(|explanation| {
+            let points: Vec<String> = explanation
+                .points
+                .iter()
+                .map(|(line, points)| format!("{line} +{points}"))
+                .collect();
+            list(&points)
+        })
+    }
+
+    #[must_use]
+    pub fn decisions(&self) -> String {
+        self.explained(|explanation| explanation.decisions.to_string())
+    }
+
+    #[must_use]
+    pub fn nesting(&self) -> String {
+        self.explained(|explanation| explanation.nesting.to_string())
+    }
+
+    #[must_use]
+    pub fn points_by_kind(&self) -> String {
+        self.explained(|explanation| {
+            let kinds: Vec<String> = explanation
+                .points_by_kind
+                .iter()
+                .map(|(kind, points)| format!("{kind} {points}"))
+                .collect();
+            list(&kinds)
+        })
+    }
+
+    #[must_use]
+    pub fn deepest_line(&self) -> String {
+        self.explained(|explanation| {
+            explanation
+                .deepest
+                .as_ref()
+                .map_or_else(|| NONE.into(), |(line, _)| line.to_string())
+        })
+    }
+
+    #[must_use]
+    pub fn deepest_path(&self) -> String {
+        self.explained(|explanation| {
+            explanation
+                .deepest
+                .as_ref()
+                .map_or_else(|| NONE.into(), |(_, path)| path.join(", "))
+        })
+    }
+
+    #[must_use]
+    pub fn in_file(&self) -> String {
+        self.read(|analysis| {
+            let rank = self
+                .metric_id()
+                .ok()
+                .and_then(|metric| analysis.in_file(&self.id(), metric));
+            rank.map_or_else(
+                || NOT_APPLICABLE.into(),
+                |rank| format!("{} of {}", rank.position, rank.of),
+            )
+        })
+    }
+
+    #[must_use]
+    pub fn commits(&self) -> String {
+        self.subject_metric(MetricId::Churn)
+    }
+
+    #[must_use]
+    pub fn file_complexity(&self) -> String {
+        self.subject_metric(MetricId::Cyclomatic)
+    }
+
+    #[must_use]
+    pub fn latest_commit(&self) -> String {
+        self.read(|analysis| {
+            let commits = analysis.commits_of(&RelativePath::new(&self.subject));
+            commits
+                .first()
+                .map_or_else(|| NONE.into(), |commit| commit.subject.clone())
+        })
+    }
+
+    #[must_use]
+    pub fn groups(&self) -> String {
+        self.read(|analysis| read::method_groups(analysis, &self.id(), false))
+    }
+
+    #[must_use]
+    pub fn depends_on(&self) -> String {
+        self.read(|analysis| {
+            let graph = ModuleGraph::of(&analysis.view());
+            let found: Vec<String> = graph
+                .depends_on(&self.id())
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            list(&found)
+        })
+    }
+
+    #[must_use]
+    pub fn depended_on_by(&self) -> String {
+        self.read(|analysis| {
+            let graph = ModuleGraph::of(&analysis.view());
+            let found: Vec<String> = graph
+                .depended_on_by(&self.id())
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            list(&found)
+        })
+    }
+
+    #[must_use]
+    pub fn cycle_path(&self) -> String {
+        self.read(|analysis| {
+            let Some(hops) = analysis.cycle_path(&self.id()) else {
+                return NONE.into();
+            };
+            let mut path: Vec<String> = hops.iter().map(|(from, _, _)| from.to_string()).collect();
+            path.extend(hops.last().map(|(_, to, _)| to.to_string()));
+            path.join(" -> ")
+        })
+    }
+
+    #[must_use]
+    pub fn cycle_hops(&self) -> String {
+        self.read(|analysis| {
+            let Some(hops) = analysis.cycle_path(&self.id()) else {
+                return NONE.into();
+            };
+            hops.iter()
+                .map(|(from, to, confidence)| {
+                    format!("{from} -> {to} imports {}", confidence.name())
+                })
+                .collect::<Vec<_>>()
+                .join("; ")
+        })
+    }
+
+    #[must_use]
+    pub fn nodes(&self) -> String {
+        self.drawn(|view| {
+            let ids: Vec<String> = view.nodes.iter().map(|node| node.id.to_string()).collect();
+            list(&ids)
+        })
+    }
+
+    #[must_use]
+    pub fn edges(&self) -> String {
+        self.drawn(|view| {
+            let edges: Vec<String> = view
+                .edges
+                .iter()
+                .map(|edge| format!("{} -> {} ({})", edge.from, edge.to, edge.kind.name()))
+                .collect();
+            list(&edges)
+        })
+    }
+
+    #[must_use]
+    pub fn overlay_value(&self) -> String {
+        let metric = MetricId::parse(&self.overlay);
+        self.drawn(|view| {
+            let node = view.node(&self.id());
+            match (node.and_then(|node| node.overlay), metric) {
+                (Some(value), Some(metric)) => metric.descriptor().format(value),
+                _ => NOT_APPLICABLE.into(),
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn member_value(&self) -> String {
+        let Some(metric) = MetricId::parse(&self.overlay) else {
+            return failed("no overlay");
+        };
+        self.subject_metric(metric)
+    }
+
+    #[must_use]
+    pub fn edge_confidence(&self) -> String {
+        self.drawn(|view| {
+            self.edge(view)
+                .map_or_else(|| NONE.into(), |edge| edge.confidence.name().into())
+        })
+    }
+
+    #[must_use]
+    pub fn edge_in_cycle(&self) -> String {
+        self.drawn(|view| {
+            self.edge(view)
+                .map_or_else(|| NONE.into(), |edge| yes_no(edge.in_cycle))
+        })
+    }
+
+    #[must_use]
+    #[expect(
+        clippy::wrong_self_convention,
+        reason = "temoc names this method after the `from members?` column"
+    )]
+    pub fn from_members(&self) -> String {
+        self.drawn(|view| {
+            self.edge(view)
+                .map_or_else(|| NONE.into(), |edge| list(&edge.from_members))
+        })
+    }
+
+    #[must_use]
+    pub fn to_members(&self) -> String {
+        self.drawn(|view| {
+            self.edge(view)
+                .map_or_else(|| NONE.into(), |edge| list(&edge.to_members))
+        })
+    }
+
+    #[must_use]
+    pub fn stereotype(&self) -> String {
+        self.drawn(|view| {
+            view.node(&self.id()).map_or_else(
+                || NOT_APPLICABLE.into(),
+                |node| node.stereotype.unwrap_or(NONE).into(),
+            )
+        })
+    }
+
+    #[must_use]
+    pub fn fields(&self) -> String {
+        self.drawn(|view| {
+            let names: Vec<String> = view
+                .node(&self.id())
+                .map(|node| {
+                    node.fields
+                        .iter()
+                        .map(|member| member.name.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            list(&names)
+        })
+    }
+
+    #[must_use]
+    pub fn methods(&self) -> String {
+        self.drawn(|view| {
+            let names: Vec<String> = view
+                .node(&self.id())
+                .map(|node| {
+                    node.methods
+                        .iter()
+                        .map(|member| member.name.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            list(&names)
+        })
     }
 
     #[must_use]
@@ -626,9 +1263,21 @@ impl Core {
         })
     }
 
-    /// The value of the `setting` column.
+    /// The value of the `setting` column, or the worst value of the `metric` column.
     #[must_use]
     pub fn value(&self) -> String {
+        if self.setting.is_empty() && !self.metric.is_empty() {
+            return self.read(|analysis| {
+                self.metric_id()
+                    .ok()
+                    .and_then(|metric| {
+                        analysis
+                            .worst(metric)
+                            .map(|worst| metric.descriptor().format(worst.value))
+                    })
+                    .unwrap_or_else(|| NOT_APPLICABLE.into())
+            });
+        }
         if self.setting.is_empty() {
             return String::new();
         }
@@ -802,6 +1451,15 @@ impl Cli {
                 &String::from_utf8_lossy(&ran.output.stderr),
                 &self.stderr_text,
             )
+        })
+    }
+
+    #[must_use]
+    pub fn valid_json(&self) -> String {
+        self.read(|ran| {
+            yes_no(crate::json::is_valid(&String::from_utf8_lossy(
+                &ran.output.stdout,
+            )))
         })
     }
 

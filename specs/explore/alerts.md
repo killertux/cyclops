@@ -25,7 +25,7 @@ semicolons. A rule can end with `in PATTERN` for its `paths`, or with `disabled`
 ## Firing
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace       | alert                                                            | alerts?                                                               |
 | ------------------ | --------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -40,7 +40,7 @@ semicolons. A rule can end with `in PATTERN` for its `paths`, or with `disabled`
 Rules follow the same rule as [filters](filters.md): a symbol with no value never
 fires, so `shop::notes` has no alert here.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | alert                            | alerts?                                      |
 | ----------- | --------- | -------------------------------- | -------------------------------------------- |
@@ -48,7 +48,7 @@ fires, so `shop::notes` has no alert here.
 
 ## Narrowing a rule
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace | steps                    | alert                                             | alerts?                             |
 | ------------------ | --------- | ------------------------ | ------------------------------------------------- | ----------------------------------- |
@@ -62,7 +62,7 @@ fires, so `shop::notes` has no alert here.
 
 `alerted?` says whether a symbol has an alert, so that any view can mark it.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | alert                             | subject                       | alerted? |
 | ----------- | --------- | --------------------------------- | ----------------------------- | -------- |
@@ -74,7 +74,7 @@ fires, so `shop::notes` has no alert here.
 A rule that can never work is a [configuration problem](../project/configuration.md#invalid-configuration),
 and it stops the analysis.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace | alert                                  | analyzed? | problem?                                      |
 | ------------------- | --------- | -------------------------------------- | --------- | --------------------------------------------- |

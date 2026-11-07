@@ -15,7 +15,7 @@ the file. `decisions?` is the number of decision points, which is what
 many of the points come from nesting.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace | subject                       | points?      | decisions? | nesting? |
 | --------------- | --------- | ----------------------------- | ------------ | ---------- | -------- |
@@ -25,7 +25,7 @@ many of the points come from nesting.
 
 `kinds?` groups the decision points of a function by what they are.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation  | language   | code                                                       | kinds?             |
 | ------------ | ---------- | ---------------------------------------------------------- | ------------------ |
@@ -37,7 +37,7 @@ many of the points come from nesting.
 
 `points by kind?` adds the cognitive points up by structure.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace | subject                       | points by kind? |
 | --------------- | --------- | ----------------------------- | --------------- |
@@ -50,7 +50,7 @@ many of the points come from nesting.
 `deepest line?` is where [nesting](../metrics/size.md#nesting) is at its deepest, and
 `deepest path?` lists the structures that lead there, from the outside in.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation   | workspace | subject                       | deepest line? | deepest path? |
 | ------------- | --------- | ----------------------------- | ------------- | ------------- |
@@ -63,7 +63,7 @@ many of the points come from nesting.
 `in file?` says where a function stands among the functions of its file, for the `metric`.
 Rank 1 is the worst, as on the [ranking](ranking.md) page.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace | subject                         | metric     | in file? |
 | --------------- | --------- | ------------------------------- | ---------- | -------- |
@@ -78,7 +78,7 @@ A [hotspot](../metrics/hotspots.md) comes from history. `commits?` lists how man
 changed a file within `metrics.hotspots.since`, which is the same as its `churn`.
 `file complexity?` is the other half of the score.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps                                                  | subject       | commits? | file complexity? |
 | ----------- | --------- | ------------------------------------------------------ | ------------- | -------- | ---------------- |
@@ -89,7 +89,7 @@ changed a file within `metrics.hotspots.since`, which is the same as its `churn`
 Each commit has its short id, its age and its subject. `latest commit?` reads the most
 recent one, and the subject of a commit made by `commit` is `Change PATH`.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps                                    | subject       | latest commit?       |
 | ----------- | --------- | ---------------------------------------- | ------------- | -------------------- |
@@ -101,7 +101,7 @@ recent one, and the subject of a commit made by `commit` is `Change PATH`.
 separated by semicolons. They are what LCOM counts, and each one is a candidate for
 splitting the type.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation     | language   | code                                                                                                        | groups? |
 | --------------- | ---------- | ----------------------------------------------------------------------------------------------------------- | ------- |
@@ -110,7 +110,7 @@ splitting the type.
 | A class         | typescript | `class S { a = 1; b = 2; x() { return this.a; } y() { return this.b; } }`                                   | x; y    |
 | No methods      | rust       | `struct S { a: u8 }`                                                                                        | none    |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation  | workspace       | subject             | groups?     |
 | ------------ | --------------- | ------------------- | ----------- |
@@ -118,7 +118,7 @@ splitting the type.
 
 `group fields?` lists the fields each group uses, in the same order.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation     | language | code                                                                                             | group fields? |
 | --------------- | -------- | ------------------------------------------------------------------------------------------------ | ------------- |
@@ -129,7 +129,7 @@ splitting the type.
 `depends on?` and `depended on by?` list the modules behind the
 [coupling metrics](../metrics/coupling.md).
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | subject       | depends on?                  | depended on by?             |
 | ----------- | --------- | ------------- | ---------------------------- | --------------------------- |
@@ -143,7 +143,7 @@ splitting the type.
 `cycle path?` shows a way around the [cycle](../metrics/dependency-cycles.md) of a module,
 starting from it.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation    | workspace   | subject   | cycle path?                                      |
 | -------------- | ----------- | --------- | ------------------------------------------------ |
@@ -153,7 +153,7 @@ starting from it.
 
 `cycle hops?` gives each step of that path, with its kind and confidence.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace   | subject   | cycle hops?                                                                |
 | ----------- | ----------- | --------- | -------------------------------------------------------------------------- |
