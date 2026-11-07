@@ -1,19 +1,23 @@
 //! Walks a parsed file: finds its symbols, and describes what makes each function
 //! complex. Everything that is not a symbol counts towards the function around it.
 
-use cyclops_domain::facts::{BodyFacts, DecisionKind, DecisionPoint, SymbolFact};
+use cyclops_domain::facts::{
+    BodyFacts, DecisionKind, DecisionPoint, Export, Import, MemberFacts, Reference, ReferenceKind,
+    SymbolFact,
+};
 use cyclops_domain::lines::LineMap;
 use cyclops_domain::symbol::{CodeRole, Span, SymbolKind, Visibility};
 use oxc_ast::ast::{
-    ArrowFunctionExpression, AssignmentExpression, BindingPattern, BreakStatement, CallExpression,
-    CatchClause, Class, ClassElement, ComputedMemberExpression, ConditionalExpression,
-    ContinueStatement, Declaration, DoWhileStatement, ExportDefaultDeclarationKind, Expression,
-    ForInStatement, ForOfStatement, ForStatement, FormalParameters, Function, FunctionBody,
-    FunctionType, IfStatement, LogicalExpression, MethodDefinition, PrivateFieldExpression,
-    Program, PropertyDefinition, PropertyKey, Statement, StaticMemberExpression, SwitchStatement,
-    TSAccessibility, TSInterfaceDeclaration, TSNamespaceDeclaration, TSNamespaceDeclarationBody,
-    TSSignature, TSType, TSTypeAnnotation, TryStatement, VariableDeclaration, VariableDeclarator,
-    WhileStatement,
+    ArrowFunctionExpression, AssignmentExpression, AssignmentTarget, BindingPattern,
+    BreakStatement, CallExpression, CatchClause, Class, ClassElement, ComputedMemberExpression,
+    ConditionalExpression, ContinueStatement, Declaration, DoWhileStatement,
+    ExportDefaultDeclarationKind, Expression, ForInStatement, ForOfStatement, ForStatement,
+    FormalParameters, Function, FunctionBody, FunctionType, IfStatement,
+    ImportDeclarationSpecifier, LogicalExpression, MethodDefinition, MethodDefinitionKind,
+    NewExpression, PrivateFieldExpression, Program, PropertyDefinition, PropertyKey, Statement,
+    StaticMemberExpression, SwitchStatement, TSAccessibility, TSInterfaceDeclaration,
+    TSNamespaceDeclaration, TSNamespaceDeclarationBody, TSSignature, TSTypeAnnotation, TSTypeName,
+    TSTypeReference, TryStatement, VariableDeclaration, VariableDeclarator, WhileStatement,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_span::GetSpan;
@@ -26,6 +30,8 @@ use std::marker::PhantomData;
 struct Frame {
     name: String,
     is_method: bool,
+    fields_used: Vec<String>,
+    methods_called: Vec<String>,
     decisions: Vec<DecisionPoint>,
     max_nesting: u32,
     /// How deep the walk is for cognitive complexity, which also counts closures.
@@ -43,7 +49,9 @@ struct Callable<'n, 'a> {
     start: u32,
     end: u32,
     params: &'n FormalParameters<'a>,
+    returns: Option<&'n TSTypeAnnotation<'a>>,
     body: Option<CallableBody<'n, 'a>>,
+    instance: bool,
 }
 
 enum CallableBody<'n, 'a> {
@@ -63,7 +71,113 @@ pub(crate) struct Extractor<'l, 'a> {
     declared: HashMap<(Option<usize>, String), usize>,
     /// What `export { name }` and `export default name` make public.
     exported: HashSet<String>,
+    imports: Vec<Import>,
+    exports: Vec<Export>,
     marker: PhantomData<&'a ()>,
+}
+
+/// Collects the types an annotation names, outside of any function.
+#[derive(Default)]
+struct TypeNames(Vec<Vec<String>>);
+
+impl<'a> Visit<'a> for TypeNames {
+    fn visit_ts_type_reference(&mut self, reference: &TSTypeReference<'a>) {
+        self.0.push(type_name(&reference.type_name));
+        walk::walk_ts_type_reference(self, reference);
+    }
+}
+
+fn type_references(annotation: Option<&TSTypeAnnotation<'_>>) -> Vec<Reference> {
+    let mut names = TypeNames::default();
+    if let Some(annotation) = annotation {
+        names.visit_ts_type_annotation(annotation);
+    }
+    names
+        .0
+        .into_iter()
+        .map(|path| Reference {
+            kind: ReferenceKind::Type,
+            path,
+        })
+        .collect()
+}
+
+/// The names of a type, such as `ns` and `Thing` in `ns.Thing`.
+fn type_name(name: &TSTypeName<'_>) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut current = name;
+    loop {
+        match current {
+            TSTypeName::IdentifierReference(identifier) => {
+                names.push(identifier.name.to_string());
+                break;
+            }
+            TSTypeName::QualifiedName(qualified) => {
+                names.push(qualified.right.name.to_string());
+                current = &qualified.left;
+            }
+            TSTypeName::ThisExpression(_) => break,
+        }
+    }
+    names.reverse();
+    names
+}
+
+/// The names of an expression such as `a.b.C`, if it is only names.
+fn expression_path(expression: &Expression<'_>) -> Option<Vec<String>> {
+    let mut names = Vec::new();
+    let mut current = expression.get_inner_expression();
+    loop {
+        match current {
+            Expression::Identifier(identifier) => {
+                names.push(identifier.name.to_string());
+                break;
+            }
+            Expression::StaticMemberExpression(member) => {
+                names.push(member.property.name.to_string());
+                current = member.object.get_inner_expression();
+            }
+            _ => return None,
+        }
+    }
+    names.reverse();
+    Some(names)
+}
+
+/// The module a `require("...")` call loads.
+fn required_module<'n>(expression: &'n Expression<'_>) -> Option<&'n str> {
+    let Expression::CallExpression(call) = expression.get_inner_expression() else {
+        return None;
+    };
+    let Expression::Identifier(callee) = &call.callee else {
+        return None;
+    };
+    if callee.name != "require" {
+        return None;
+    }
+    match call.arguments.first()?.as_expression()? {
+        Expression::StringLiteral(literal) => literal.value.as_str(),
+        _ => None,
+    }
+}
+
+/// The fields a constructor creates with `this.name = value`, as JavaScript does.
+#[derive(Default)]
+struct AssignedFields(Vec<(String, oxc_span::Span)>);
+
+impl<'a> Visit<'a> for AssignedFields {
+    fn visit_assignment_expression(&mut self, expression: &AssignmentExpression<'a>) {
+        if let AssignmentTarget::StaticMemberExpression(member) = &expression.left
+            && matches!(member.object, Expression::ThisExpression(_))
+        {
+            self.0
+                .push((member.property.name.to_string(), expression.span));
+        }
+        walk::walk_assignment_expression(self, expression);
+    }
+
+    /// Functions inside a constructor have a `this` of their own.
+    fn visit_function(&mut self, _: &Function<'a>, _: ScopeFlags) {}
 }
 
 fn visibility_of(accessibility: Option<TSAccessibility>) -> Visibility {
@@ -122,12 +236,41 @@ impl<'l, 'a> Extractor<'l, 'a> {
             frame: None,
             declared: HashMap::new(),
             exported: HashSet::new(),
+            imports: Vec::new(),
+            exports: Vec::new(),
             marker: PhantomData,
         }
     }
 
-    pub(crate) fn into_symbols(self) -> Vec<SymbolFact> {
-        self.symbols
+    pub(crate) fn into_parts(self) -> (Vec<SymbolFact>, Vec<Import>, Vec<Export>) {
+        (self.symbols, self.imports, self.exports)
+    }
+
+    fn import(&mut self, alias: Option<String>, name: Option<String>, from: &str) {
+        self.imports.push(Import {
+            alias,
+            path: name.into_iter().collect(),
+            from: Some(from.to_owned()),
+            scope: None,
+        });
+    }
+
+    fn export(&mut self, name: Option<String>, original: Option<String>, from: &str) {
+        self.exports.push(Export {
+            name,
+            original,
+            from: from.to_owned(),
+        });
+    }
+
+    /// Records something the function being walked mentions.
+    fn reference(&mut self, kind: ReferenceKind, path: Vec<String>) {
+        if self.frame.is_none() || path.is_empty() {
+            return;
+        }
+        if let Some(symbol) = self.parent.and_then(|index| self.symbols.get_mut(index)) {
+            symbol.references.push(Reference { kind, path });
+        }
     }
 
     pub(crate) fn program(&mut self, program: &Program<'a>) {
@@ -157,6 +300,46 @@ impl<'l, 'a> Extractor<'l, 'a> {
             }
             Statement::ExportDefaultDeclaration(export) => {
                 self.default_export(&export.declaration);
+            }
+            Statement::ImportDeclaration(import) => {
+                let Some(from) = import.source.value.as_str() else {
+                    return;
+                };
+                let Some(specifiers) = &import.specifiers else {
+                    self.import(None, None, from);
+                    return;
+                };
+                for specifier in specifiers {
+                    let (alias, name) = match specifier {
+                        ImportDeclarationSpecifier::ImportSpecifier(named) => (
+                            named.local.name.to_string(),
+                            Some(named.imported.name().to_string()),
+                        ),
+                        ImportDeclarationSpecifier::ImportDefaultSpecifier(default) => {
+                            (default.local.name.to_string(), Some("default".to_owned()))
+                        }
+                        ImportDeclarationSpecifier::ImportNamespaceSpecifier(namespace) => {
+                            (namespace.local.name.to_string(), None)
+                        }
+                    };
+                    self.import(Some(alias), name, from);
+                }
+            }
+            Statement::ExportFromDeclaration(export) => {
+                let Some(from) = export.source.value.as_str() else {
+                    return;
+                };
+                for specifier in &export.specifiers {
+                    let name = Some(specifier.exported.name().to_string());
+                    let original = Some(specifier.local.name().to_string());
+                    self.export(name, original, from);
+                }
+            }
+            Statement::ExportAllDeclaration(export) => {
+                if let Some(from) = export.source.value.as_str() {
+                    let name = export.exported.as_ref().map(|name| name.name().to_string());
+                    self.export(name, None, from);
+                }
             }
             other => {
                 if let Some(declaration) = other.as_declaration() {
@@ -191,7 +374,9 @@ impl<'l, 'a> Extractor<'l, 'a> {
                     start: arrow.span.start,
                     end: arrow.span.end,
                     params: &arrow.params,
+                    returns: arrow.return_type.as_deref(),
                     body: Some(CallableBody::Arrow(arrow)),
+                    instance: false,
                 });
             }
             _ => {}
@@ -272,6 +457,8 @@ impl<'l, 'a> Extractor<'l, 'a> {
             },
             code_lines: self.lines.counts_between(start_line, end_line).code,
             body: None,
+            member: MemberFacts::default(),
+            references: Vec::new(),
         }
     }
 
@@ -297,6 +484,14 @@ impl<'l, 'a> Extractor<'l, 'a> {
     }
 
     fn variable(&mut self, variable: &VariableDeclarator<'a>, visibility: Visibility) {
+        if let Some(from) = variable.init.as_ref().and_then(required_module) {
+            self.required(&variable.id, from);
+        }
+        if self.frame.is_some()
+            && let Some(annotation) = &variable.type_annotation
+        {
+            self.visit_ts_type_annotation(annotation);
+        }
         let name = binding_name(&variable.id);
         let init = variable.init.as_ref().map(Expression::get_inner_expression);
         match (name, init) {
@@ -308,7 +503,9 @@ impl<'l, 'a> Extractor<'l, 'a> {
                     start: variable.span.start,
                     end: variable.span.end,
                     params: &arrow.params,
+                    returns: arrow.return_type.as_deref(),
                     body: Some(CallableBody::Arrow(arrow)),
+                    instance: false,
                 });
             }
             (Some(name), Some(Expression::FunctionExpression(function))) => {
@@ -319,7 +516,9 @@ impl<'l, 'a> Extractor<'l, 'a> {
                     start: variable.span.start,
                     end: variable.span.end,
                     params: &function.params,
+                    returns: function.return_type.as_deref(),
                     body: function.body.as_deref().map(CallableBody::Function),
+                    instance: false,
                 });
             }
             (Some(name), Some(Expression::ClassExpression(class))) => {
@@ -334,6 +533,23 @@ impl<'l, 'a> Extractor<'l, 'a> {
                     self.visit_expression(init);
                 }
             }
+        }
+    }
+
+    /// `const { a, b: c } = require("./m")` and `const m = require("./m")`.
+    fn required(&mut self, pattern: &BindingPattern<'a>, from: &str) {
+        match pattern {
+            BindingPattern::ObjectPattern(object) => {
+                for property in &object.properties {
+                    let name = property
+                        .key
+                        .static_name()
+                        .and_then(|name| name.as_str().map(ToOwned::to_owned));
+                    let alias = binding_name(&property.value).or_else(|| name.clone());
+                    self.import(alias, name, from);
+                }
+            }
+            other => self.import(binding_name(other), None, from),
         }
     }
 
@@ -353,7 +569,9 @@ impl<'l, 'a> Extractor<'l, 'a> {
             start: function.span.start,
             end: function.span.end,
             params: &function.params,
+            returns: function.return_type.as_deref(),
             body: function.body.as_deref().map(CallableBody::Function),
+            instance: false,
         });
     }
 
@@ -378,6 +596,9 @@ impl<'l, 'a> Extractor<'l, 'a> {
             self.symbols.len() - 1
         };
         let Some(body) = callable.body else {
+            if let Some(symbol) = self.symbols.get_mut(index) {
+                symbol.member.instance = callable.instance;
+            }
             self.declared.insert(key, index);
             return;
         };
@@ -386,6 +607,8 @@ impl<'l, 'a> Extractor<'l, 'a> {
         let frame = Frame {
             name: callable.name,
             is_method: callable.kind == SymbolKind::Method,
+            fields_used: Vec::new(),
+            methods_called: Vec::new(),
             decisions: Vec::new(),
             max_nesting: 0,
             nesting: 0,
@@ -394,6 +617,10 @@ impl<'l, 'a> Extractor<'l, 'a> {
         };
         let outer_frame = self.frame.replace(frame);
         let outer_parent = self.parent.replace(index);
+        self.visit_formal_parameters(callable.params);
+        if let Some(returns) = callable.returns {
+            self.visit_ts_type_annotation(returns);
+        }
         match body {
             CallableBody::Function(body) => self.visit_function_body(body),
             CallableBody::Arrow(arrow) => self.visit_arrow_function_body(&arrow.body),
@@ -403,16 +630,46 @@ impl<'l, 'a> Extractor<'l, 'a> {
 
         if let (Some(mut frame), Some(symbol)) = (finished, self.symbols.get_mut(index)) {
             frame.decisions.sort_by_key(|point| point.line);
+            frame.fields_used.sort();
+            frame.fields_used.dedup();
+            frame.methods_called.sort();
+            frame.methods_called.dedup();
             symbol.body = Some(BodyFacts {
                 decisions: frame.decisions,
                 parameters: parameter_count(callable.params),
                 max_nesting: frame.max_nesting,
+                fields_used: frame.fields_used,
+                methods_called: frame.methods_called,
             });
+        }
+        if let Some(symbol) = self.symbols.get_mut(index) {
+            symbol.member.instance = callable.instance;
         }
     }
 
     fn class(&mut self, name: &str, class: &Class<'a>, visibility: Visibility) {
         let index = self.plain(name, SymbolKind::Class, visibility, class.span);
+        let mut references: Vec<Reference> = class
+            .implements
+            .iter()
+            .map(|implemented| Reference {
+                kind: ReferenceKind::Implements,
+                path: type_name(&implemented.expression),
+            })
+            .collect();
+        if let Some(path) = class
+            .heritage
+            .as_ref()
+            .and_then(|heritage| expression_path(&heritage.expression))
+        {
+            references.push(Reference {
+                kind: ReferenceKind::Inherits,
+                path,
+            });
+        }
+        if let Some(symbol) = self.symbols.get_mut(index) {
+            symbol.references = references;
+        }
         let outer = self.parent.replace(index);
         for element in &class.body.body {
             match element {
@@ -431,7 +688,11 @@ impl<'l, 'a> Extractor<'l, 'a> {
 
     fn method(&mut self, method: &MethodDefinition<'a>) {
         let function = &method.value;
+        let constructor = method.kind == MethodDefinitionKind::Constructor;
         self.parameter_properties(&function.params);
+        if constructor && let Some(body) = &function.body {
+            self.assigned_fields(body);
+        }
         self.callable(Callable {
             name: key_name(&method.key, self.text),
             kind: SymbolKind::Method,
@@ -439,8 +700,25 @@ impl<'l, 'a> Extractor<'l, 'a> {
             start: method.key.span().start,
             end: method.span.end,
             params: &function.params,
+            returns: function.return_type.as_deref(),
             body: function.body.as_deref().map(CallableBody::Function),
+            instance: !method.r#static && !constructor,
         });
+    }
+
+    /// Fields a constructor creates by assigning them, unless the class declares them.
+    fn assigned_fields(&mut self, body: &FunctionBody<'a>) {
+        let mut assigned = AssignedFields::default();
+        assigned.visit_function_body(body);
+        for (name, span) in assigned.0 {
+            let declared = self
+                .symbols
+                .iter()
+                .any(|symbol| symbol.parent == self.parent && symbol.name == name);
+            if !declared {
+                self.plain(&name, SymbolKind::Field, Visibility::Public, span);
+            }
+        }
     }
 
     /// `constructor(private a: number)` declares a field too.
@@ -451,7 +729,11 @@ impl<'l, 'a> Extractor<'l, 'a> {
             }
             if let Some(name) = binding_name(&parameter.pattern) {
                 let visibility = visibility_of(parameter.accessibility);
-                self.plain(&name, SymbolKind::Field, visibility, parameter.span);
+                let index = self.plain(&name, SymbolKind::Field, visibility, parameter.span);
+                let references = type_references(parameter.type_annotation.as_deref());
+                if let Some(symbol) = self.symbols.get_mut(index) {
+                    symbol.references = references;
+                }
             }
         }
     }
@@ -473,7 +755,11 @@ impl<'l, 'a> Extractor<'l, 'a> {
                 function.body.as_deref().map(CallableBody::Function),
             ),
             _ => {
-                self.plain(&name, SymbolKind::Field, visibility, property.span);
+                let index = self.plain(&name, SymbolKind::Field, visibility, property.span);
+                let references = type_references(property.type_annotation.as_deref());
+                if let Some(symbol) = self.symbols.get_mut(index) {
+                    symbol.references = references;
+                }
                 return;
             }
         };
@@ -484,7 +770,9 @@ impl<'l, 'a> Extractor<'l, 'a> {
             start: property.key.span().start,
             end: property.span.end,
             params,
+            returns: None,
             body,
+            instance: !property.r#static,
         });
     }
 
@@ -495,6 +783,16 @@ impl<'l, 'a> Extractor<'l, 'a> {
             visibility,
             interface.span,
         );
+        if let Some(symbol) = self.symbols.get_mut(index) {
+            symbol.references = interface
+                .extends
+                .iter()
+                .map(|heritage| Reference {
+                    kind: ReferenceKind::Inherits,
+                    path: type_name(&heritage.type_name),
+                })
+                .collect();
+        }
         let outer = self.parent.replace(index);
         for signature in &interface.body.body {
             match signature {
@@ -506,7 +804,9 @@ impl<'l, 'a> Extractor<'l, 'a> {
                         start: method.span.start,
                         end: method.span.end,
                         params: &method.params,
+                        returns: method.return_type.as_deref(),
                         body: None,
+                        instance: true,
                     });
                 }
                 TSSignature::TSPropertySignature(property) => {
@@ -622,10 +922,18 @@ fn operators<'n, 'a>(
 }
 
 impl<'a> Visit<'a> for Extractor<'_, 'a> {
-    /// Types do nothing at run time.
-    fn visit_ts_type(&mut self, _: &TSType<'a>) {}
+    /// A type is a mention, and adds nothing to complexity.
+    fn visit_ts_type_reference(&mut self, reference: &TSTypeReference<'a>) {
+        self.reference(ReferenceKind::Type, type_name(&reference.type_name));
+        walk::walk_ts_type_reference(self, reference);
+    }
 
-    fn visit_ts_type_annotation(&mut self, _: &TSTypeAnnotation<'a>) {}
+    fn visit_new_expression(&mut self, expression: &NewExpression<'a>) {
+        if let Some(path) = expression_path(&expression.callee) {
+            self.reference(ReferenceKind::Type, path);
+        }
+        walk::walk_new_expression(self, expression);
+    }
 
     fn visit_statement(&mut self, statement: &Statement<'a>) {
         match statement {
@@ -788,6 +1096,23 @@ impl<'a> Visit<'a> for Extractor<'_, 'a> {
 
     fn visit_call_expression(&mut self, expression: &CallExpression<'a>) {
         self.shortcut(expression.optional, expression.span.start);
+        match expression.callee.get_inner_expression() {
+            Expression::Identifier(identifier) => {
+                self.reference(ReferenceKind::Call, vec![identifier.name.to_string()]);
+            }
+            Expression::StaticMemberExpression(member) => {
+                let name = member.property.name.to_string();
+                if matches!(member.object, Expression::ThisExpression(_)) {
+                    if let Some(frame) = &mut self.frame {
+                        frame.methods_called.push(name.clone());
+                    }
+                    self.reference(ReferenceKind::SelfCall, vec![name]);
+                } else {
+                    self.reference(ReferenceKind::MethodCall, vec![name]);
+                }
+            }
+            _ => {}
+        }
         if self.calls_itself(&expression.callee) {
             self.recursion(expression.span.start);
         }
@@ -796,6 +1121,11 @@ impl<'a> Visit<'a> for Extractor<'_, 'a> {
 
     fn visit_static_member_expression(&mut self, expression: &StaticMemberExpression<'a>) {
         self.shortcut(expression.optional, expression.span.start);
+        if matches!(expression.object, Expression::ThisExpression(_))
+            && let Some(frame) = &mut self.frame
+        {
+            frame.fields_used.push(expression.property.name.to_string());
+        }
         walk::walk_static_member_expression(self, expression);
     }
 
@@ -806,6 +1136,13 @@ impl<'a> Visit<'a> for Extractor<'_, 'a> {
 
     fn visit_private_field_expression(&mut self, expression: &PrivateFieldExpression<'a>) {
         self.shortcut(expression.optional, expression.span.start);
+        if matches!(expression.object, Expression::ThisExpression(_))
+            && let Some(frame) = &mut self.frame
+        {
+            frame
+                .fields_used
+                .push(format!("#{}", expression.field.name));
+        }
         walk::walk_private_field_expression(self, expression);
     }
 

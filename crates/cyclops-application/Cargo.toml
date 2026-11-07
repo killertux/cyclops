@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 blake3.workspace = true
 cyclops-domain.workspace = true
+petgraph.workspace = true
 rayon.workspace = true
 thiserror.workspace = true
 

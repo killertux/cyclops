@@ -19,7 +19,7 @@ In all three shop projects, `orders` depends on `billing` and `catalog`, and `bi
 depends on `catalog`. A module with no dependencies either way has no instability.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace | subject       | afferent? | efferent? | instability? |
 | ------------------- | --------- | ------------- | --------- | --------- | ------------ |
@@ -44,7 +44,7 @@ of [test code](../analysis/test-code.md#leaving-it-out) are left out with it.
 
 A module with no types has neither.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace | subject       | abstractness? | distance? |
 | --------------- | --------- | ------------- | ------------- | --------- |

@@ -9,6 +9,7 @@ pub mod metric;
 pub mod model;
 pub mod path;
 pub mod problem;
+pub mod relation;
 pub mod settings;
 pub mod symbol;
 pub mod symbol_set;

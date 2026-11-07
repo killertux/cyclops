@@ -5,8 +5,10 @@ use crate::read::{self, NONE, NOT_APPLICABLE, list, yes_no};
 use crate::scenario::{Scenario, no_cyclops};
 use crate::scratch::Scratch;
 use cyclops_application::analysis::ProjectAnalysis;
+use cyclops_application::graph::ModuleGraph;
 use cyclops_domain::metric::{MetricId, Scope, Subject};
 use cyclops_domain::path::RelativePath;
+use cyclops_domain::relation::{Confidence, RelationKind};
 use cyclops_domain::settings::{SettingKey, Settings};
 use cyclops_domain::symbol::SymbolId;
 use rust_slim::fixture;
@@ -210,6 +212,11 @@ impl Snippet {
     }
 
     #[must_use]
+    pub fn lcom(&self) -> String {
+        self.metric(&Subject::Symbol(self.id("S")), MetricId::Lcom)
+    }
+
+    #[must_use]
     pub fn lines(&self) -> String {
         self.of_file_or_symbol(MetricId::Lines)
     }
@@ -236,6 +243,8 @@ pub struct Core {
     scope: String,
     value: String,
     setting: String,
+    from: String,
+    to: String,
     outcome: Option<Outcome>,
     settings: Option<Result<Settings, String>>,
 }
@@ -267,6 +276,22 @@ impl Core {
 
     fn id(&self) -> SymbolId {
         SymbolId::new(&self.subject)
+    }
+
+    fn subject_metric(&self, metric: MetricId) -> String {
+        self.read(|analysis| read::metric_value(analysis, &read::subject(&self.subject), metric))
+    }
+
+    /// The relation between `from` and `to`. When there are several kinds, the first in
+    /// the order of the relations page is read.
+    fn relation_between(&self, analysis: &ProjectAnalysis) -> Option<(RelationKind, Confidence)> {
+        let (from, to) = (SymbolId::new(&self.from), SymbolId::new(&self.to));
+        analysis
+            .view()
+            .relations()
+            .filter(|relation| relation.from == from && relation.to == to)
+            .map(|relation| (relation.kind, relation.confidence))
+            .min()
     }
 
     fn metric_id(&self) -> Result<MetricId, String> {
@@ -308,6 +333,14 @@ impl Core {
 
     pub fn set_value(&mut self, value: String) {
         self.value = value;
+    }
+
+    pub fn set_from(&mut self, from: String) {
+        self.from = from;
+    }
+
+    pub fn set_to(&mut self, to: String) {
+        self.to = to;
     }
 
     /// temoc calls a column that starts with `set` by its own name.
@@ -434,12 +467,94 @@ impl Core {
 
     #[must_use]
     pub fn cyclomatic(&self) -> String {
+        self.subject_metric(MetricId::Cyclomatic)
+    }
+
+    #[must_use]
+    pub fn cognitive(&self) -> String {
+        self.subject_metric(MetricId::Cognitive)
+    }
+
+    #[must_use]
+    pub fn lcom(&self) -> String {
+        self.subject_metric(MetricId::Lcom)
+    }
+
+    #[must_use]
+    pub fn afferent(&self) -> String {
+        self.subject_metric(MetricId::Afferent)
+    }
+
+    #[must_use]
+    pub fn efferent(&self) -> String {
+        self.subject_metric(MetricId::Efferent)
+    }
+
+    #[must_use]
+    pub fn instability(&self) -> String {
+        self.subject_metric(MetricId::Instability)
+    }
+
+    #[must_use]
+    pub fn abstractness(&self) -> String {
+        self.subject_metric(MetricId::Abstractness)
+    }
+
+    #[must_use]
+    pub fn distance(&self) -> String {
+        self.subject_metric(MetricId::Distance)
+    }
+
+    #[must_use]
+    pub fn cycle_size(&self) -> String {
+        self.subject_metric(MetricId::CycleSize)
+    }
+
+    #[must_use]
+    pub fn in_cycle(&self) -> String {
         self.read(|analysis| {
-            read::metric_value(
-                analysis,
-                &read::subject(&self.subject),
-                MetricId::Cyclomatic,
-            )
+            let cycles = ModuleGraph::of(&analysis.view()).cycles();
+            let id = self.id();
+            cycles.iter().any(|cycle| cycle.contains(&id)).to_string()
+        })
+    }
+
+    /// Each cycle, with its members separated by commas and cycles by semicolons.
+    #[must_use]
+    pub fn cycles(&self) -> String {
+        self.read(|analysis| {
+            let cycles: Vec<String> = ModuleGraph::of(&analysis.view())
+                .cycles()
+                .iter()
+                .map(|cycle| {
+                    cycle
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .collect();
+            if cycles.is_empty() {
+                NONE.into()
+            } else {
+                cycles.join("; ")
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn relation(&self) -> String {
+        self.read(|analysis| {
+            self.relation_between(analysis)
+                .map_or_else(|| NONE.into(), |(kind, _)| kind.name().into())
+        })
+    }
+
+    #[must_use]
+    pub fn confidence(&self) -> String {
+        self.read(|analysis| {
+            self.relation_between(analysis)
+                .map_or_else(|| NONE.into(), |(_, confidence)| confidence.name().into())
         })
     }
 

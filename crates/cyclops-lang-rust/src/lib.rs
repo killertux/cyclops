@@ -15,7 +15,7 @@ use std::path::Path;
 
 /// Raise it whenever the facts this adapter extracts change, so that cached ones from an
 /// older version are parsed again.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 #[derive(Debug, Default)]
 pub struct RustAdapter;

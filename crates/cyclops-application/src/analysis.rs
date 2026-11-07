@@ -13,6 +13,8 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnalyzedFile {
     pub path: RelativePath,
+    /// The module or package the file is.
+    pub module: Option<SymbolId>,
     pub language: LanguageId,
     pub role: CodeRole,
     pub lines: LineCounts,
@@ -24,6 +26,7 @@ impl AnalyzedFile {
     pub fn from_facts(facts: &FileFacts) -> Self {
         Self {
             path: facts.path.clone(),
+            module: None,
             language: facts.language,
             role: facts.role,
             lines: facts.lines,

@@ -17,7 +17,7 @@ The exception is a file, where `cyclomatic` is the sum of its functions, as
 [hotspots](hotspots.md) use it.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | subject                    | cyclomatic? | cognitive? | lines? | lcom? |
 | ----------- | --------- | -------------------------- | ----------- | ---------- | ------ | ----- |

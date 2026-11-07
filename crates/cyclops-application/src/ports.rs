@@ -5,7 +5,8 @@ use cyclops_domain::facts::FileFacts;
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::metric::Measurement;
 use cyclops_domain::path::RelativePath;
-use cyclops_domain::symbol::Symbol;
+use cyclops_domain::relation::Relation;
+use cyclops_domain::symbol::{Symbol, SymbolId};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -20,8 +21,11 @@ pub struct SourceFile<'a> {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Linked {
     pub symbols: Vec<Symbol>,
+    pub relations: Vec<Relation>,
     /// Files that are test code, which only the rest of the project could tell.
     pub test_files: Vec<RelativePath>,
+    /// The module or package each file is.
+    pub file_modules: Vec<(RelativePath, SymbolId)>,
 }
 
 /// Knows one language, or a family of them. An adapter describes code and never

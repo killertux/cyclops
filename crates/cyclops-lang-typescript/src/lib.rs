@@ -4,6 +4,7 @@
 mod extract;
 mod language;
 mod link;
+mod resolve;
 mod symbols;
 
 use cyclops_application::ports::{FileSource, LanguageAdapter, Linked, SourceFile};
@@ -13,7 +14,7 @@ use cyclops_domain::path::RelativePath;
 
 /// Raise it whenever the facts this adapter extracts change, so that cached ones from an
 /// older version are parsed again.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 #[derive(Debug, Default)]
 pub struct TypeScriptAdapter;

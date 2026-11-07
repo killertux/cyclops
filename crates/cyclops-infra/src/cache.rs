@@ -11,7 +11,7 @@ use std::path::Path;
 
 /// Raise it whenever the layout of the database or of the facts changes. A cache of
 /// another version is started over.
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 pub struct SqliteFactStore {
     connection: Connection,
@@ -195,6 +195,8 @@ mod tests {
             imports: Vec::new(),
             syntax_error: false,
             test_modules: Vec::new(),
+            extensions: Vec::new(),
+            exports: Vec::new(),
         }
     }
 

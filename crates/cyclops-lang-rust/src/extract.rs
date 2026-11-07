@@ -1,13 +1,18 @@
 //! Extracts the facts of one Rust file.
 
-use crate::body::{self, Function};
+use crate::body::{self, Function, path_names, type_references};
 use crate::lines;
-use cyclops_domain::facts::{BodyFacts, FileFacts, Import, LineCounts, SymbolFact, is_too_deep};
+use cyclops_domain::facts::{
+    BodyFacts, Extension, FileFacts, Import, LineCounts, MemberFacts, Reference, ReferenceKind,
+    SymbolFact, is_too_deep,
+};
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::lines::LineMap;
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::symbol::{CodeRole, Span, SymbolKind, Visibility};
-use ra_ap_syntax::ast::{self, AstNode, HasAttrs, HasModuleItem, HasName, HasVisibility};
+use ra_ap_syntax::ast::{
+    self, AstNode, HasAttrs, HasModuleItem, HasName, HasTypeBounds, HasVisibility,
+};
 use ra_ap_syntax::{Edition, NodeOrToken, SourceFile, SyntaxKind, SyntaxNode, TextSize, WalkEvent};
 use std::collections::VecDeque;
 use std::mem::ManuallyDrop;
@@ -52,6 +57,8 @@ fn unparsed(path: &RelativePath, text: &str) -> FileFacts {
         imports: Vec::new(),
         syntax_error: true,
         test_modules: Vec::new(),
+        extensions: Vec::new(),
+        exports: Vec::new(),
     }
 }
 
@@ -74,6 +81,7 @@ pub(crate) fn extract(path: &RelativePath, text: &str) -> FileFacts {
         imports: Vec::new(),
         test_lines: LineCounts::default(),
         test_modules: Vec::new(),
+        extensions: Vec::new(),
     };
     for item in tree.items() {
         extractor.pending.push_back(Pending::new(item, None, role));
@@ -96,6 +104,8 @@ pub(crate) fn extract(path: &RelativePath, text: &str) -> FileFacts {
         imports: extractor.imports,
         syntax_error: !parse.errors().is_empty(),
         test_modules: extractor.test_modules,
+        extensions: extractor.extensions,
+        exports: Vec::new(),
     }
 }
 
@@ -180,11 +190,7 @@ fn type_path(ty: &ast::Type) -> Vec<String> {
     if let ast::Type::PathType(path_type) = &current
         && let Some(path) = path_type.path()
     {
-        let names: Vec<String> = path
-            .segments()
-            .filter_map(|segment| segment.name_ref())
-            .map(|name| name.text().to_string())
-            .collect();
+        let names = path_names(&path);
         if !names.is_empty() {
             return names;
         }
@@ -201,6 +207,8 @@ struct Pending {
     owner: Option<Vec<String>>,
     /// What it inherits, when it has no visibility of its own.
     visibility: Option<Visibility>,
+    /// Whether it comes from implementing an interface.
+    for_interface: bool,
 }
 
 impl Pending {
@@ -211,6 +219,7 @@ impl Pending {
             role,
             owner: None,
             visibility: None,
+            for_interface: false,
         }
     }
 }
@@ -225,6 +234,8 @@ struct Described<'a> {
     parent: Option<usize>,
     owner: Option<Vec<String>>,
     body: Option<BodyFacts>,
+    member: MemberFacts,
+    references: Vec<Reference>,
 }
 
 struct Extractor<'a> {
@@ -234,6 +245,7 @@ struct Extractor<'a> {
     imports: Vec<Import>,
     test_lines: LineCounts,
     test_modules: Vec<Vec<String>>,
+    extensions: Vec<Extension>,
 }
 
 impl Extractor<'_> {
@@ -276,7 +288,7 @@ impl Extractor<'_> {
                 self.named(&item, SymbolKind::Constant, &pending);
             }
             ast::Item::Impl(item) => self.implementation(&item, &pending),
-            ast::Item::Use(item) => self.import(&item),
+            ast::Item::Use(item) => self.import(&item, pending.parent),
             _ => {}
         }
     }
@@ -311,6 +323,8 @@ impl Extractor<'_> {
             },
             code_lines: self.lines.counts_between(start_line, end_line).code,
             body: symbol.body,
+            member: symbol.member,
+            references: symbol.references,
         });
         self.symbols.len() - 1
     }
@@ -334,6 +348,8 @@ impl Extractor<'_> {
                 parent: pending.parent,
                 owner: pending.owner.clone(),
                 body: None,
+                member: MemberFacts::default(),
+                references: Vec::new(),
             }),
         )
     }
@@ -397,6 +413,13 @@ impl Extractor<'_> {
             };
             body::walk(self.lines, function, &block)
         });
+        let mut references = Vec::new();
+        if let Some(list) = item.param_list() {
+            references.extend(type_references(list.syntax(), ReferenceKind::Type));
+        }
+        if let Some(returned) = item.ret_type() {
+            references.extend(type_references(returned.syntax(), ReferenceKind::Type));
+        }
         let (facts, nested) = walked.map_or((None, Vec::new()), |walked| {
             let parameters = item
                 .param_list()
@@ -405,8 +428,16 @@ impl Extractor<'_> {
                 parameters,
                 ..walked.body
             };
+            references.extend(walked.references);
             (Some(body), walked.items)
         });
+        let member = MemberFacts {
+            instance: item
+                .param_list()
+                .and_then(|list| list.self_param())
+                .is_some(),
+            for_interface: pending.for_interface,
+        };
         let index = self.add(Described {
             name,
             kind,
@@ -419,6 +450,8 @@ impl Extractor<'_> {
             parent: pending.parent,
             owner: pending.owner.clone(),
             body: facts,
+            member,
+            references,
         });
         for inner in nested {
             self.pending
@@ -445,6 +478,8 @@ impl Extractor<'_> {
                         parent: Some(index),
                         owner: None,
                         body: None,
+                        member: MemberFacts::default(),
+                        references: type_references(field.syntax(), ReferenceKind::Type),
                     });
                 }
             }
@@ -474,6 +509,8 @@ impl Extractor<'_> {
                 parent: Some(parent),
                 owner: None,
                 body: None,
+                member: MemberFacts::default(),
+                references: type_references(field.syntax(), ReferenceKind::Type),
             });
         }
     }
@@ -483,6 +520,10 @@ impl Extractor<'_> {
         let Some(index) = self.named(item, SymbolKind::Interface, pending) else {
             return;
         };
+        if let (Some(bounds), Some(symbol)) = (item.type_bound_list(), self.symbols.get_mut(index))
+        {
+            symbol.references = type_references(bounds.syntax(), ReferenceKind::Inherits);
+        }
         let visibility = visibility_of(item);
         for inner in Self::associated_items(item.assoc_item_list()) {
             self.pending.push_back(Pending {
@@ -498,11 +539,28 @@ impl Extractor<'_> {
         let Some(owner) = item.self_ty().map(|ty| type_path(&ty)) else {
             return;
         };
-        let visibility = item.trait_().map(|_| Visibility::Public);
+        let implements = item.trait_().map(|ty| type_path(&ty));
+        let visibility = implements.as_ref().map(|_| Visibility::Public);
+        let range = item.syntax().text_range();
+        let start = self.lines.line_of(signature_start(item.syntax()).into());
+        let end = self.lines.line_of(
+            range
+                .end()
+                .checked_sub(TextSize::new(1))
+                .unwrap_or(range.end())
+                .into(),
+        );
+        self.extensions.push(Extension {
+            owner: owner.clone(),
+            parent: pending.parent,
+            implements: implements.clone(),
+            code_lines: self.lines.counts_between(start, end).code,
+        });
         for inner in Self::associated_items(item.assoc_item_list()) {
             self.pending.push_back(Pending {
                 owner: Some(owner.clone()),
                 visibility,
+                for_interface: implements.is_some(),
                 ..Pending::new(inner, pending.parent, pending.role)
             });
         }
@@ -519,7 +577,7 @@ impl Extractor<'_> {
             })
     }
 
-    fn import(&mut self, item: &ast::Use) {
+    fn import(&mut self, item: &ast::Use, scope: Option<usize>) {
         let mut pending: Vec<(Vec<String>, ast::UseTree)> = item
             .use_tree()
             .map(|tree| (Vec::new(), tree))
@@ -534,14 +592,24 @@ impl Extractor<'_> {
             if let Some(list) = tree.use_tree_list() {
                 pending.extend(list.use_trees().map(|inner| (path.clone(), inner)));
             } else if tree.star_token().is_some() {
-                self.imports.push(Import { alias: None, path });
+                self.imports.push(Import {
+                    alias: None,
+                    path,
+                    from: None,
+                    scope,
+                });
             } else {
                 let renamed = tree
                     .rename()
                     .and_then(|rename| rename.name())
                     .map(|name| name.text().to_string());
                 let alias = renamed.or_else(|| path.last().cloned());
-                self.imports.push(Import { alias, path });
+                self.imports.push(Import {
+                    alias,
+                    path,
+                    from: None,
+                    scope,
+                });
             }
         }
     }

@@ -2,7 +2,7 @@
 
 use crate::language;
 use crate::symbols::Extractor;
-use cyclops_domain::facts::{FileFacts, LineCounts, SymbolFact, is_too_deep};
+use cyclops_domain::facts::{Export, FileFacts, Import, LineCounts, SymbolFact, is_too_deep};
 use cyclops_domain::lines::LineMap;
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::symbol::CodeRole;
@@ -16,6 +16,8 @@ const MAX_CUTS: usize = 8;
 /// What a parse gives, for the part of a file that parsed.
 struct Parsed {
     symbols: Vec<SymbolFact>,
+    imports: Vec<Import>,
+    exports: Vec<Export>,
     comments: Vec<(u32, u32)>,
     syntax_error: bool,
 }
@@ -50,8 +52,11 @@ fn parse(text: &str, part: &str, source_type: SourceType, role: CodeRole) -> Opt
     let lines = classified(map, text, &comments);
     let mut extractor = Extractor::new(&lines, part, role);
     extractor.program(&parsed.program);
+    let (symbols, imports, exports) = extractor.into_parts();
     Some(Parsed {
-        symbols: extractor.into_symbols(),
+        symbols,
+        imports,
+        exports,
         comments,
         syntax_error: parsed.diagnostics.has_errors(),
     })
@@ -100,9 +105,17 @@ fn top_level_lines(text: &str) -> Vec<usize> {
 
 fn facts(path: &RelativePath, text: &str, parsed: Option<Parsed>) -> FileFacts {
     let role = language::role(path);
-    let (symbols, comments, syntax_error) = parsed.map_or_else(
-        || (Vec::new(), Vec::new(), true),
-        |parsed| (parsed.symbols, parsed.comments, parsed.syntax_error),
+    let (symbols, imports, exports, comments, syntax_error) = parsed.map_or_else(
+        || (Vec::new(), Vec::new(), Vec::new(), Vec::new(), true),
+        |parsed| {
+            (
+                parsed.symbols,
+                parsed.imports,
+                parsed.exports,
+                parsed.comments,
+                parsed.syntax_error,
+            )
+        },
     );
     let lines = classified(LineMap::new(text), text, &comments).counts();
     FileFacts {
@@ -115,9 +128,11 @@ fn facts(path: &RelativePath, text: &str, parsed: Option<Parsed>) -> FileFacts {
             CodeRole::Production => LineCounts::default(),
         },
         symbols,
-        imports: Vec::new(),
+        imports,
         syntax_error,
         test_modules: Vec::new(),
+        extensions: Vec::new(),
+        exports,
     }
 }
 

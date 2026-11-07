@@ -1,7 +1,7 @@
 //! Walks the body of a function and describes what makes it complex. It keeps its own
 //! stack of work rather than recursing, so that very deep code cannot overflow.
 
-use cyclops_domain::facts::{BodyFacts, DecisionKind, DecisionPoint};
+use cyclops_domain::facts::{BodyFacts, DecisionKind, DecisionPoint, Reference, ReferenceKind};
 use cyclops_domain::lines::LineMap;
 use ra_ap_syntax::ast::{self, AstNode, BinaryOp, ElseBranch, HasName, LogicOp};
 use ra_ap_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, TextSize};
@@ -17,6 +17,37 @@ pub(crate) struct Walked {
     pub(crate) body: BodyFacts,
     /// Items written inside the function. They are measured on their own.
     pub(crate) items: Vec<ast::Item>,
+    /// What the body mentions and calls.
+    pub(crate) references: Vec<Reference>,
+}
+
+/// The names of a path, such as `crate`, `billing` and `Invoice`, without generic
+/// arguments.
+pub(crate) fn path_names(path: &ast::Path) -> Vec<String> {
+    path.segments()
+        .map(|segment| {
+            segment.name_ref().map_or_else(
+                || segment.syntax().text().to_string(),
+                |name| name.text().to_string(),
+            )
+        })
+        .collect()
+}
+
+/// Every type a piece of syntax names, such as the parameters of a function.
+pub(crate) fn type_references(node: &SyntaxNode, kind: ReferenceKind) -> Vec<Reference> {
+    node.descendants()
+        .filter_map(ast::PathType::cast)
+        .filter_map(|ty| ty.path())
+        .map(|path| Reference {
+            kind,
+            path: path_names(&path),
+        })
+        .collect()
+}
+
+fn is_self(expr: Option<ast::Expr>) -> bool {
+    expr.is_some_and(|expr| expr.syntax().text() == "self")
 }
 
 /// A part of the code still to walk.
@@ -36,6 +67,9 @@ struct Walker<'a> {
     max_nesting: u32,
     items: Vec<ast::Item>,
     recursive: bool,
+    references: Vec<Reference>,
+    fields_used: Vec<String>,
+    methods_called: Vec<String>,
 }
 
 pub(crate) fn walk(lines: &LineMap, function: Function<'_>, body: &ast::BlockExpr) -> Walked {
@@ -47,19 +81,29 @@ pub(crate) fn walk(lines: &LineMap, function: Function<'_>, body: &ast::BlockExp
         max_nesting: 0,
         items: Vec::new(),
         recursive: false,
+        references: Vec::new(),
+        fields_used: Vec::new(),
+        methods_called: Vec::new(),
     };
     walker.push(Some(body.syntax()), 0, 0);
     while let Some(step) = walker.steps.pop() {
         walker.visit(step);
     }
     walker.decisions.sort_by_key(|point| point.line);
+    walker.fields_used.sort();
+    walker.fields_used.dedup();
+    walker.methods_called.sort();
+    walker.methods_called.dedup();
     Walked {
         body: BodyFacts {
             decisions: walker.decisions,
             parameters: 0,
             max_nesting: walker.max_nesting,
+            fields_used: walker.fields_used,
+            methods_called: walker.methods_called,
         },
         items: walker.items,
+        references: walker.references,
     }
 }
 
@@ -126,6 +170,36 @@ fn operators(top: &ast::BinExpr) -> Vec<(TextSize, LogicOp, Option<SyntaxToken>)
 }
 
 impl Walker<'_> {
+    fn reference(&mut self, kind: ReferenceKind, path: Vec<String>) {
+        if !path.is_empty() {
+            self.references.push(Reference { kind, path });
+        }
+    }
+
+    /// Types named in the body: in annotations, in struct literals, and before `::`.
+    fn mentions(&mut self, node: &SyntaxNode) {
+        if let Some(ty) = ast::PathType::cast(node.clone()) {
+            if let Some(path) = ty.path() {
+                self.reference(ReferenceKind::Type, path_names(&path));
+            }
+        } else if let Some(record) = ast::RecordExpr::cast(node.clone()) {
+            if let Some(path) = record.path() {
+                self.reference(ReferenceKind::Type, path_names(&path));
+            }
+        } else if let Some(expr) = ast::PathExpr::cast(node.clone())
+            && let Some(path) = expr.path()
+        {
+            let mut names = path_names(&path);
+            names.pop();
+            let only_keywords = names
+                .iter()
+                .all(|name| matches!(name.as_str(), "self" | "super" | "crate" | "Self"));
+            if !only_keywords {
+                self.reference(ReferenceKind::Type, names);
+            }
+        }
+    }
+
     fn push(&mut self, node: Option<&SyntaxNode>, nesting: u32, depth: u32) {
         if let Some(node) = node {
             self.steps.push(Step {
@@ -164,6 +238,7 @@ impl Walker<'_> {
             self.items.extend(ast::Item::cast(node));
             return;
         }
+        self.mentions(&node);
         let known = ast::Expr::cast(node.clone())
             .is_some_and(|expr| self.visit_expr(&expr, nesting, depth));
         if known {
@@ -224,6 +299,14 @@ impl Walker<'_> {
             }
             ast::Expr::MethodCallExpr(expr) => {
                 self.visit_method_call(expr, nesting);
+                return false;
+            }
+            ast::Expr::FieldExpr(expr) => {
+                if is_self(expr.expr())
+                    && let Some(name) = expr.name_ref()
+                {
+                    self.fields_used.push(name.text().to_string());
+                }
                 return false;
             }
             _ => return false,
@@ -338,6 +421,15 @@ impl Walker<'_> {
         let Some(ast::Expr::PathExpr(callee)) = expr.expr() else {
             return;
         };
+        if let Some(path) = callee.path() {
+            let names = path_names(&path);
+            match names.as_slice() {
+                [first, name] if first == "Self" => {
+                    self.reference(ReferenceKind::SelfCall, vec![name.clone()]);
+                }
+                _ => self.reference(ReferenceKind::Call, names),
+            }
+        }
         let path = callee.syntax().text().to_string();
         let name = self.function.name;
         let calls_itself = if self.function.is_method {
@@ -351,9 +443,15 @@ impl Walker<'_> {
     }
 
     fn visit_method_call(&mut self, expr: &ast::MethodCallExpr, nesting: u32) {
-        let on_self = expr
-            .receiver()
-            .is_some_and(|receiver| receiver.syntax().text() == "self");
+        let on_self = is_self(expr.receiver());
+        if let Some(name) = expr.name_ref().map(|name| name.text().to_string()) {
+            if on_self {
+                self.methods_called.push(name.clone());
+                self.reference(ReferenceKind::SelfCall, vec![name]);
+            } else {
+                self.reference(ReferenceKind::MethodCall, vec![name]);
+            }
+        }
         let same_name = expr
             .name_ref()
             .is_some_and(|name| name.text() == self.function.name);

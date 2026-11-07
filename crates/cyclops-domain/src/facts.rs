@@ -23,6 +23,34 @@ pub struct FileFacts {
     /// The modules this file declares as test code, each living in a file of its own,
     /// as a path of names from this file's module.
     pub test_modules: Vec<Vec<String>>,
+    /// Blocks that add members to a type written elsewhere, such as Rust's `impl`.
+    pub extensions: Vec<Extension>,
+    /// What this file makes available from other modules, such as a barrel file's
+    /// `export { a } from "./a"`.
+    pub exports: Vec<Export>,
+}
+
+/// A block that adds to a type, wherever the type is written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Extension {
+    /// The type, as written.
+    pub owner: Vec<String>,
+    /// The symbol around the block, if any.
+    pub parent: Option<usize>,
+    /// The interface it implements, if it does.
+    pub implements: Option<Vec<String>>,
+    pub code_lines: u32,
+}
+
+/// A name a module passes on from another module.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Export {
+    /// The name it is exported as, or nothing for all of them.
+    pub name: Option<String>,
+    /// The name in the other module.
+    pub original: Option<String>,
+    /// The other module, as written.
+    pub from: String,
 }
 
 /// Each line of a file is exactly one of these.
@@ -70,6 +98,18 @@ pub struct SymbolFact {
     pub span: Span,
     pub code_lines: u32,
     pub body: Option<BodyFacts>,
+    pub member: MemberFacts,
+    pub references: Vec<Reference>,
+}
+
+/// What a member says about how it belongs to its type.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemberFacts {
+    /// It works on an instance: not a constructor, a static method or an associated
+    /// function.
+    pub instance: bool,
+    /// It serves an interface the type implements, rather than the type itself.
+    pub for_interface: bool,
 }
 
 /// A name a file brings into scope.
@@ -77,7 +117,37 @@ pub struct SymbolFact {
 pub struct Import {
     /// The name used in the file, or nothing when it brings in everything at `path`.
     pub alias: Option<String>,
+    /// The path of the name. For a module written as a string, as in JavaScript, the
+    /// name inside that module, or nothing for the module itself.
     pub path: Vec<String>,
+    /// The module, when it is written as a string.
+    pub from: Option<String>,
+    /// The symbol whose scope the import is in, or nothing for the whole file.
+    pub scope: Option<usize>,
+}
+
+/// Something a symbol mentions, before it is known what that is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reference {
+    pub kind: ReferenceKind,
+    /// The name, as written, such as `crate::billing::Invoice`.
+    pub path: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReferenceKind {
+    /// A type, such as in a parameter, a field or an expression.
+    Type,
+    /// A function called by its path.
+    Call,
+    /// A method called on something whose type is not known.
+    MethodCall,
+    /// A method called on `self` or `this`.
+    SelfCall,
+    /// An interface this type implements.
+    Implements,
+    /// A type this one extends.
+    Inherits,
 }
 
 /// What the body of a function contains.
@@ -87,6 +157,10 @@ pub struct BodyFacts {
     pub parameters: u32,
     /// The depth of the deepest control structure.
     pub max_nesting: u32,
+    /// The fields it reads or writes through `self` or `this`.
+    pub fields_used: Vec<String>,
+    /// The methods it calls through `self` or `this`.
+    pub methods_called: Vec<String>,
 }
 
 /// One thing in a function that adds to its complexity.

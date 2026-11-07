@@ -3,5 +3,7 @@
 
 pub mod analysis;
 pub mod analyzers;
+pub mod graph;
 pub mod pipeline;
 pub mod ports;
+pub mod rollups;

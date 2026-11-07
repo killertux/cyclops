@@ -8,7 +8,8 @@ pub use environment::Environment;
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use cyclops_application::analysis::ProjectAnalysis;
-use cyclops_application::analyzers::{ComplexityAnalyzer, SizeAnalyzer};
+use cyclops_application::analyzers::{CohesionAnalyzer, ComplexityAnalyzer, SizeAnalyzer};
+use cyclops_application::graph::CouplingAnalyzer;
 use cyclops_application::pipeline::AnalysisService;
 use cyclops_application::ports::{CacheAccess, CacheError, LanguageAdapter};
 use cyclops_domain::metric::{MetricId, Subject};
@@ -35,7 +36,12 @@ pub fn adapters() -> Vec<Box<dyn LanguageAdapter>> {
 pub fn analysis_service(adapters: Vec<Box<dyn LanguageAdapter>>) -> AnalysisService {
     AnalysisService::new(
         adapters,
-        vec![Box::new(ComplexityAnalyzer), Box::new(SizeAnalyzer)],
+        vec![
+            Box::new(ComplexityAnalyzer),
+            Box::new(SizeAnalyzer),
+            Box::new(CohesionAnalyzer),
+            Box::new(CouplingAnalyzer),
+        ],
     )
 }
 

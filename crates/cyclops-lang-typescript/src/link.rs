@@ -2,6 +2,7 @@
 //! module, a folder is the module that holds them, and an `index` file is the module of
 //! its folder. A module is named after its path from the project root.
 
+use crate::resolve::{Placed, Resolver};
 use cyclops_application::ports::{FileSource, Linked};
 use cyclops_domain::facts::FileFacts;
 use cyclops_domain::path::RelativePath;
@@ -122,14 +123,27 @@ pub(crate) fn link(facts: &[&FileFacts], source: &dyn FileSource) -> Linked {
         names: HashMap::new(),
     };
     let mut symbols = SymbolSet::default();
+    let mut placed = Vec::with_capacity(sorted.len());
     for file in sorted {
         let package = packages.of(file.path.as_str());
         let module = place(&mut symbols, file, &package);
-        add_symbols(&mut symbols, file, &module);
+        let ids = add_symbols(&mut symbols, file, &module);
+        placed.push(Placed {
+            facts: file,
+            module,
+            ids,
+        });
     }
+    let relations = Resolver::new(&placed, &symbols, source).relations();
+    let file_modules = placed
+        .iter()
+        .map(|file| (file.facts.path.clone(), file.module.clone()))
+        .collect();
     Linked {
         symbols: symbols.into_symbols(),
+        relations,
         test_files: Vec::new(),
+        file_modules,
     }
 }
 
@@ -165,7 +179,7 @@ fn place(symbols: &mut SymbolSet, file: &FileFacts, package: &Package) -> Symbol
     parent
 }
 
-fn add_symbols(symbols: &mut SymbolSet, file: &FileFacts, module: &SymbolId) {
+fn add_symbols(symbols: &mut SymbolSet, file: &FileFacts, module: &SymbolId) -> Vec<SymbolId> {
     let mut ids: Vec<SymbolId> = Vec::with_capacity(file.symbols.len());
     for fact in &file.symbols {
         let parent = fact
@@ -176,6 +190,7 @@ fn add_symbols(symbols: &mut SymbolSet, file: &FileFacts, module: &SymbolId) {
         let id = symbols.add(fact, parent.child(&fact.name), parent, &file.path);
         ids.push(id);
     }
+    ids
 }
 
 #[cfg(test)]
@@ -216,6 +231,125 @@ mod tests {
             .collect();
         let refs: Vec<&FileFacts> = facts.iter().collect();
         link(&refs, project).symbols
+    }
+
+    fn relations(project: &Project, files: &[(&str, &str)]) -> Vec<String> {
+        let facts: Vec<FileFacts> = files
+            .iter()
+            .map(|(path, text)| extract(&RelativePath::new(path), text))
+            .collect();
+        let refs: Vec<&FileFacts> = facts.iter().collect();
+        let mut found: Vec<String> = link(&refs, project)
+            .relations
+            .iter()
+            .map(|relation| {
+                format!(
+                    "{} {} {} {}",
+                    relation.from,
+                    relation.kind.name(),
+                    relation.to,
+                    relation.confidence.name()
+                )
+            })
+            .collect();
+        found.sort();
+        found.dedup();
+        found
+    }
+
+    #[test]
+    fn a_path_alias_and_a_barrel_lead_to_the_defining_module() {
+        let project = Project(&[(
+            "tsconfig.json",
+            "{ // comments are allowed\n \"compilerOptions\": { \"baseUrl\": \".\", \"paths\": { \"@lib/*\": [\"src/lib/*\"] } }, }",
+        )]);
+        let found = relations(
+            &project,
+            &[
+                (
+                    "src/app.ts",
+                    "import { helper } from \"@lib/helper\";\nimport { thing } from \"./barrel\";\n",
+                ),
+                (
+                    "src/barrel/index.ts",
+                    "export { thing } from \"./thing\";\n",
+                ),
+                ("src/barrel/thing.ts", "export const thing = 1;\n"),
+                ("src/lib/helper.ts", "export function helper() {}\n"),
+            ],
+        );
+        assert!(
+            found.contains(&"src/app imports src/lib/helper exact".to_owned()),
+            "{found:?}"
+        );
+        assert!(
+            found.contains(&"src/app imports src/barrel/thing exact".to_owned()),
+            "{found:?}"
+        );
+        assert!(
+            !found
+                .iter()
+                .any(|line| line.starts_with("src/app imports src/barrel ")),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn an_import_can_name_a_javascript_file_that_is_typescript() {
+        let found = relations(
+            &Project(&[]),
+            &[
+                ("src/a.ts", "import { b } from \"./b.js\";\n"),
+                ("src/b.ts", "export const b = 1;\n"),
+            ],
+        );
+        assert_eq!(found, ["src/a imports src/b exact"]);
+    }
+
+    #[test]
+    fn a_star_export_is_followed() {
+        let found = relations(
+            &Project(&[]),
+            &[
+                ("src/a.ts", "import { b } from \"./index\";\n"),
+                ("src/index.ts", "export * from \"./b\";\n"),
+                ("src/b.ts", "export const b = 1;\n"),
+            ],
+        );
+        assert!(
+            found.contains(&"src/a imports src/b exact".to_owned()),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn a_namespace_import_reaches_into_its_module() {
+        let found = relations(
+            &Project(&[]),
+            &[
+                (
+                    "src/a.ts",
+                    "import * as m from \"./m\";\nexport function f(x: m.Thing) { m.make(); }\n",
+                ),
+                (
+                    "src/m.ts",
+                    "export class Thing {}\nexport function make() {}\n",
+                ),
+            ],
+        );
+        assert!(
+            found.contains(&"src/a::f uses src/m::Thing exact".to_owned()),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn a_package_import_is_not_a_module_of_the_project() {
+        let found = relations(
+            &Project(&[]),
+            &[("src/a.ts", "import React from \"react\";\n")],
+        );
+        assert_eq!(found, Vec::<String>::new());
     }
 
     fn parent_of<'a>(symbols: &'a [Symbol], id: &str) -> Option<&'a str> {

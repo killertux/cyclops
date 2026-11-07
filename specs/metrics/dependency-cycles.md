@@ -10,7 +10,7 @@ imports `a`.
 `cycles?` lists each cycle, separated by semicolons.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace   | cycles?                                               |
 | ----------- | ----------- | ----------------------------------------------------- |
@@ -23,7 +23,7 @@ imports `a`.
 `in cycle` is true for each member of a cycle. A module that depends on a cycle is not
 part of it.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace   | subject   | in cycle? | cycle size? |
 | ------------------ | ----------- | --------- | --------- | ----------- |

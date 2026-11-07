@@ -28,6 +28,7 @@ oxc_syntax = "=0.157.0"
 # The ra_ap_* crates break their APIs often, so this is pinned on purpose. It also pins
 # unicode-ident, so Cargo.lock keeps unicode-properties on the same Unicode version.
 ra_ap_syntax = "=0.0.360"
+petgraph = "0.8"
 postcard = { version = "1", features = ["use-std"] }
 rayon = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }

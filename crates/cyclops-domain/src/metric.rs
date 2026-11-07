@@ -129,11 +129,19 @@ impl MetricId {
             self,
             Self::Instability | Self::Abstractness | Self::Distance | Self::Hotspot
         );
+        let rollup = match self {
+            Self::Cyclomatic | Self::Cognitive | Self::MaxNesting | Self::Churn | Self::Hotspot => {
+                Rollup::Max
+            }
+            Self::Lines | Self::CommentLines | Self::BlankLines => Rollup::Sum,
+            _ => Rollup::None,
+        };
         MetricDescriptor {
             id: self,
             direction,
             heat,
             ratio,
+            rollup,
         }
     }
 }
@@ -225,6 +233,18 @@ pub struct MetricDescriptor {
     pub heat: Option<HeatBands>,
     /// Whether values are ratios, written with two decimal places.
     pub ratio: bool,
+    /// How it appears on larger symbols.
+    pub rollup: Rollup,
+}
+
+/// How a metric of small symbols appears on the larger ones that contain them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rollup {
+    None,
+    /// The highest of its parts.
+    Max,
+    /// The sum of its parts.
+    Sum,
 }
 
 impl MetricDescriptor {

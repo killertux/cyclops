@@ -1,6 +1,7 @@
 //! The project model: every symbol, after linking.
 
-use crate::symbol::{CodeRole, Symbol, SymbolId};
+use crate::relation::{Relation, RelationKind};
+use crate::symbol::{CodeRole, Symbol, SymbolId, SymbolKind};
 use std::collections::{BTreeMap, HashMap};
 
 /// Whether test code counts.
@@ -25,13 +26,15 @@ impl TestCode {
 pub struct ProjectModel {
     symbols: BTreeMap<SymbolId, Symbol>,
     children: HashMap<SymbolId, Vec<SymbolId>>,
+    relations: Vec<Relation>,
 }
 
 impl ProjectModel {
     /// Builds the model. If two languages describe the same symbol, such as the package
-    /// they share, the first one stays.
+    /// they share, the first one stays. A relation stated twice keeps its surest form,
+    /// and one to a symbol that does not exist is dropped.
     #[must_use]
-    pub fn new(symbols: Vec<Symbol>) -> Self {
+    pub fn new(symbols: Vec<Symbol>, relations: Vec<Relation>) -> Self {
         let mut by_id = BTreeMap::new();
         for symbol in symbols {
             by_id.entry(symbol.id.clone()).or_insert(symbol);
@@ -45,10 +48,32 @@ impl ProjectModel {
                     .push(symbol.id.clone());
             }
         }
+        let mut best: BTreeMap<(SymbolId, SymbolId, RelationKind), Relation> = BTreeMap::new();
+        for relation in relations {
+            if relation.from == relation.to && relation.kind != RelationKind::Calls {
+                continue;
+            }
+            if !by_id.contains_key(&relation.from) || !by_id.contains_key(&relation.to) {
+                continue;
+            }
+            let key = (relation.from.clone(), relation.to.clone(), relation.kind);
+            match best.get(&key) {
+                Some(known) if known.confidence <= relation.confidence => {}
+                _ => {
+                    best.insert(key, relation);
+                }
+            }
+        }
         Self {
             symbols: by_id,
             children,
+            relations: best.into_values().collect(),
         }
+    }
+
+    /// Every relation, in order of where it starts.
+    pub fn relations(&self) -> impl Iterator<Item = &Relation> {
+        self.relations.iter()
     }
 
     #[must_use]
@@ -104,12 +129,51 @@ impl<'a> ModelView<'a> {
             .children(id)
             .filter(move |symbol| tests.shows(symbol.role))
     }
+
+    /// The relations between visible symbols.
+    pub fn relations(&self) -> impl Iterator<Item = &'a Relation> {
+        let view = *self;
+        self.model.relations().filter(move |relation| {
+            view.symbol(&relation.from).is_some() && view.symbol(&relation.to).is_some()
+        })
+    }
+
+    /// Whether a symbol is another one, or anywhere inside it.
+    #[must_use]
+    pub fn is_within(&self, id: &SymbolId, ancestor: &SymbolId) -> bool {
+        let mut current = Some(id);
+        while let Some(candidate) = current {
+            if candidate == ancestor {
+                return true;
+            }
+            current = self
+                .model
+                .symbol(candidate)
+                .and_then(|symbol| symbol.parent.as_ref());
+        }
+        false
+    }
+
+    /// The module or package a symbol is in, or the symbol itself if it is one.
+    #[must_use]
+    pub fn module_of(&self, id: &SymbolId) -> Option<&'a Symbol> {
+        let mut current = self.model.symbol(id);
+        while let Some(symbol) = current {
+            if matches!(symbol.kind, SymbolKind::Module | SymbolKind::Package) {
+                return Some(symbol);
+            }
+            current = symbol
+                .parent
+                .as_ref()
+                .and_then(|parent| self.model.symbol(parent));
+        }
+        None
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::symbol::SymbolKind;
 
     fn symbol(id: &str, parent: Option<&str>, role: CodeRole) -> Symbol {
         Symbol::container(
@@ -123,10 +187,13 @@ mod tests {
 
     #[test]
     fn the_first_description_of_a_symbol_stays() {
-        let model = ProjectModel::new(vec![
-            symbol("shop", None, CodeRole::Production),
-            symbol("shop", None, CodeRole::Test),
-        ]);
+        let model = ProjectModel::new(
+            vec![
+                symbol("shop", None, CodeRole::Production),
+                symbol("shop", None, CodeRole::Test),
+            ],
+            Vec::new(),
+        );
         let id = SymbolId::new("shop");
         assert_eq!(
             model.symbol(&id).map(|symbol| symbol.role),
@@ -136,11 +203,14 @@ mod tests {
 
     #[test]
     fn a_view_without_tests_hides_test_code_everywhere() {
-        let model = ProjectModel::new(vec![
-            symbol("shop", None, CodeRole::Production),
-            symbol("shop::a", Some("shop"), CodeRole::Production),
-            symbol("shop::tests", Some("shop"), CodeRole::Test),
-        ]);
+        let model = ProjectModel::new(
+            vec![
+                symbol("shop", None, CodeRole::Production),
+                symbol("shop::a", Some("shop"), CodeRole::Production),
+                symbol("shop::tests", Some("shop"), CodeRole::Test),
+            ],
+            Vec::new(),
+        );
         let shop = SymbolId::new("shop");
         let hidden = ModelView::new(&model, TestCode::Excluded);
         let shown = ModelView::new(&model, TestCode::Included);

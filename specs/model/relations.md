@@ -27,7 +27,7 @@ containing a module is the [hierarchy](symbols.md#the-hierarchy), not a relation
 ## Structure
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace | from                        | to                     | relation?  | confidence? |
 | ------------------- | --------- | --------------------------- | ---------------------- | ---------- | ----------- |
@@ -53,7 +53,7 @@ The syntax layer knows the name of a called method, but not always the type it
 belongs to. `self` and `this` are always known. For anything else, Cyclops looks for
 methods with that name.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace | from                            | to                              | relation? | confidence? |
 | ------------------- | --------- | ------------------------------- | ------------------------------- | --------- | ----------- |
@@ -71,7 +71,7 @@ A type's `impl` blocks count wherever they are. Imports point to the module that
 really defines something, so a TypeScript barrel file does not hide it, and path
 aliases from `tsconfig.json` are followed.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation       | workspace     | from                | to                     | relation? | confidence? |
 | ----------------- | ------------- | ------------------- | ---------------------- | --------- | ----------- |

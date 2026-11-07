@@ -12,6 +12,8 @@ pub struct SymbolSet {
     symbols: Vec<Symbol>,
     /// Where each package and module is in `symbols`.
     containers: HashMap<SymbolId, usize>,
+    /// Where every symbol is in `symbols`.
+    positions: HashMap<SymbolId, usize>,
 }
 
 impl SymbolSet {
@@ -35,6 +37,7 @@ impl SymbolSet {
         }
         let unique = self.ids.unique(id.clone());
         self.containers.insert(id.clone(), self.symbols.len());
+        self.positions.insert(unique.clone(), self.symbols.len());
         self.symbols
             .push(Symbol::container(unique, parent.cloned(), name, kind, role));
     }
@@ -68,8 +71,25 @@ impl SymbolSet {
     ) -> SymbolId {
         let id = self.ids.unique(id);
         let symbol = Symbol::from_fact(fact, id.clone(), Some(parent), file);
+        self.positions.insert(id.clone(), self.symbols.len());
         self.symbols.push(symbol);
         id
+    }
+
+    /// A symbol added so far.
+    #[must_use]
+    pub fn get(&self, id: &SymbolId) -> Option<&Symbol> {
+        self.positions
+            .get(id)
+            .and_then(|index| self.symbols.get(*index))
+    }
+
+    /// Counts more lines of code for a symbol, such as an `impl` block of a type.
+    pub fn add_lines(&mut self, id: &SymbolId, lines: u32) {
+        let index = self.positions.get(id).copied();
+        if let Some(symbol) = index.and_then(|index| self.symbols.get_mut(index)) {
+            symbol.code_lines += lines;
+        }
     }
 
     #[must_use]

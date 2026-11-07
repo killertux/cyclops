@@ -1,12 +1,14 @@
 //! Places the facts of every Rust file in the project: gives each symbol its full name
-//! and its parent, and moves the members of an `impl` to their type.
+//! and its parent, moves the members of an `impl` to their type, and works out the
+//! relations between symbols.
 
 use crate::layout::{Layout, Package, Place};
 use cyclops_application::ports::{FileSource, Linked};
-use cyclops_domain::facts::{FileFacts, Import, SymbolFact};
+use cyclops_domain::facts::{FileFacts, Import, ReferenceKind, SymbolFact};
+use cyclops_domain::relation::{Confidence, Relation, RelationKind};
 use cyclops_domain::symbol::{CodeRole, SymbolId, SymbolKind};
 use cyclops_domain::symbol_set::SymbolSet;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// A file with its place in the project.
 struct Placed<'a> {
@@ -19,10 +21,41 @@ struct Placed<'a> {
     ids: Vec<Option<SymbolId>>,
 }
 
+/// Where a name is read, which decides what it can mean.
+struct Context<'a> {
+    file: &'a Placed<'a>,
+    /// The innermost symbol around the name.
+    local: SymbolId,
+    /// The module around the name, which is what `self::` means.
+    module: SymbolId,
+}
+
+/// What a name can be, for each kind of reference.
+#[derive(Clone, Copy)]
+enum Wanted {
+    Type,
+    Callable,
+    Anything,
+}
+
+impl Wanted {
+    const fn accepts(self, kind: SymbolKind) -> bool {
+        match self {
+            Self::Type => kind.is_type(),
+            Self::Callable => matches!(kind, SymbolKind::Function | SymbolKind::Method),
+            Self::Anything => true,
+        }
+    }
+}
+
 #[derive(Default)]
 struct Linker {
     symbols: SymbolSet,
-    types: HashSet<SymbolId>,
+    /// The kind and the parent of every symbol.
+    known: HashMap<SymbolId, (SymbolKind, Option<SymbolId>)>,
+    types_by_name: HashMap<String, Vec<SymbolId>>,
+    methods_by_name: HashMap<String, Vec<SymbolId>>,
+    relations: Vec<Relation>,
 }
 
 pub(crate) fn link(facts: &[&FileFacts], source: &dyn FileSource) -> Linked {
@@ -45,11 +78,20 @@ pub(crate) fn link(facts: &[&FileFacts], source: &dyn FileSource) -> Linked {
     for file in &mut files {
         linker.members(file);
     }
+    for file in &files {
+        linker.extensions(file);
+        linker.references(file);
+        linker.imports(file);
+    }
     let test_modules = declared_test_modules(&files);
     let test_files = files
         .iter()
         .filter(|file| is_inside_any(&file.module, &test_modules))
         .map(|file| file.facts.path.clone())
+        .collect();
+    let file_modules = files
+        .iter()
+        .map(|file| (file.facts.path.clone(), file.module.clone()))
         .collect();
     let mut symbols = linker.symbols.into_symbols();
     for symbol in &mut symbols {
@@ -59,7 +101,9 @@ pub(crate) fn link(facts: &[&FileFacts], source: &dyn FileSource) -> Linked {
     }
     Linked {
         symbols,
+        relations: linker.relations,
         test_files,
+        file_modules,
     }
 }
 
@@ -70,7 +114,7 @@ fn declared_test_modules(files: &[Placed<'_>]) -> HashSet<SymbolId> {
         .flat_map(|file| {
             let module = &file.module;
             let declared = file.facts.test_modules.iter();
-            declared.map(|path| Linker::join(module, path))
+            declared.map(|path| join(module, path))
         })
         .collect()
 }
@@ -82,40 +126,63 @@ fn is_inside_any(id: &SymbolId, modules: &HashSet<SymbolId>) -> bool {
         if modules.contains(&candidate) {
             return true;
         }
-        current = Linker::parent_id(&candidate);
+        current = parent_id(&candidate);
     }
     false
 }
 
+fn join(start: &SymbolId, path: &[String]) -> SymbolId {
+    path.iter().fold(start.clone(), |id, name| id.child(name))
+}
+
+fn parent_id(id: &SymbolId) -> Option<SymbolId> {
+    id.as_str()
+        .rsplit_once("::")
+        .map(|(parent, _)| SymbolId::new(parent))
+}
+
+fn is_keyword(name: &str) -> bool {
+    matches!(name, "crate" | "self" | "super" | "Self")
+}
+
 impl Linker {
+    fn container(
+        &mut self,
+        id: &SymbolId,
+        parent: Option<&SymbolId>,
+        name: &str,
+        kind: SymbolKind,
+        role: CodeRole,
+    ) {
+        self.symbols.container(id, parent, name, kind, role);
+        self.known
+            .entry(id.clone())
+            .or_insert_with(|| (kind, parent.cloned()));
+    }
+
     fn place<'a>(&mut self, file: &'a FileFacts, package: &Package, place: Place) -> Placed<'a> {
         let role = file.role;
         let root = SymbolId::new(&package.name);
-        self.symbols
-            .container(&root, None, &package.name, SymbolKind::Package, role);
+        self.container(&root, None, &package.name, SymbolKind::Package, role);
 
-        let (crate_root, module, written) = match place {
-            Place::Root => (root.clone(), root, false),
+        let (crate_root, module) = match place {
+            Place::Root => (root.clone(), root),
             Place::OwnCrate(path) => {
                 let module = SymbolId::new(&path);
-                self.symbols
-                    .container(&module, Some(&root), &path, SymbolKind::Module, role);
-                (module.clone(), module, true)
+                self.container(&module, Some(&root), &path, SymbolKind::Module, role);
+                (module.clone(), module)
             }
             Place::Module(names) => {
                 let mut parent = root.clone();
                 for name in names {
                     let id = parent.child(&name);
-                    self.symbols
-                        .container(&id, Some(&parent), &name, SymbolKind::Module, role);
+                    self.container(&id, Some(&parent), &name, SymbolKind::Module, role);
                     parent = id;
                 }
-                (root, parent, true)
+                (root, parent)
             }
         };
-        if written {
-            self.symbols.written_in(&module, file);
-        }
+        self.symbols.written_in(&module, file);
         Placed {
             facts: file,
             crate_root,
@@ -132,9 +199,19 @@ impl Linker {
         id: SymbolId,
         parent: SymbolId,
     ) {
-        let id = self.symbols.add(fact, id, parent, &file.facts.path);
+        let id = self.symbols.add(fact, id, parent.clone(), &file.facts.path);
+        self.known.insert(id.clone(), (fact.kind, Some(parent)));
         if fact.kind.is_type() {
-            self.types.insert(id.clone());
+            self.types_by_name
+                .entry(fact.name.clone())
+                .or_default()
+                .push(id.clone());
+        }
+        if fact.kind == SymbolKind::Method {
+            self.methods_by_name
+                .entry(fact.name.clone())
+                .or_default()
+                .push(id.clone());
         }
         if let Some(slot) = file.ids.get_mut(index) {
             *slot = Some(id);
@@ -142,8 +219,8 @@ impl Linker {
     }
 
     /// The id of the symbol around a fact, if it has one yet.
-    fn parent_of(file: &Placed<'_>, fact: &SymbolFact) -> Option<SymbolId> {
-        match fact.parent {
+    fn parent_of(file: &Placed<'_>, parent: Option<usize>) -> Option<SymbolId> {
+        match parent {
             None => Some(file.module.clone()),
             Some(index) => file.ids.get(index).cloned().flatten(),
         }
@@ -154,7 +231,7 @@ impl Linker {
         let facts = file.facts;
         for (index, fact) in facts.symbols.iter().enumerate() {
             if fact.owner.is_none()
-                && let Some(parent) = Self::parent_of(file, fact)
+                && let Some(parent) = Self::parent_of(file, fact.parent)
             {
                 self.add(file, index, fact, parent.child(&fact.name), parent);
             }
@@ -169,79 +246,163 @@ impl Linker {
             if file.ids.get(index).is_some_and(Option::is_some) {
                 continue;
             }
-            let Some(scope) = Self::parent_of(file, fact) else {
+            let Some(scope) = Self::parent_of(file, fact.parent) else {
                 continue;
             };
             let Some(owner) = &fact.owner else {
                 self.add(file, index, fact, scope.child(&fact.name), scope);
                 continue;
             };
-            if let Some(owner_id) = self.resolve(owner, file, &scope) {
+            let resolved = {
+                let context = self.context(file, scope.clone());
+                self.resolve(owner, &context, Wanted::Type)
+            };
+            if let Some(owner_id) = resolved {
                 self.add(file, index, fact, owner_id.child(&fact.name), owner_id);
             } else {
-                let written = owner.join("::");
-                let id = scope.child(&written).child(&fact.name);
+                let id = scope.child(&owner.join("::")).child(&fact.name);
                 self.add(file, index, fact, id, scope);
             }
         }
     }
 
-    /// Finds the type a path refers to, the way a person reading the file would.
-    fn resolve(&self, path: &[String], file: &Placed<'_>, scope: &SymbolId) -> Option<SymbolId> {
-        self.in_scopes(path, file, scope)
-            .or_else(|| self.absolute(path, file))
-            .or_else(|| self.through_imports(path, file))
+    fn kind_of(&self, id: &SymbolId) -> Option<SymbolKind> {
+        self.known.get(id).map(|(kind, _)| *kind)
     }
 
-    /// Looks in each scope around the code, from the inside out.
-    fn in_scopes(&self, path: &[String], file: &Placed<'_>, scope: &SymbolId) -> Option<SymbolId> {
-        let mut current = scope.clone();
-        loop {
-            let candidate = Self::join(&current, path);
-            if self.types.contains(&candidate) {
+    fn parent_symbol(&self, id: &SymbolId) -> Option<&SymbolId> {
+        self.known.get(id).and_then(|(_, parent)| parent.as_ref())
+    }
+
+    /// The nearest symbol around `id`, or `id` itself, that passes a test.
+    fn enclosing(&self, id: &SymbolId, test: impl Fn(SymbolKind) -> bool) -> Option<SymbolId> {
+        let mut current = Some(id.clone());
+        while let Some(candidate) = current {
+            if self.kind_of(&candidate).is_some_and(&test) {
                 return Some(candidate);
             }
-            if current == file.module {
-                return None;
-            }
-            current = Self::parent_id(&current)?;
+            current = self.parent_symbol(&candidate).cloned();
         }
+        None
     }
 
-    fn through_imports(&self, path: &[String], file: &Placed<'_>) -> Option<SymbolId> {
-        let (first, rest) = path.split_first()?;
-        let imports = &file.facts.imports;
-        let named = imports
-            .iter()
-            .filter(|import| import.alias.as_ref() == Some(first))
-            .find_map(|import| self.absolute(&Self::extended(import, rest), file));
-        named.or_else(|| {
-            imports
-                .iter()
-                .filter(|import| import.alias.is_none())
-                .find_map(|import| self.absolute(&Self::extended(import, path), file))
+    fn module_of(&self, id: &SymbolId) -> Option<SymbolId> {
+        self.enclosing(id, |kind| {
+            matches!(kind, SymbolKind::Module | SymbolKind::Package)
         })
     }
 
-    fn extended(import: &Import, rest: &[String]) -> Vec<String> {
-        let mut path = import.path.clone();
-        path.extend_from_slice(rest);
-        path
+    fn context<'a>(&self, file: &'a Placed<'a>, local: SymbolId) -> Context<'a> {
+        let module = self
+            .module_of(&local)
+            .unwrap_or_else(|| file.module.clone());
+        Context {
+            file,
+            local,
+            module,
+        }
+    }
+
+    fn exists(&self, id: &SymbolId, wanted: Wanted) -> bool {
+        self.kind_of(id).is_some_and(|kind| wanted.accepts(kind))
+    }
+
+    /// Finds what a path names, the way a person reading the file would: in the scopes
+    /// around it, then as a path from somewhere, then through what the file imports.
+    fn resolve(&self, path: &[String], context: &Context<'_>, wanted: Wanted) -> Option<SymbolId> {
+        self.in_scopes(path, context, wanted)
+            .or_else(|| self.absolute(path, context, wanted))
+            .or_else(|| self.through_imports(path, context, wanted))
+    }
+
+    /// Looks in each scope around the code, from the inside out.
+    fn in_scopes(
+        &self,
+        path: &[String],
+        context: &Context<'_>,
+        wanted: Wanted,
+    ) -> Option<SymbolId> {
+        let mut current = context.local.clone();
+        loop {
+            let candidate = join(&current, path);
+            if self.exists(&candidate, wanted) {
+                return Some(candidate);
+            }
+            if current == context.module {
+                return None;
+            }
+            current = self.parent_symbol(&current)?.clone();
+        }
+    }
+
+    /// The imports that are in force where a name is read.
+    fn visible_imports<'a>(&self, context: &'a Context<'a>) -> impl Iterator<Item = &'a Import> {
+        let local = context.local.clone();
+        context
+            .file
+            .facts
+            .imports
+            .iter()
+            .filter(move |import| match import.scope {
+                None => true,
+                Some(index) => {
+                    context
+                        .file
+                        .ids
+                        .get(index)
+                        .cloned()
+                        .flatten()
+                        .is_some_and(|scope| {
+                            self.enclosing(&local, |_| true).is_some()
+                                && self.is_within(&local, &scope)
+                        })
+                }
+            })
+    }
+
+    fn is_within(&self, id: &SymbolId, ancestor: &SymbolId) -> bool {
+        let mut current = Some(id.clone());
+        while let Some(candidate) = current {
+            if &candidate == ancestor {
+                return true;
+            }
+            current = self.parent_symbol(&candidate).cloned();
+        }
+        false
+    }
+
+    fn through_imports(
+        &self,
+        path: &[String],
+        context: &Context<'_>,
+        wanted: Wanted,
+    ) -> Option<SymbolId> {
+        let (first, rest) = path.split_first()?;
+        let named = self
+            .visible_imports(context)
+            .filter(|import| import.alias.as_ref() == Some(first))
+            .find_map(|import| self.absolute(&extended(import, rest), context, wanted));
+        named.or_else(|| {
+            self.visible_imports(context)
+                .filter(|import| import.alias.is_none())
+                .find_map(|import| self.absolute(&extended(import, path), context, wanted))
+        })
     }
 
     /// Follows a path that says where it starts from.
-    fn absolute(&self, path: &[String], file: &Placed<'_>) -> Option<SymbolId> {
+    fn absolute(&self, path: &[String], context: &Context<'_>, wanted: Wanted) -> Option<SymbolId> {
         let (first, rest) = path.split_first()?;
         let mut start = match first.as_str() {
-            "crate" => file.crate_root.clone(),
-            "self" => file.module.clone(),
-            "super" => Self::parent_id(&file.module)?,
+            "crate" => context.file.crate_root.clone(),
+            "self" => context.module.clone(),
+            "super" => self.module_of(self.parent_symbol(&context.module)?)?,
+            "Self" => self.enclosing(&context.local, SymbolKind::is_type)?,
             _ => {
                 let from_package = SymbolId::new(&path.join("::"));
-                let from_module = Self::join(&file.module, path);
+                let from_module = join(&context.module, path);
                 return [from_package, from_module]
                     .into_iter()
-                    .find(|id| self.types.contains(id));
+                    .find(|id| self.exists(id, wanted));
             }
         };
         let mut rest = rest;
@@ -249,22 +410,150 @@ impl Linker {
             if next != "super" {
                 break;
             }
-            start = Self::parent_id(&start)?;
+            start = self.module_of(self.parent_symbol(&start)?)?;
             rest = others;
         }
-        let candidate = Self::join(&start, rest);
-        self.types.contains(&candidate).then_some(candidate)
+        let candidate = join(&start, rest);
+        self.exists(&candidate, wanted).then_some(candidate)
     }
 
-    fn join(start: &SymbolId, path: &[String]) -> SymbolId {
-        path.iter().fold(start.clone(), |id, name| id.child(name))
+    /// What a type name means: exactly, or failing that, every type with that name.
+    fn types_named(&self, path: &[String], context: &Context<'_>) -> Vec<(SymbolId, Confidence)> {
+        if let Some(found) = self.resolve(path, context, Wanted::Type) {
+            return vec![(found, Confidence::Exact)];
+        }
+        let Some(name) = path.last().filter(|name| !is_keyword(name)) else {
+            return Vec::new();
+        };
+        let candidates = self.types_by_name.get(name).cloned().unwrap_or_default();
+        let confidence = Confidence::of_candidates(candidates.len());
+        candidates.into_iter().map(|id| (id, confidence)).collect()
     }
 
-    fn parent_id(id: &SymbolId) -> Option<SymbolId> {
-        id.as_str()
-            .rsplit_once("::")
-            .map(|(parent, _)| SymbolId::new(parent))
+    fn relate(
+        &mut self,
+        from: &SymbolId,
+        to: SymbolId,
+        kind: RelationKind,
+        confidence: Confidence,
+    ) {
+        self.relations.push(Relation {
+            from: from.clone(),
+            to,
+            kind,
+            confidence,
+        });
     }
+
+    /// The types `impl` blocks extend: their lines count towards the type, and an `impl`
+    /// of a trait is an implementation of it.
+    fn extensions(&mut self, file: &Placed<'_>) {
+        for extension in &file.facts.extensions {
+            let Some(scope) = Self::parent_of(file, extension.parent) else {
+                continue;
+            };
+            let context = self.context(file, scope);
+            let Some(owner) = self.resolve(&extension.owner, &context, Wanted::Type) else {
+                continue;
+            };
+            self.symbols.add_lines(&owner, extension.code_lines);
+            if let Some(interface) = &extension.implements {
+                for (target, confidence) in self.types_named(interface, &context) {
+                    self.relate(&owner, target, RelationKind::Implements, confidence);
+                }
+            }
+        }
+    }
+
+    fn references(&mut self, file: &Placed<'_>) {
+        for (index, fact) in file.facts.symbols.iter().enumerate() {
+            let Some(id) = file.ids.get(index).cloned().flatten() else {
+                continue;
+            };
+            let context = self.context(file, id.clone());
+            for reference in &fact.references {
+                let path = &reference.path;
+                match reference.kind {
+                    ReferenceKind::Type => {
+                        let from = if fact.kind == SymbolKind::Field {
+                            self.parent_symbol(&id).cloned()
+                        } else {
+                            Some(id.clone())
+                        };
+                        let kind = if fact.kind == SymbolKind::Field {
+                            RelationKind::Composes
+                        } else {
+                            RelationKind::Uses
+                        };
+                        if let Some(from) = from {
+                            for (target, confidence) in self.types_named(path, &context) {
+                                self.relate(&from, target, kind, confidence);
+                            }
+                        }
+                    }
+                    ReferenceKind::Implements | ReferenceKind::Inherits => {
+                        let kind = if reference.kind == ReferenceKind::Implements {
+                            RelationKind::Implements
+                        } else {
+                            RelationKind::Inherits
+                        };
+                        for (target, confidence) in self.types_named(path, &context) {
+                            self.relate(&id, target, kind, confidence);
+                        }
+                    }
+                    ReferenceKind::Call => {
+                        if let Some(target) = self.resolve(path, &context, Wanted::Callable) {
+                            self.relate(&id, target, RelationKind::Calls, Confidence::Exact);
+                        }
+                    }
+                    ReferenceKind::SelfCall => {
+                        let owner = self.enclosing(&id, SymbolKind::is_type);
+                        let target = owner.map(|owner| join(&owner, path));
+                        if let Some(target) =
+                            target.filter(|target| self.exists(target, Wanted::Callable))
+                        {
+                            self.relate(&id, target, RelationKind::Calls, Confidence::Exact);
+                        }
+                    }
+                    ReferenceKind::MethodCall => {
+                        let name = path.last().cloned().unwrap_or_default();
+                        let candidates =
+                            self.methods_by_name.get(&name).cloned().unwrap_or_default();
+                        let confidence = Confidence::of_candidates(candidates.len());
+                        for target in candidates {
+                            self.relate(&id, target, RelationKind::Calls, confidence);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// A module imports the modules that define what its `use` items name.
+    fn imports(&mut self, file: &Placed<'_>) {
+        for import in &file.facts.imports {
+            let Some(scope) = Self::parent_of(file, import.scope) else {
+                continue;
+            };
+            let context = self.context(file, scope);
+            let Some(target) = self.absolute(&import.path, &context, Wanted::Anything) else {
+                continue;
+            };
+            let Some(to) = self.module_of(&target) else {
+                continue;
+            };
+            if to != context.module {
+                let from = context.module.clone();
+                self.relate(&from, to, RelationKind::Imports, Confidence::Exact);
+            }
+        }
+    }
+}
+
+fn extended(import: &Import, rest: &[String]) -> Vec<String> {
+    let mut path = import.path.clone();
+    path.extend_from_slice(rest);
+    path
 }
 
 #[cfg(test)]
@@ -398,6 +687,103 @@ mod tests {
             parent_of(&symbols, "p::store::Store::x::inner"),
             Some("p::store::Store::x")
         );
+    }
+
+    fn relations(files: &[(&str, &str)]) -> Vec<String> {
+        let facts: Vec<FileFacts> = files
+            .iter()
+            .map(|(path, text)| extract(&RelativePath::new(path), text))
+            .collect();
+        let refs: Vec<&FileFacts> = facts.iter().collect();
+        let mut found: Vec<String> = link(&refs, &NoManifest)
+            .relations
+            .iter()
+            .map(|relation| {
+                format!(
+                    "{} {} {} {}",
+                    relation.from,
+                    relation.kind.name(),
+                    relation.to,
+                    relation.confidence.name()
+                )
+            })
+            .collect();
+        found.sort();
+        found.dedup();
+        found
+    }
+
+    #[test]
+    fn a_static_call_through_a_type_is_exact() {
+        let found = relations(&[
+            (
+                "src/a.rs",
+                "pub struct A;\nimpl A { pub fn new() -> A { A } }\n",
+            ),
+            (
+                "src/b.rs",
+                "use crate::a::A;\nfn f() { let _ = A::new(); }\n",
+            ),
+        ]);
+        assert!(
+            found.contains(&"p::b::f calls p::a::A::new exact".to_owned()),
+            "{found:?}"
+        );
+        assert!(
+            found.contains(&"p::b::f uses p::a::A exact".to_owned()),
+            "{found:?}"
+        );
+        assert!(
+            found.contains(&"p::b imports p::a exact".to_owned()),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn a_supertrait_is_inherited() {
+        let found = relations(&[("src/lib.rs", "trait A {}\ntrait B: A {}\n")]);
+        assert_eq!(found, ["p::B inherits p::A exact"]);
+    }
+
+    #[test]
+    fn an_import_from_a_test_module_comes_from_that_module() {
+        let found = relations(&[
+            ("src/lib.rs", "pub mod a;\n"),
+            (
+                "src/a.rs",
+                "pub fn g() {}\n#[cfg(test)]\nmod tests {\n    use super::g;\n    fn t() { g(); }\n}\n",
+            ),
+        ]);
+        assert!(
+            found.contains(&"p::a::tests imports p::a exact".to_owned()),
+            "{found:?}"
+        );
+        assert!(
+            found.contains(&"p::a::tests::t calls p::a::g exact".to_owned()),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn a_crate_from_outside_is_not_a_relation() {
+        let found = relations(&[(
+            "src/lib.rs",
+            "use std::collections::HashMap;\nfn f(_: HashMap<u8, u8>) {}\n",
+        )]);
+        assert_eq!(found, Vec::<String>::new());
+    }
+
+    #[test]
+    fn an_impl_block_adds_its_lines_to_its_type() {
+        let symbols = linked(&[(
+            "src/lib.rs",
+            "struct S;\nimpl S {\n    fn x(&self) {}\n}\nimpl Clone for S {\n    fn clone(&self) -> S { S }\n}\n",
+        )]);
+        let lines = symbols
+            .iter()
+            .find(|symbol| symbol.id.as_str() == "p::S")
+            .map(|symbol| symbol.code_lines);
+        assert_eq!(lines, Some(7));
     }
 
     #[test]

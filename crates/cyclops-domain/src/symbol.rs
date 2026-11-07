@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::facts::{BodyFacts, SymbolFact};
+use crate::facts::{BodyFacts, MemberFacts, SymbolFact};
 use crate::path::RelativePath;
 use std::collections::HashMap;
 use std::fmt;
@@ -162,6 +162,7 @@ pub struct Symbol {
     /// Its lines of code, leaving out blank lines and comments.
     pub code_lines: u32,
     pub body: Option<BodyFacts>,
+    pub member: MemberFacts,
 }
 
 impl Symbol {
@@ -184,6 +185,7 @@ impl Symbol {
             location: None,
             code_lines: 0,
             body: None,
+            member: MemberFacts::default(),
         }
     }
 
@@ -208,6 +210,7 @@ impl Symbol {
             }),
             code_lines: fact.code_lines,
             body: fact.body.clone(),
+            member: fact.member,
         }
     }
 }

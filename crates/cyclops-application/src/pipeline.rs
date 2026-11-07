@@ -5,6 +5,7 @@ use crate::ports::{
     Analyzer, CacheAccess, CacheEntry, CachedFacts, ContentHash, FactStore, FileSource, FileStamp,
     LanguageAdapter, SourceError, SourceFile,
 };
+use crate::rollups::roll_up;
 use cyclops_domain::facts::FileFacts;
 use cyclops_domain::glob::Glob;
 use cyclops_domain::language::LanguageId;
@@ -12,7 +13,7 @@ use cyclops_domain::model::{ModelView, ProjectModel};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
 use cyclops_domain::settings::Settings;
-use cyclops_domain::symbol::CodeRole;
+use cyclops_domain::symbol::{CodeRole, SymbolId};
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -35,6 +36,13 @@ const WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
 pub struct AnalysisService {
     adapters: Vec<Box<dyn LanguageAdapter>>,
     analyzers: Vec<Box<dyn Analyzer>>,
+}
+
+/// What linking says about files.
+#[derive(Default)]
+struct LinkedFiles {
+    test_files: HashSet<RelativePath>,
+    file_modules: HashMap<RelativePath, SymbolId>,
 }
 
 /// A file some adapter understands, and what the cache knows about it.
@@ -189,27 +197,29 @@ impl AnalysisService {
         for file in &mut extracted {
             mark_test_paths(&mut file.facts, &settings.test_paths);
         }
-        let (model, test_files) = self.link(&extracted, source);
+        let (model, linked) = self.link(&extracted, source);
         let mut files: Vec<AnalyzedFile> = extracted
             .iter()
             .map(|file| AnalyzedFile::from_facts(&file.facts))
             .collect();
-        for file in files
-            .iter_mut()
-            .filter(|file| test_files.contains(&file.path))
-        {
-            file.make_test_code();
+        for file in &mut files {
+            if linked.test_files.contains(&file.path) {
+                file.make_test_code();
+            }
+            file.module = linked.file_modules.get(&file.path).cloned();
         }
         let input = AnalysisInput {
             model: ModelView::new(&model, settings.tests),
             files: &files,
             tests: settings.tests,
         };
-        let measurements = self
+        let mut measurements: Vec<_> = self
             .analyzers
             .par_iter()
             .flat_map(|analyzer| analyzer.analyze(&input))
             .collect();
+        let rolled = roll_up(&input, &measurements);
+        measurements.extend(rolled);
 
         Ok(ProjectAnalysis::new(
             model,
@@ -327,9 +337,10 @@ impl AnalysisService {
         &self,
         extracted: &[Extracted],
         source: &dyn FileSource,
-    ) -> (ProjectModel, HashSet<RelativePath>) {
+    ) -> (ProjectModel, LinkedFiles) {
         let mut symbols = Vec::new();
-        let mut test_files = HashSet::new();
+        let mut relations = Vec::new();
+        let mut files = LinkedFiles::default();
         for (index, adapter) in self.adapters.iter().enumerate() {
             let facts: Vec<&FileFacts> = extracted
                 .iter()
@@ -339,9 +350,11 @@ impl AnalysisService {
             if !facts.is_empty() {
                 let linked = adapter.link(&facts, source);
                 symbols.extend(linked.symbols);
-                test_files.extend(linked.test_files);
+                relations.extend(linked.relations);
+                files.test_files.extend(linked.test_files);
+                files.file_modules.extend(linked.file_modules);
             }
         }
-        (ProjectModel::new(symbols), test_files)
+        (ProjectModel::new(symbols, relations), files)
     }
 }

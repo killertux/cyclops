@@ -53,7 +53,7 @@ Excluded test code is hidden everywhere, and it contributes to no metric.
 
 Its dependencies, lines and clones do not count either.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation    | workspace | steps                    | subject      | afferent? | instability? |
 | -------------- | --------- | ------------------------ | ------------ | --------- | ------------ |
@@ -62,7 +62,7 @@ Its dependencies, lines and clones do not count either.
 | TS, left out   | ts-shop   |                          | src/orders   | 0         | 1.00         |
 | TS, included   | ts-shop   | `set tests.include true` | src/orders   | 1         | 0.67         |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps                    | subject | lines? |
 | ----------- | --------- | ------------------------ | ------- | ------ |

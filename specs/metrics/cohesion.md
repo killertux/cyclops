@@ -19,7 +19,7 @@ A result of 1 is cohesive. Anything higher suggests the type could be split.
 Each table measures the type `S`.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation         | language | code                                                                                                                                             | lcom? |
 | ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
@@ -37,7 +37,7 @@ Each table measures the type `S`.
 
 ## TypeScript and JavaScript
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation                 | language   | code                                                                                                  | lcom? |
 | --------------------------- | ---------- | ----------------------------------------------------------------------------------------------------- | ----- |
@@ -54,7 +54,7 @@ Each table measures the type `S`.
 
 A type is measured as a whole, wherever its methods are.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace       | subject             | lcom? |
 | ------------------ | --------------- | ------------------- | ----- |

@@ -113,7 +113,10 @@ fn report_prints_the_metrics_of_symbols_and_files() {
     let stdout = text(&output.stdout);
     assert_eq!(output.status.code(), Some(0));
     assert!(stdout.contains("shop::orders::Order::total  cyclomatic=3 cognitive=3"));
-    assert!(stdout.contains("src/orders.rs  lines="));
+    assert!(
+        stdout.contains("src/orders.rs  cyclomatic=4 lines="),
+        "{stdout}"
+    );
 }
 
 #[test]
