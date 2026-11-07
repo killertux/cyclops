@@ -31,16 +31,16 @@ worst file.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys          | focus?                     | has?            |
-| ----------- | --------- | ------------- | -------------------------- | --------------- |
-| A module    | rust-shop | `<Space>ejgd` | shop::orders::Order::total | worst in orders |
-| The project | rust-shop | `gd`          | shop::orders::Order::total | worst in shop   |
+| # situation | workspace | keys          | focus?                     | text            | includes? |
+| ----------- | --------- | ------------- | -------------------------- | --------------- | --------- |
+| A module    | rust-shop | `<Space>ejgd` | shop::orders::Order::total | worst in orders | yes       |
+| The project | rust-shop | `gd`          | shop::orders::Order::total | worst in shop   | yes       |
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps                                    | keys | focus?                     | has?          |
-| ----------- | --------- | ---------------------------------------- | ---- | -------------------------- | ------------- |
-| A hotspot   | rust-shop | `git init; commit src/orders.rs 2 times` | `gd` | shop::orders::Order::total | worst in shop |
+| # situation | workspace | steps                                    | keys | focus?                     | text          | includes? |
+| ----------- | --------- | ---------------------------------------- | ---- | -------------------------- | ------------- | --------- |
+| A hotspot   | rust-shop | `git init; commit src/orders.rs 2 times` | `gd` | shop::orders::Order::total | worst in shop | yes       |
 
 ## The reasons
 
@@ -50,14 +50,14 @@ still works.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps                                    | keys                                    | has?                 |
-| ----------- | --------- | ---------------------------------------- | --------------------------------------- | -------------------- |
-| The score   | rust-shop |                                          | `<C-p>Order::total<CR>Mcognitive<CR>gd` | Why cognitive is 3   |
-| Its parts   | rust-shop |                                          | `<C-p>Order::total<CR>Mcognitive<CR>gd` | Decision points      |
-| Nesting     | rust-shop |                                          | `<C-p>Order::total<CR>Mcognitive<CR>gd` | Added by nesting     |
-| The lens    | rust-shop |                                          | `<C-p>Order::total<CR>gd`               | Why cyclomatic is 3  |
-| The history | rust-shop | `git init; commit src/orders.rs 2 times` | `<C-p>Order::total<CR>gd`               | Change src/orders.rs |
-| Without git | rust-shop |                                          | `<C-p>Order::total<CR>gd`               | no git history       |
+| # situation | workspace | steps                                    | keys                                    | text                 | includes? |
+| ----------- | --------- | ---------------------------------------- | --------------------------------------- | -------------------- | --------- |
+| The score   | rust-shop |                                          | `<C-p>Order::total<CR>Mcognitive<CR>gd` | Why cognitive is 3   | yes       |
+| Its parts   | rust-shop |                                          | `<C-p>Order::total<CR>Mcognitive<CR>gd` | Decision points      | yes       |
+| Nesting     | rust-shop |                                          | `<C-p>Order::total<CR>Mcognitive<CR>gd` | Added by nesting     | yes       |
+| The lens    | rust-shop |                                          | `<C-p>Order::total<CR>gd`               | Why cyclomatic is 3  | yes       |
+| The history | rust-shop | `git init; commit src/orders.rs 2 times` | `<C-p>Order::total<CR>gd`               | Change src/orders.rs | yes       |
+| Without git | rust-shop |                                          | `<C-p>Order::total<CR>gd`               | no git history       | yes       |
 
 ## What it explains
 
@@ -85,15 +85,15 @@ The others share one layout:
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation    | workspace       | keys                               | focus?              | section? | has?                                |
-| -------------- | --------------- | ---------------------------------- | ------------------- | -------- | ----------------------------------- |
-| Cohesion       | rust-split-impl | `<C-p>Store<CR>Mlcom<CR>gd`        | split::store::Store | Why      | grow                                |
-| Coupling       | rust-shop       | `<Space>ejMinstability<CR>gd`      | shop::orders        | Why      | shop::billing                       |
-| A cycle        | rust-cycles     | `<C-p>cycles::a<CR>Mcycle<CR>gd`   | cycles::a           | Why      | cycles::a -> cycles::b -> cycles::a |
-| Copies         | clones          | `<C-p>first<CR>Mduplication<CR>gd` | clones::first       | Why      | src/second.rs                       |
-| Members        | rust-shop       | `<C-p>Order<CR>Mmembers<CR>gd`     | shop::orders::Order | Why      | invoices                            |
-| Comments       | rust-shop       | `<Space>ejMcomment_lines<CR>gd`    | shop::orders        | Why      | Why comment_lines is 0              |
-| Does not apply | rust-shop       | `<Space>ejMlcom<CR>gd`             | shop::orders        | closed   | lcom does not apply to module.      |
+| # situation    | workspace       | keys                               | focus?              | section? | text                                | includes? |
+| -------------- | --------------- | ---------------------------------- | ------------------- | -------- | ----------------------------------- | --------- |
+| Cohesion       | rust-split-impl | `<C-p>Store<CR>Mlcom<CR>gd`        | split::store::Store | Why      | grow                                | yes       |
+| Coupling       | rust-shop       | `<Space>ejMinstability<CR>gd`      | shop::orders        | Why      | shop::billing                       | yes       |
+| A cycle        | rust-cycles     | `<C-p>cycles::a<CR>Mcycle<CR>gd`   | cycles::a           | Why      | cycles::a -> cycles::b -> cycles::a | yes       |
+| Copies         | clones          | `<C-p>first<CR>Mduplication<CR>gd` | clones::first       | Why      | src/second.rs                       | yes       |
+| Members        | rust-shop       | `<C-p>Order<CR>Mmembers<CR>gd`     | shop::orders::Order | Why      | invoices                            | yes       |
+| Comments       | rust-shop       | `<Space>ejMcomment_lines<CR>gd`    | shop::orders        | Why      | Why comment_lines is 0              | yes       |
+| Does not apply | rust-shop       | `<Space>ejMlcom<CR>gd`             | shop::orders        | closed   | lcom does not apply to module.      | yes       |
 
 ## Leaving
 

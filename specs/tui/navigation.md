@@ -29,11 +29,11 @@ In a list or a tree, `j` and `k` move the selection, `gg` and `G` go to the ends
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation    | workspace | keys                        | view?   | focus?       | has?                |
-| -------------- | --------- | --------------------------- | ------- | ------------ | ------------------- |
-| To the diagram | rust-shop | `<Space>ej<Space>d`         | Diagram | shop::orders | Neighbors of orders |
-| To the map     | rust-shop | `<Space>ej<Space>m`         | Map     | shop::orders | orders              |
-| And back       | rust-shop | `<Space>ej<Space>d<Space>e` | Explore | shop::orders | Structure           |
+| # situation    | workspace | keys                        | view?   | focus?       | text                | includes? |
+| -------------- | --------- | --------------------------- | ------- | ------------ | ------------------- | --------- |
+| To the diagram | rust-shop | `<Space>ej<Space>d`         | Diagram | shop::orders | Neighbors of orders | yes       |
+| To the map     | rust-shop | `<Space>ej<Space>m`         | Map     | shop::orders | orders              | yes       |
+| And back       | rust-shop | `<Space>ej<Space>d<Space>e` | Explore | shop::orders | Structure           | yes       |
 
 The breadcrumb shows where the focus sits. `-` moves the focus to its parent.
 
@@ -114,12 +114,12 @@ for the session. An unknown mark says so.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation  | workspace | keys                    | focus?       | has?            |
-| ------------ | --------- | ----------------------- | ------------ | --------------- |
-| Jumping back | rust-shop | `<Space>ejmagg'a`       | shop::orders | orders          |
-| Across views | rust-shop | `<Space>ejma<Space>o'a` | shop::orders | orders          |
-| Two marks    | rust-shop | `<Space>ejmajmbgg'a`    | shop::orders | orders          |
-| Unknown      | rust-shop | `'z`                    | shop         | Mark not set: z |
+| # situation  | workspace | keys                    | focus?       | text            | includes? |
+| ------------ | --------- | ----------------------- | ------------ | --------------- | --------- |
+| Jumping back | rust-shop | `<Space>ejmagg'a`       | shop::orders | orders          | yes       |
+| Across views | rust-shop | `<Space>ejma<Space>o'a` | shop::orders | orders          | yes       |
+| Two marks    | rust-shop | `<Space>ejmajmbgg'a`    | shop::orders | orders          | yes       |
+| Unknown      | rust-shop | `'z`                    | shop         | Mark not set: z | yes       |
 
 ## Jumping and searching
 
@@ -139,9 +139,9 @@ the selection, and `n` and `N` step through the matches.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation  | workspace | keys                   | selected?     | has?                       |
-| ------------ | --------- | ---------------------- | ------------- | -------------------------- |
-| Searching    | rust-shop | `<Space>e/notes<CR>`   | shop::notes   | notes                      |
-| The next one | rust-shop | `<Space>e/o<CR>n`      | shop::catalog | catalog                    |
-| The last one | rust-shop | `<Space>e/o<CR>nN`     | shop::orders  | orders                     |
-| No match     | rust-shop | `<Space>e/nothing<CR>` | shop          | Pattern not found: nothing |
+| # situation  | workspace | keys                   | selected?     | text                       | includes? |
+| ------------ | --------- | ---------------------- | ------------- | -------------------------- | --------- |
+| Searching    | rust-shop | `<Space>e/notes<CR>`   | shop::notes   | notes                      | yes       |
+| The next one | rust-shop | `<Space>e/o<CR>n`      | shop::catalog | catalog                    | yes       |
+| The last one | rust-shop | `<Space>e/o<CR>nN`     | shop::orders  | orders                     | yes       |
+| No match     | rust-shop | `<Space>e/nothing<CR>` | shop          | Pattern not found: nothing | yes       |

@@ -1,9 +1,11 @@
 //! Paths inside a project.
 
+use serde::{Deserialize, Serialize};
+
 use std::fmt;
 
 /// A path relative to the project root, always written with forward slashes.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct RelativePath(String);
 
 impl RelativePath {

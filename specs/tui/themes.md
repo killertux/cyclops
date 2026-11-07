@@ -31,17 +31,17 @@ choice, so it can only be set in [your own file](../project/configuration.md#you
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps                                               | keys                | theme? | config lacks? |
-| ----------- | --------- | --------------------------------------------------- | ------------------- | ------ | ------------- |
-| Light       | rust-shop |                                                     | `:set bg=light<CR>` | light  | ui.theme      |
-| Dark        | rust-shop | `set user ui.theme light`                           | `:set bg=dark<CR>`  | dark   | ui.theme      |
-| Automatic   | rust-shop | `terminal background light; set user ui.theme dark` | `:set bg=auto<CR>`  | light  | ui.theme      |
+| # situation | workspace | steps                                               | keys                | theme? | config text | config includes? |
+| ----------- | --------- | --------------------------------------------------- | ------------------- | ------ | ----------- | ---------------- |
+| Light       | rust-shop |                                                     | `:set bg=light<CR>` | light  | ui.theme    | no               |
+| Dark        | rust-shop | `set user ui.theme light`                           | `:set bg=dark<CR>`  | dark   | ui.theme    | no               |
+| Automatic   | rust-shop | `terminal background light; set user ui.theme dark` | `:set bg=auto<CR>`  | light  | ui.theme    | no               |
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys               | theme? | has?                |
-| ----------- | --------- | ------------------ | ------ | ------------------- |
-| Unknown     | rust-shop | `:set bg=pink<CR>` | dark   | Unknown theme: pink |
+| # situation | workspace | keys               | theme? | text                | includes? |
+| ----------- | --------- | ------------------ | ------ | ------------------- | --------- |
+| Unknown     | rust-shop | `:set bg=pink<CR>` | dark   | Unknown theme: pink | yes       |
 
 ## Without color
 
@@ -51,8 +51,8 @@ visible, through marks, line styles, bold and reverse video.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation   | workspace | steps                                                       | keys       | theme?   | has? |
-| ------------- | --------- | ----------------------------------------------------------- | ---------- | -------- | ---- |
-| No color      | rust-shop | `env NO_COLOR 1`                                            |            | no color | shop |
-| Over the file | rust-shop | `env NO_COLOR 1; set user ui.theme light`                   |            | no color | shop |
-| Marks stay    | rust-shop | `env NO_COLOR 1; add alert cyclomatic function > 2 warning` | `<Space>e` | no color | !    |
+| # situation   | workspace | steps                                                       | keys       | theme?   | text | includes? |
+| ------------- | --------- | ----------------------------------------------------------- | ---------- | -------- | ---- | --------- |
+| No color      | rust-shop | `env NO_COLOR 1`                                            |            | no color | shop | yes       |
+| Over the file | rust-shop | `env NO_COLOR 1; set user ui.theme light`                   |            | no color | shop | yes       |
+| Marks stay    | rust-shop | `env NO_COLOR 1; add alert cyclomatic function > 2 warning` | `<Space>e` | no color | !    | yes       |

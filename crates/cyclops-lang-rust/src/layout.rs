@@ -155,7 +155,7 @@ impl<'a> Layout<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cyclops_application::ports::{Discovered, SourceError};
+    use cyclops_application::ports::{Discovered, FileStamp, SourceError};
 
     struct Project(&'static [(&'static str, &'static str)]);
 
@@ -173,6 +173,10 @@ mod tests {
                     .collect(),
                 unreadable: Vec::new(),
             })
+        }
+
+        fn stamp(&self, path: &RelativePath) -> Result<FileStamp, SourceError> {
+            Err(SourceError::Unreadable(path.clone()))
         }
 
         fn read(&self, path: &RelativePath) -> Result<Vec<u8>, SourceError> {

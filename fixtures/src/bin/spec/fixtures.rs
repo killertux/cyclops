@@ -1,14 +1,16 @@
 //! The fixtures used by the pages in `specs/`. See `specs/writing-specs.md`.
 
+use crate::cli::{files_in, includes, run};
 use crate::read::{self, NONE, NOT_APPLICABLE, list, yes_no};
+use crate::scenario::{Scenario, no_cyclops};
 use crate::scratch::Scratch;
 use cyclops_application::analysis::ProjectAnalysis;
-use cyclops_application::pipeline::AnalysisOptions;
-use cyclops_cli::analyze;
 use cyclops_domain::metric::{MetricId, Scope, Subject};
 use cyclops_domain::path::RelativePath;
+use cyclops_domain::settings::{SettingKey, Settings};
 use cyclops_domain::symbol::SymbolId;
 use rust_slim::fixture;
+use std::process::{Command, Output};
 
 /// The file a snippet is written to, and the module that makes it.
 struct SnippetFile {
@@ -67,7 +69,7 @@ impl Snippet {
         let file = self.file();
         let scratch =
             Scratch::with_file(file.manifest, file.path, &code).map_err(|e| e.to_string())?;
-        analyze(scratch.root(), AnalysisOptions::default()).map_err(|e| e.to_string())
+        Scenario::new(scratch).analyze()
     }
 
     fn id(&self, default: &str) -> SymbolId {
@@ -233,22 +235,31 @@ pub struct Core {
     metric: String,
     scope: String,
     value: String,
+    setting: String,
     outcome: Option<Outcome>,
+    settings: Option<Result<Settings, String>>,
 }
 
 impl Core {
-    fn run(&self) -> Outcome {
+    fn run(&mut self) -> Outcome {
         let scratch = Scratch::from_sample(&self.workspace).map_err(|e| e.to_string())?;
-        let steps = self.steps.split(';').map(str::trim);
-        for step in steps.filter(|step| !step.is_empty()) {
-            scratch.step(step)?;
-        }
-        analyze(scratch.root(), AnalysisOptions::default()).map_err(|e| e.to_string())
+        let mut scenario = Scenario::new(scratch);
+        scenario.steps(&self.steps, &no_cyclops)?;
+        self.settings = Some(scenario.settings());
+        scenario.analyze()
     }
 
     fn read(&self, reader: impl FnOnce(&ProjectAnalysis) -> String) -> String {
         match &self.outcome {
             Some(Ok(analysis)) => reader(analysis),
+            Some(Err(error)) => failed(error),
+            None => not_run(),
+        }
+    }
+
+    fn read_settings(&self, key: SettingKey) -> String {
+        match &self.settings {
+            Some(Ok(settings)) => settings.display(key),
             Some(Err(error)) => failed(error),
             None => not_run(),
         }
@@ -299,6 +310,11 @@ impl Core {
         self.value = value;
     }
 
+    /// temoc calls a column that starts with `set` by its own name.
+    pub fn setting(&mut self, setting: String) {
+        self.setting = setting;
+    }
+
     pub fn execute(&mut self) {
         if !self.workspace.is_empty() {
             self.outcome = Some(self.run());
@@ -308,6 +324,16 @@ impl Core {
     #[must_use]
     pub fn analyzed(&self) -> String {
         yes_no(matches!(self.outcome, Some(Ok(_))))
+    }
+
+    /// Why the analysis was refused.
+    #[must_use]
+    pub fn problem(&self) -> String {
+        match &self.outcome {
+            Some(Err(error)) => error.clone(),
+            Some(Ok(_)) => NONE.into(),
+            None => not_run(),
+        }
     }
 
     #[must_use]
@@ -332,6 +358,11 @@ impl Core {
                 .collect();
             list(&files)
         })
+    }
+
+    #[must_use]
+    pub fn files_parsed(&self) -> String {
+        self.read(|analysis| analysis.files_parsed().to_string())
     }
 
     #[must_use]
@@ -402,6 +433,34 @@ impl Core {
     }
 
     #[must_use]
+    pub fn cyclomatic(&self) -> String {
+        self.read(|analysis| {
+            read::metric_value(
+                analysis,
+                &read::subject(&self.subject),
+                MetricId::Cyclomatic,
+            )
+        })
+    }
+
+    /// The value of the `setting` column.
+    #[must_use]
+    pub fn value(&self) -> String {
+        if self.setting.is_empty() {
+            return String::new();
+        }
+        SettingKey::parse(&self.setting).map_or_else(
+            || failed(&format!("unknown setting {}", self.setting)),
+            |key| self.read_settings(key),
+        )
+    }
+
+    #[must_use]
+    pub fn tests_included(&self) -> String {
+        self.read_settings(SettingKey::TestsInclude)
+    }
+
+    #[must_use]
     pub fn direction(&self) -> String {
         self.metric_id().map_or_else(
             |error| failed(&error),
@@ -424,5 +483,172 @@ impl Core {
             .ok()
             .and_then(|value| metric.descriptor().heat_of(scope, value));
         heat.map_or_else(|| NONE.into(), |heat| heat.name().into())
+    }
+}
+
+/// Runs the real `cyclops` binary, after the steps.
+struct Ran {
+    output: Output,
+    created: Vec<String>,
+    scenario: Scenario,
+}
+
+#[derive(Default)]
+pub struct Cli {
+    workspace: String,
+    steps: String,
+    command: String,
+    subject: String,
+    stdout_text: String,
+    stderr_text: String,
+    outcome: Option<Result<Ran, String>>,
+}
+
+impl Cli {
+    fn play(&self) -> Result<Ran, String> {
+        let scratch = Scratch::from_sample(&self.workspace).map_err(|e| e.to_string())?;
+        let mut scenario = Scenario::new(scratch);
+        let step_runner = |scenario: &Scenario, arguments: &str| {
+            let output = run(scenario, arguments)?;
+            if output.status.success() {
+                Ok(())
+            } else {
+                Err(String::from_utf8_lossy(&output.stderr).into_owned())
+            }
+        };
+        scenario.steps(&self.steps, &step_runner)?;
+        let before = files_in(scenario.root());
+        let arguments = self
+            .command
+            .strip_prefix("cyclops")
+            .ok_or_else(|| format!("not a cyclops command: {}", self.command))?;
+        let output = run(&scenario, arguments)?;
+        let created = files_in(scenario.root())
+            .difference(&before)
+            .cloned()
+            .collect();
+        Ok(Ran {
+            output,
+            created,
+            scenario,
+        })
+    }
+
+    fn read(&self, reader: impl FnOnce(&Ran) -> String) -> String {
+        match &self.outcome {
+            Some(Ok(ran)) => reader(ran),
+            Some(Err(error)) => format!("failed: {error}"),
+            None => "failed: nothing was run".into(),
+        }
+    }
+
+    fn setting(&self, key: SettingKey) -> String {
+        self.read(|ran| {
+            ran.scenario.settings().map_or_else(
+                |error| format!("failed: {error}"),
+                |settings| settings.display(key),
+            )
+        })
+    }
+}
+
+#[fixture]
+impl Cli {
+    #[slim(constructor)]
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn set_workspace(&mut self, workspace: String) {
+        self.workspace = workspace;
+    }
+
+    pub fn set_steps(&mut self, steps: String) {
+        self.steps = steps;
+    }
+
+    pub fn set_command(&mut self, command: String) {
+        self.command = command;
+    }
+
+    pub fn set_subject(&mut self, subject: String) {
+        self.subject = subject;
+    }
+
+    pub fn set_stdout_text(&mut self, text: String) {
+        self.stdout_text = text;
+    }
+
+    pub fn set_stderr_text(&mut self, text: String) {
+        self.stderr_text = text;
+    }
+
+    pub fn execute(&mut self) {
+        self.outcome = Some(self.play());
+    }
+
+    #[must_use]
+    pub fn exit_code(&self) -> String {
+        self.read(|ran| {
+            ran.output
+                .status
+                .code()
+                .map_or_else(|| "killed".into(), |code| code.to_string())
+        })
+    }
+
+    #[must_use]
+    pub fn stdout_includes(&self) -> String {
+        self.read(|ran| {
+            includes(
+                &String::from_utf8_lossy(&ran.output.stdout),
+                &self.stdout_text,
+            )
+        })
+    }
+
+    #[must_use]
+    pub fn stderr_includes(&self) -> String {
+        self.read(|ran| {
+            includes(
+                &String::from_utf8_lossy(&ran.output.stderr),
+                &self.stderr_text,
+            )
+        })
+    }
+
+    #[must_use]
+    pub fn created(&self) -> String {
+        self.read(|ran| list(&ran.created))
+    }
+
+    #[must_use]
+    pub fn languages(&self) -> String {
+        self.setting(SettingKey::ProjectLanguages)
+    }
+
+    #[must_use]
+    pub fn tests_included(&self) -> String {
+        self.setting(SettingKey::TestsInclude)
+    }
+
+    #[must_use]
+    pub fn ignored_by_git(&self) -> String {
+        self.read(|ran| {
+            let checked = Command::new("git")
+                .args(["check-ignore", "-q", &self.subject])
+                .current_dir(ran.scenario.root())
+                .status();
+            match checked.map(|status| status.code()) {
+                Ok(Some(0)) => yes_no(true),
+                Ok(Some(1)) => yes_no(false),
+                _ => NONE.into(),
+            }
+        })
     }
 }

@@ -182,7 +182,7 @@ fn add_symbols(symbols: &mut SymbolSet, file: &FileFacts, module: &SymbolId) {
 mod tests {
     use super::*;
     use crate::extract::extract;
-    use cyclops_application::ports::{Discovered, SourceError};
+    use cyclops_application::ports::{Discovered, FileStamp, SourceError};
     use cyclops_domain::symbol::Symbol;
 
     struct Project(&'static [(&'static str, &'static str)]);
@@ -194,6 +194,10 @@ mod tests {
 
         fn discover(&self) -> Result<Discovered, SourceError> {
             Ok(Discovered::default())
+        }
+
+        fn stamp(&self, path: &RelativePath) -> Result<FileStamp, SourceError> {
+            Err(SourceError::Unreadable(path.clone()))
         }
 
         fn read(&self, path: &RelativePath) -> Result<Vec<u8>, SourceError> {

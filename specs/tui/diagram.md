@@ -73,17 +73,17 @@ the place of the last node in the column, so that what is selected is always on 
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation  | workspace | size   | keys                               | popup?     | has?      | lacks? |
-| ------------ | --------- | ------ | ---------------------------------- | ---------- | --------- | ------ |
-| Too many     | rust-wide | 80x24  | `<C-p>hub<CR><Space>d`             | none       | more      | none   |
-| Opening it   | rust-wide | 80x24  | `<C-p>hub<CR><Space>d<click more>` | more nodes | wide::m12 | none   |
-| Room for all | rust-wide | 200x80 | `<C-p>hub<CR><Space>d`             | none       | wide::m12 | more   |
+| # situation  | workspace | size   | keys                               | popup?     | text      | includes? | other text | other includes? |
+| ------------ | --------- | ------ | ---------------------------------- | ---------- | --------- | --------- | ---------- | --------------- |
+| Too many     | rust-wide | 80x24  | `<C-p>hub<CR><Space>d`             | none       | more      | yes       | none       | no              |
+| Opening it   | rust-wide | 80x24  | `<C-p>hub<CR><Space>d<click more>` | more nodes | wide::m12 | yes       | none       | no              |
+| Room for all | rust-wide | 200x80 | `<C-p>hub<CR><Space>d`             | none       | wide::m12 | yes       | more       | no              |
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation  | workspace | size  | keys                                                     | popup? | selected? | has?      |
-| ------------ | --------- | ----- | -------------------------------------------------------- | ------ | --------- | --------- |
-| Choosing one | rust-wide | 80x24 | `<C-p>hub<CR><Space>d<click more><click menu wide::m12>` | none   | wide::m12 | wide::m12 |
+| # situation  | workspace | size  | keys                                                     | popup? | selected? | text      | includes? |
+| ------------ | --------- | ----- | -------------------------------------------------------- | ------ | --------- | --------- | --------- |
+| Choosing one | rust-wide | 80x24 | `<C-p>hub<CR><Space>d<click more><click menu wide::m12>` | none   | wide::m12 | wide::m12 | yes       |
 
 ## Reading it
 
@@ -111,18 +111,18 @@ and the legend stays on screen. `node value?` reads the `subject` node.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys       | has?       |
-| ----------- | --------- | ---------- | ---------- |
-| The legend  | rust-shop | `<Space>d` | ambiguous  |
-| The kinds   | rust-shop | `<Space>d` | implements |
+| # situation | workspace | keys       | text       | includes? |
+| ----------- | --------- | ---------- | ---------- | --------- |
+| The legend  | rust-shop | `<Space>d` | ambiguous  | yes       |
+| The kinds   | rust-shop | `<Space>d` | implements | yes       |
 
 A filter keeps a node whole, so the diagram says how much it left out.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys                           | has?         |
-| ----------- | --------- | ------------------------------ | ------------ |
-| Filtered    | rust-shop | `fpath ~ "src/o*"<CR><Space>d` | 1 of 4 nodes |
+| # situation | workspace | keys                           | text         | includes? |
+| ----------- | --------- | ------------------------------ | ------------ | --------- |
+| Filtered    | rust-shop | `fpath ~ "src/o*"<CR><Space>d` | 1 of 4 nodes | yes       |
 
 ## Class boxes
 
@@ -140,15 +140,15 @@ which centers the diagram on the member's type. The interface has no separate me
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation  | workspace | keys                             | level? | selected?                     | has?        |
-| ------------ | --------- | -------------------------------- | ------ | ----------------------------- | ----------- |
-| Expanded     | rust-shop | `<C-p>Order<CR><Space>d<CR>`     | type   | shop::orders::Order           | invoices    |
-| A field      | rust-shop | `<C-p>Order<CR><Space>d<CR>j`    | type   | shop::orders::Order::invoices | invoices    |
-| A method     | rust-shop | `<C-p>Order<CR><Space>d<CR>jj`   | type   | shop::orders::Order::total    | total()     |
-| Collapsed    | rust-shop | `<C-p>Order<CR><Space>d<CR>-`    | type   | shop::orders::Order           | Order       |
-| At the end   | rust-shop | `<C-p>Order<CR><Space>d<CR>jjjj` | type   | shop::orders::Order::add      | add()       |
-| Leaving it   | rust-shop | `<C-p>Order<CR><Space>d<CR>jl`   | type   | shop::billing::Invoice        | Invoice     |
-| A stereotype | rust-shop | `<C-p>Priced<CR><Space>d`        | type   | shop::catalog::Priced         | «interface» |
+| # situation  | workspace | keys                             | level? | selected?                     | text        | includes? |
+| ------------ | --------- | -------------------------------- | ------ | ----------------------------- | ----------- | --------- |
+| Expanded     | rust-shop | `<C-p>Order<CR><Space>d<CR>`     | type   | shop::orders::Order           | invoices    | yes       |
+| A field      | rust-shop | `<C-p>Order<CR><Space>d<CR>j`    | type   | shop::orders::Order::invoices | invoices    | yes       |
+| A method     | rust-shop | `<C-p>Order<CR><Space>d<CR>jj`   | type   | shop::orders::Order::total    | total()     | yes       |
+| Collapsed    | rust-shop | `<C-p>Order<CR><Space>d<CR>-`    | type   | shop::orders::Order           | Order       | yes       |
+| At the end   | rust-shop | `<C-p>Order<CR><Space>d<CR>jjjj` | type   | shop::orders::Order::add      | add()       | yes       |
+| Leaving it   | rust-shop | `<C-p>Order<CR><Space>d<CR>jl`   | type   | shop::billing::Invoice        | Invoice     | yes       |
+| A stereotype | rust-shop | `<C-p>Priced<CR><Space>d`        | type   | shop::catalog::Priced         | «interface» | yes       |
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
@@ -180,12 +180,12 @@ from any view, and go to Diagram if the view cannot show them.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace   | keys   | view?    | focus?    | has?                 |
-| ----------- | ----------- | ------ | -------- | --------- | -------------------- |
-| The first   | rust-cycles | `]c`   | Diagram  | cycles::a | Neighbors of a       |
-| The second  | rust-cycles | `]c]c` | Diagram  | cycles::c | Neighbors of c       |
-| Back        | rust-cycles | `]c[c` | Diagram  | cycles::c | Neighbors of c       |
-| None        | rust-shop   | `]c`   | Overview | shop      | No dependency cycles |
+| # situation | workspace   | keys   | view?    | focus?    | text                 | includes? |
+| ----------- | ----------- | ------ | -------- | --------- | -------------------- | --------- |
+| The first   | rust-cycles | `]c`   | Diagram  | cycles::a | Neighbors of a       | yes       |
+| The second  | rust-cycles | `]c]c` | Diagram  | cycles::c | Neighbors of c       | yes       |
+| Back        | rust-cycles | `]c[c` | Diagram  | cycles::c | Neighbors of c       | yes       |
+| None        | rust-shop   | `]c`   | Overview | shop      | No dependency cycles | yes       |
 
 ## Impact
 
@@ -195,13 +195,13 @@ distance, how many modules and packages they reach, and how many of those are gu
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps              | keys                        | view?   | section? | has?                     |
-| ----------- | --------- | ------------------ | --------------------------- | ------- | -------- | ------------------------ |
-| Opening     | rust-shop |                    | `<C-p>catalog<CR>gr`        | Diagram | Impact   | distance 1               |
-| The reach   | rust-shop |                    | `<C-p>catalog<CR>gr`        | Diagram | Impact   | 2 of 4 modules           |
-| Nothing     | rust-shop |                    | `<C-p>notes<CR>gr`          | Diagram | Impact   | Nothing depends on this. |
-| Guesses     | rust-shop |                    | `<C-p>Invoice::total<CR>gr` | Diagram | Impact   | 1 of these is a guess.   |
-| None left   | rust-shop | `precise analysis` | `<C-p>Invoice::total<CR>gr` | Diagram | Impact   | exact                    |
+| # situation | workspace | steps              | keys                        | view?   | section? | text                     | includes? |
+| ----------- | --------- | ------------------ | --------------------------- | ------- | -------- | ------------------------ | --------- |
+| Opening     | rust-shop |                    | `<C-p>catalog<CR>gr`        | Diagram | Impact   | distance 1               | yes       |
+| The reach   | rust-shop |                    | `<C-p>catalog<CR>gr`        | Diagram | Impact   | 2 of 4 modules           | yes       |
+| Nothing     | rust-shop |                    | `<C-p>notes<CR>gr`          | Diagram | Impact   | Nothing depends on this. | yes       |
+| Guesses     | rust-shop |                    | `<C-p>Invoice::total<CR>gr` | Diagram | Impact   | 1 of these is a guess.   | yes       |
+| None left   | rust-shop | `precise analysis` | `<C-p>Invoice::total<CR>gr` | Diagram | Impact   | exact                    | yes       |
 
 ## Exporting
 
@@ -209,19 +209,19 @@ distance, how many modules and packages they reach, and how many of those are gu
 output as [`cyclops export`](../cli/commands.md#exporting), with the current focus, depth,
 level and overlay. So a diagram of types exports as a
 [class diagram](../cli/commands.md#class-diagrams). A format it does not know is refused.
-`exported has?` reads the file.
+`exported text` and `exported includes?` read the file.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation    | workspace | keys                                  | mode?   | created? | has?                  |
-| -------------- | --------- | ------------------------------------- | ------- | -------- | --------------------- |
-| The prompt     | rust-shop | `<Space>d<Space>x`                    | COMMAND | none     | :export               |
-| Writing        | rust-shop | `<Space>d:export mermaid out.mmd<CR>` | NORMAL  | out.mmd  | out.mmd               |
-| Unknown format | rust-shop | `<Space>d:export visio out<CR>`       | NORMAL  | none     | Unknown format: visio |
+| # situation    | workspace | keys                                  | mode?   | created? | text                  | includes? |
+| -------------- | --------- | ------------------------------------- | ------- | -------- | --------------------- | --------- |
+| The prompt     | rust-shop | `<Space>d<Space>x`                    | COMMAND | none     | :export               | yes       |
+| Writing        | rust-shop | `<Space>d:export mermaid out.mmd<CR>` | NORMAL  | out.mmd  | out.mmd               | yes       |
+| Unknown format | rust-shop | `<Space>d:export visio out<CR>`       | NORMAL  | none     | Unknown format: visio | yes       |
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation     | workspace | keys                                                | created? | exported has? |
-| --------------- | --------- | --------------------------------------------------- | -------- | ------------- |
-| A class diagram | rust-shop | `<C-p>Order<CR><Space>d:export mermaid out.mmd<CR>` | out.mmd  | classDiagram  |
-| With its scores | rust-shop | `<C-p>Order<CR><Space>d:export mermaid out.mmd<CR>` | out.mmd  | cyclomatic 3  |
+| # situation     | workspace | keys                                                | created? | exported text | exported includes? |
+| --------------- | --------- | --------------------------------------------------- | -------- | ------------- | ------------------ |
+| A class diagram | rust-shop | `<C-p>Order<CR><Space>d:export mermaid out.mmd<CR>` | out.mmd  | classDiagram  | yes                |
+| With its scores | rust-shop | `<C-p>Order<CR><Space>d:export mermaid out.mmd<CR>` | out.mmd  | cyclomatic 3  | yes                |

@@ -20,36 +20,36 @@ and `<resume>` lets it finish.
 [//]: # "import Spec.Fixtures"
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation       | workspace | steps                            | keys                 | mode?     | view?    | has?                    | lacks? |
-| ----------------- | --------- | -------------------------------- | -------------------- | --------- | -------- | ----------------------- | ------ |
-| Opens at once     | rust-shop | `pause before extract`           |                      | ANALYZING | Overview | Analysis                | none   |
-| Partial results   | rust-shop | `pause before link`              |                      | ANALYZING | Overview | so far                  | none   |
-| Needs the links   | rust-shop | `pause before link`              |                      | ANALYZING | Overview | waiting for link        | none   |
-| Needs the history | rust-shop | `git init; pause before history` |                      | ANALYZING | Overview | waiting for git history | none   |
-| Browsing          | rust-shop | `pause before link`              | `<Space>e`           | ANALYZING | Explore  | Structure               | none   |
-| Filtering         | rust-shop | `pause before link`              | `fkind = struct<CR>` | ANALYZING | Overview | kind = struct           | none   |
-| It finishes       | rust-shop | `pause before link`              | `<resume>`           | NORMAL    | Overview | fresh                   | so far |
-| The view stays    | rust-shop | `pause before link`              | `<Space>e<resume>`   | NORMAL    | Explore  | Structure               | so far |
+| # situation       | workspace | steps                            | keys                 | mode?     | view?    | text                    | includes? | other text | other includes? |
+| ----------------- | --------- | -------------------------------- | -------------------- | --------- | -------- | ----------------------- | --------- | ---------- | --------------- |
+| Opens at once     | rust-shop | `pause before extract`           |                      | ANALYZING | Overview | Analysis                | yes       | none       | no              |
+| Partial results   | rust-shop | `pause before link`              |                      | ANALYZING | Overview | so far                  | yes       | none       | no              |
+| Needs the links   | rust-shop | `pause before link`              |                      | ANALYZING | Overview | waiting for link        | yes       | none       | no              |
+| Needs the history | rust-shop | `git init; pause before history` |                      | ANALYZING | Overview | waiting for git history | yes       | none       | no              |
+| Browsing          | rust-shop | `pause before link`              | `<Space>e`           | ANALYZING | Explore  | Structure               | yes       | none       | no              |
+| Filtering         | rust-shop | `pause before link`              | `fkind = struct<CR>` | ANALYZING | Overview | kind = struct           | yes       | none       | no              |
+| It finishes       | rust-shop | `pause before link`              | `<resume>`           | NORMAL    | Overview | fresh                   | yes       | so far     | no              |
+| The view stays    | rust-shop | `pause before link`              | `<Space>e<resume>`   | NORMAL    | Explore  | Structure               | yes       | so far     | no              |
 
 Results from a cache need no waiting, and an analysis with nothing to do says so.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation  | workspace | steps     | mode?  | has?                   |
-| ------------ | --------- | --------- | ------ | ---------------------- |
-| From a cache | rust-shop | `analyze` | NORMAL | fresh                  |
-| No sources   | docs-only |           | NORMAL | No source files found. |
+| # situation  | workspace | steps     | mode?  | text                   | includes? |
+| ------------ | --------- | --------- | ------ | ---------------------- | --------- |
+| From a cache | rust-shop | `analyze` | NORMAL | fresh                  | yes       |
+| No sources   | docs-only |           | NORMAL | No source files found. | yes       |
 
 Analysis works without `cyclops init`, as [initializing](../project/initializing.md#without-initializing)
 explains. The interface says which settings are in use, and `:init` saves them.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation     | workspace | steps                                        | keys        | has?                    | lacks?                  | created?             |
-| --------------- | --------- | -------------------------------------------- | ----------- | ----------------------- | ----------------------- | -------------------- |
-| Not initialized | rust-shop | `pause before link`                          |             | No project settings yet | none                    | none                 |
-| Saving them     | rust-shop | `pause before link`                          | `:init<CR>` | Analysis                | No project settings yet | .cyclops/config.toml |
-| Already set up  | rust-shop | `set tests.include false; pause before link` |             | Analysis                | No project settings yet | none                 |
+| # situation     | workspace | steps                                        | keys        | text                    | includes? | other text              | other includes? | created?             |
+| --------------- | --------- | -------------------------------------------- | ----------- | ----------------------- | --------- | ----------------------- | --------------- | -------------------- |
+| Not initialized | rust-shop | `pause before link`                          |             | No project settings yet | yes       | none                    | no              | none                 |
+| Saving them     | rust-shop | `pause before link`                          | `:init<CR>` | Analysis                | yes       | No project settings yet | no              | .cyclops/config.toml |
+| Already set up  | rust-shop | `set tests.include false; pause before link` |             | Analysis                | yes       | No project settings yet | no              | none                 |
 
 Quitting during an analysis stops it, and what was finished stays in the cache.
 
@@ -68,18 +68,18 @@ files the last refresh parsed.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation   | workspace | keys                                  | parsed? | has?  |
-| ------------- | --------- | ------------------------------------- | ------- | ----- |
-| Nothing new   | rust-shop | `<Space>r`                            | 0       | fresh |
-| One file      | rust-shop | `<step edit src/orders.rs><Space>r`   | 1       | fresh |
-| Not refreshed | rust-shop | `<step edit src/orders.rs><wait 500>` | 0       | stale |
+| # situation   | workspace | keys                                  | parsed? | text  | includes? |
+| ------------- | --------- | ------------------------------------- | ------- | ----- | --------- |
+| Nothing new   | rust-shop | `<Space>r`                            | 0       | fresh | yes       |
+| One file      | rust-shop | `<step edit src/orders.rs><Space>r`   | 1       | fresh | yes       |
+| Not refreshed | rust-shop | `<step edit src/orders.rs><wait 500>` | 0       | stale | yes       |
 
 A refresh keeps the view and the lens. If the focus no longer exists, it moves to the
 nearest parent that does, and says so.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys                                                     | view?   | focus?                     | has?             |
-| ----------- | --------- | -------------------------------------------------------- | ------- | -------------------------- | ---------------- |
-| It stays    | rust-shop | `<C-p>Order::total<CR><step edit src/orders.rs><Space>r` | Explore | shop::orders::Order::total | Structure        |
-| It is gone  | rust-shop | `<C-p>greeting<CR><step delete src/notes.rs><Space>r`    | Explore | shop                       | greeting is gone |
+| # situation | workspace | keys                                                     | view?   | focus?                     | text             | includes? |
+| ----------- | --------- | -------------------------------------------------------- | ------- | -------------------------- | ---------------- | --------- |
+| It stays    | rust-shop | `<C-p>Order::total<CR><step edit src/orders.rs><Space>r` | Explore | shop::orders::Order::total | Structure        | yes       |
+| It is gone  | rust-shop | `<C-p>greeting<CR><step delete src/notes.rs><Space>r`    | Explore | shop                       | greeting is gone | yes       |

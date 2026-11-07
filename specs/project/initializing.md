@@ -7,7 +7,7 @@ holds the project's settings, which are meant to be committed, and its cache, wh
 stays local.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation        | workspace | command        | exit code? | created?                                  | languages?                   |
 | ------------------ | --------- | -------------- | ---------- | ----------------------------------------- | ---------------------------- |
@@ -21,18 +21,18 @@ stays local.
 
 An existing configuration is never overwritten.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
-| # situation       | workspace | steps                                  | command        | exit code? | tests included? | stdout has?         |
-| ----------------- | --------- | -------------------------------------- | -------------- | ---------- | --------------- | ------------------- |
-| Settings are kept | rust-shop | `cyclops init; set tests.include true` | `cyclops init` | 0          | true            | Already initialized |
+| # situation       | workspace | steps                                  | command        | exit code? | tests included? | stdout text         | stdout includes? |
+| ----------------- | --------- | -------------------------------------- | -------------- | ---------- | --------------- | ------------------- | ---------------- |
+| Settings are kept | rust-shop | `cyclops init; set tests.include true` | `cyclops init` | 0          | true            | Already initialized | yes              |
 
 ## Without initializing
 
 Analysis works without `init`, using the [default settings](configuration.md#defaults).
 It creates what it needs for the cache and nothing else.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation | workspace | command           | exit code? | created?                                       |
 | ----------- | --------- | ----------------- | ---------- | ---------------------------------------------- |
@@ -43,7 +43,7 @@ It creates what it needs for the cache and nothing else.
 The generated `.gitignore` keeps the cache out of the repository, so nobody has to
 edit their own.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation       | workspace | steps                    | command           | subject                   | ignored by git? |
 | ----------------- | --------- | ------------------------ | ----------------- | ------------------------- | --------------- |

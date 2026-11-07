@@ -3,8 +3,9 @@
 Back to the [specification index](../README.md).
 
 The command line gives scripts and CI everything the core does. Data goes to stdout
-and errors go to stderr, so that output can be piped. The `stdout has?` and
-`stderr has?` columns are text that must appear, and `nothing` means it stays empty.
+and errors go to stderr, so that output can be piped. `stdout includes?` says whether
+the output has the `stdout text`, and `nothing` as the text means it stays empty. The
+`stderr` columns work the same way.
 
 `cyclops` with no command opens the [terminal interface](../tui/README.md).
 
@@ -19,14 +20,14 @@ and errors go to stderr, so that output can be piped. The `stdout has?` and
 Commands work on the current folder, or the one given with `-C`.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
-| # situation        | workspace | command                      | exit code? | stdout has? | stderr has?                |
-| ------------------ | --------- | ---------------------------- | ---------- | ----------- | -------------------------- |
-| The current one    | rust-shop | `cyclops analyze`            | 0          | 6 files     | nothing                    |
-| Another one        | rust-shop | `cyclops -C src analyze`     | 0          | 5 files     | nothing                    |
-| Does not exist     | rust-shop | `cyclops -C nowhere analyze` | 2          | nothing     | Project not found: nowhere |
-| An unknown command | rust-shop | `cyclops nonsense`           | 2          | nothing     | nonsense                   |
+| # situation        | workspace | command                      | exit code? | stdout text | stdout includes? | stderr text                | stderr includes? |
+| ------------------ | --------- | ---------------------------- | ---------- | ----------- | ---------------- | -------------------------- | ---------------- |
+| The current one    | rust-shop | `cyclops analyze`            | 0          | 6 files     | yes              | nothing                    | yes              |
+| Another one        | rust-shop | `cyclops -C src analyze`     | 0          | 5 files     | yes              | nothing                    | yes              |
+| Does not exist     | rust-shop | `cyclops -C nowhere analyze` | 2          | nothing     | yes              | Project not found: nowhere | yes              |
+| An unknown command | rust-shop | `cyclops nonsense`           | 2          | nothing     | yes              | nonsense                   | yes              |
 
 ## Analyzing
 
@@ -36,13 +37,13 @@ Commands work on the current folder, or the one given with `-C`.
 
 [//]: # "decisionTable Cli -- snooze until 2099-12-31"
 
-| # situation     | workspace | steps          | command                     | exit code? | stderr has?                             |
-| --------------- | --------- | -------------- | --------------------------- | ---------- | --------------------------------------- |
-| Everything fine | rust-shop |                | `cyclops analyze`           | 0          | nothing                                 |
-| Broken files    | broken    |                | `cyclops analyze`           | 0          | src/bad.rs: syntax error                |
-| Nothing to do   | docs-only |                | `cyclops analyze`           | 0          | No source files found.                  |
-| Bad settings    | rust-shop | `break config` | `cyclops analyze`           | 2          | .cyclops/config.toml is not valid TOML. |
-| Asking for more | rust-shop |                | `cyclops analyze --precise` | 0          | nothing                                 |
+| # situation     | workspace | steps          | command                     | exit code? | stderr text                             | stderr includes? |
+| --------------- | --------- | -------------- | --------------------------- | ---------- | --------------------------------------- | ---------------- |
+| Everything fine | rust-shop |                | `cyclops analyze`           | 0          | nothing                                 | yes              |
+| Broken files    | broken    |                | `cyclops analyze`           | 0          | src/bad.rs: syntax error                | yes              |
+| Nothing to do   | docs-only |                | `cyclops analyze`           | 0          | No source files found.                  | yes              |
+| Bad settings    | rust-shop | `break config` | `cyclops analyze`           | 2          | .cyclops/config.toml is not valid TOML. | yes              |
+| Asking for more | rust-shop |                | `cyclops analyze --precise` | 0          | nothing                                 | yes              |
 
 ## Reporting
 
@@ -51,16 +52,16 @@ JSON is for tools. The JSON is one document with no other text around it.
 
 [//]: # "decisionTable Cli -- snooze until 2099-12-31"
 
-| # situation | workspace | command                        | exit code? | valid json? | stdout has?                |
-| ----------- | --------- | ------------------------------ | ---------- | ----------- | -------------------------- |
-| For people  | rust-shop | `cyclops report`               | 0          | no          | shop::orders::Order::total |
-| For tools   | rust-shop | `cyclops report --format json` | 0          | yes         | shop::orders::Order::total |
+| # situation | workspace | command                        | exit code? | valid json? | stdout text                | stdout includes? |
+| ----------- | --------- | ------------------------------ | ---------- | ----------- | -------------------------- | ---------------- |
+| For people  | rust-shop | `cyclops report`               | 0          | no          | shop::orders::Order::total | yes              |
+| For tools   | rust-shop | `cyclops report --format json` | 0          | yes         | shop::orders::Order::total | yes              |
 
 [//]: # "decisionTable Cli -- snooze until 2099-12-31"
 
-| # situation    | workspace | command                       | exit code? | stdout has? | stderr has?         |
-| -------------- | --------- | ----------------------------- | ---------- | ----------- | ------------------- |
-| Unknown format | rust-shop | `cyclops report --format xml` | 2          | nothing     | Unknown format: xml |
+| # situation    | workspace | command                       | exit code? | stdout text | stdout includes? | stderr text         | stderr includes? |
+| -------------- | --------- | ----------------------------- | ---------- | ----------- | ---------------- | ------------------- | ---------------- |
+| Unknown format | rust-shop | `cyclops report --format xml` | 2          | nothing     | yes              | Unknown format: xml | yes              |
 
 ## Querying
 
@@ -68,13 +69,13 @@ JSON is for tools. The JSON is one document with no other text around it.
 
 [//]: # "decisionTable Cli -- snooze until 2099-12-31"
 
-| # situation  | workspace | command                                                            | exit code? | stdout has?                | stderr has?    |
-| ------------ | --------- | ------------------------------------------------------------------ | ---------- | -------------------------- | -------------- |
-| A match      | rust-shop | `cyclops query 'kind = method and cyclomatic > 2'`                 | 0          | shop::orders::Order::total | nothing        |
-| Sorted       | rust-shop | `cyclops query 'kind = method' --sort 'cyclomatic desc' --limit 1` | 0          | shop::orders::Order::total | nothing        |
-| As JSON      | rust-shop | `cyclops query 'kind = interface' --format json`                   | 0          | shop::catalog::Priced      | nothing        |
-| No matches   | rust-shop | `cyclops query 'cyclomatic > 99'`                                  | 0          | nothing                    | nothing        |
-| A bad filter | rust-shop | `cyclops query 'cyclomatic >'`                                     | 2          | nothing                    | Invalid filter |
+| # situation  | workspace | command                                                            | exit code? | stdout text                | stdout includes? | stderr text    | stderr includes? |
+| ------------ | --------- | ------------------------------------------------------------------ | ---------- | -------------------------- | ---------------- | -------------- | ---------------- |
+| A match      | rust-shop | `cyclops query 'kind = method and cyclomatic > 2'`                 | 0          | shop::orders::Order::total | yes              | nothing        | yes              |
+| Sorted       | rust-shop | `cyclops query 'kind = method' --sort 'cyclomatic desc' --limit 1` | 0          | shop::orders::Order::total | yes              | nothing        | yes              |
+| As JSON      | rust-shop | `cyclops query 'kind = interface' --format json`                   | 0          | shop::catalog::Priced      | yes              | nothing        | yes              |
+| No matches   | rust-shop | `cyclops query 'cyclomatic > 99'`                                  | 0          | nothing                    | yes              | nothing        | yes              |
+| A bad filter | rust-shop | `cyclops query 'cyclomatic >'`                                     | 2          | nothing                    | yes              | Invalid filter | yes              |
 
 ## Checking alerts
 
@@ -83,21 +84,21 @@ reaches `check.fail_on`, or the `--fail-on` flag, which is `error` by default.
 
 [//]: # "decisionTable Cli -- snooze until 2099-12-31"
 
-| # situation      | workspace | steps                                                                  | command                           | exit code? | stdout has?                |
-| ---------------- | --------- | ---------------------------------------------------------------------- | --------------------------------- | ---------- | -------------------------- |
-| No rules         | rust-shop |                                                                        | `cyclops check`                   | 0          | nothing                    |
-| No alerts        | rust-shop | `add alert cyclomatic function > 99 error`                             | `cyclops check`                   | 0          | nothing                    |
-| Only warnings    | rust-shop | `add alert cyclomatic function > 2 warning`                            | `cyclops check`                   | 0          | shop::orders::Order::total |
-| An error         | rust-shop | `add alert cyclomatic function > 2 error`                              | `cyclops check`                   | 1          | shop::orders::Order::total |
-| Stricter by flag | rust-shop | `add alert cyclomatic function > 2 warning`                            | `cyclops check --fail-on warning` | 1          | shop::orders::Order::total |
-| Stricter by file | rust-shop | `add alert cyclomatic function > 2 warning; set check.fail_on warning` | `cyclops check`                   | 1          | shop::orders::Order::total |
-| The flag wins    | rust-shop | `add alert cyclomatic function > 2 warning; set check.fail_on warning` | `cyclops check --fail-on error`   | 0          | shop::orders::Order::total |
+| # situation      | workspace | steps                                                                  | command                           | exit code? | stdout text                | stdout includes? |
+| ---------------- | --------- | ---------------------------------------------------------------------- | --------------------------------- | ---------- | -------------------------- | ---------------- |
+| No rules         | rust-shop |                                                                        | `cyclops check`                   | 0          | nothing                    | yes              |
+| No alerts        | rust-shop | `add alert cyclomatic function > 99 error`                             | `cyclops check`                   | 0          | nothing                    | yes              |
+| Only warnings    | rust-shop | `add alert cyclomatic function > 2 warning`                            | `cyclops check`                   | 0          | shop::orders::Order::total | yes              |
+| An error         | rust-shop | `add alert cyclomatic function > 2 error`                              | `cyclops check`                   | 1          | shop::orders::Order::total | yes              |
+| Stricter by flag | rust-shop | `add alert cyclomatic function > 2 warning`                            | `cyclops check --fail-on warning` | 1          | shop::orders::Order::total | yes              |
+| Stricter by file | rust-shop | `add alert cyclomatic function > 2 warning; set check.fail_on warning` | `cyclops check`                   | 1          | shop::orders::Order::total | yes              |
+| The flag wins    | rust-shop | `add alert cyclomatic function > 2 warning; set check.fail_on warning` | `cyclops check --fail-on error`   | 0          | shop::orders::Order::total | yes              |
 
 [//]: # "decisionTable Cli -- snooze until 2099-12-31"
 
-| # situation  | workspace | steps          | command         | exit code? | stderr has?                             |
-| ------------ | --------- | -------------- | --------------- | ---------- | --------------------------------------- |
-| Bad settings | rust-shop | `break config` | `cyclops check` | 2          | .cyclops/config.toml is not valid TOML. |
+| # situation  | workspace | steps          | command         | exit code? | stderr text                             | stderr includes? |
+| ------------ | --------- | -------------- | --------------- | ---------- | --------------------------------------- | ---------------- |
+| Bad settings | rust-shop | `break config` | `cyclops check` | 2          | .cyclops/config.toml is not valid TOML. | yes              |
 
 `cyclops check` ignores [your own settings](../project/configuration.md#your-own-settings),
 both rules and settings, so that it gives the same answer on every machine, including CI.
@@ -119,23 +120,23 @@ node.
 
 [//]: # "decisionTable Cli -- snooze until 2099-12-31"
 
-| # situation | workspace | command                                                                  | exit code? | stdout has?   |
-| ----------- | --------- | ------------------------------------------------------------------------ | ---------- | ------------- |
-| Mermaid     | rust-shop | `cyclops export --format mermaid`                                        | 0          | graph         |
-| DOT         | rust-shop | `cyclops export --format dot`                                            | 0          | digraph       |
-| PlantUML    | rust-shop | `cyclops export --format plantuml`                                       | 0          | @startuml     |
-| Part of it  | rust-shop | `cyclops export --format mermaid --focus shop::orders --depth 1`         | 0          | shop::billing |
-| Packages    | rust-shop | `cyclops export --format mermaid --level package`                        | 0          | shop          |
-| Members     | rust-shop | `cyclops export --format dot --level member --focus shop::orders::Order` | 0          | invoices      |
-| Scores      | rust-shop | `cyclops export --format mermaid --overlay cyclomatic`                   | 0          | cyclomatic 3  |
+| # situation | workspace | command                                                                  | exit code? | stdout text   | stdout includes? |
+| ----------- | --------- | ------------------------------------------------------------------------ | ---------- | ------------- | ---------------- |
+| Mermaid     | rust-shop | `cyclops export --format mermaid`                                        | 0          | graph         | yes              |
+| DOT         | rust-shop | `cyclops export --format dot`                                            | 0          | digraph       | yes              |
+| PlantUML    | rust-shop | `cyclops export --format plantuml`                                       | 0          | @startuml     | yes              |
+| Part of it  | rust-shop | `cyclops export --format mermaid --focus shop::orders --depth 1`         | 0          | shop::billing | yes              |
+| Packages    | rust-shop | `cyclops export --format mermaid --level package`                        | 0          | shop          | yes              |
+| Members     | rust-shop | `cyclops export --format dot --level member --focus shop::orders::Order` | 0          | invoices      | yes              |
+| Scores      | rust-shop | `cyclops export --format mermaid --overlay cyclomatic`                   | 0          | cyclomatic 3  | yes              |
 
 [//]: # "decisionTable Cli -- snooze until 2099-12-31"
 
-| # situation    | workspace | command                                          | exit code? | stdout has? | stderr has?              |
-| -------------- | --------- | ------------------------------------------------ | ---------- | ----------- | ------------------------ |
-| Unknown format | rust-shop | `cyclops export --format visio`                  | 2          | nothing     | Unknown format: visio    |
-| Unknown level  | rust-shop | `cyclops export --format dot --level nonsense`   | 2          | nothing     | Unknown level: nonsense  |
-| Unknown metric | rust-shop | `cyclops export --format dot --overlay nonsense` | 2          | nothing     | Unknown metric: nonsense |
+| # situation    | workspace | command                                          | exit code? | stdout text | stdout includes? | stderr text              | stderr includes? |
+| -------------- | --------- | ------------------------------------------------ | ---------- | ----------- | ---------------- | ------------------------ | ---------------- |
+| Unknown format | rust-shop | `cyclops export --format visio`                  | 2          | nothing     | yes              | Unknown format: visio    | yes              |
+| Unknown level  | rust-shop | `cyclops export --format dot --level nonsense`   | 2          | nothing     | yes              | Unknown level: nonsense  | yes              |
+| Unknown metric | rust-shop | `cyclops export --format dot --overlay nonsense` | 2          | nothing     | yes              | Unknown metric: nonsense | yes              |
 
 ### Class diagrams
 
@@ -146,19 +147,19 @@ labelled with its confidence, so that it stays a guess outside Cyclops too.
 
 [//]: # "decisionTable Cli -- snooze until 2099-12-31"
 
-| # situation       | workspace | command                                                             | exit code? | stdout has?     |
-| ----------------- | --------- | ------------------------------------------------------------------- | ---------- | --------------- |
-| Mermaid           | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | classDiagram    |
-| A member          | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | `+total()`      |
-| A stereotype      | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | `<<interface>>` |
-| Composition       | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | `*--`           |
-| Implementation    | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | `<\|..`         |
-| Inheritance       | js-shop   | `cyclops export --format mermaid --level type`                      | 0          | `<\|--`         |
-| A guess           | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | ambiguous       |
-| Scores            | rust-shop | `cyclops export --format mermaid --level type --overlay cyclomatic` | 0          | cyclomatic 3    |
-| PlantUML          | rust-shop | `cyclops export --format plantuml --level type`                     | 0          | interface       |
-| A PlantUML member | rust-shop | `cyclops export --format plantuml --level type`                     | 0          | `+total()`      |
-| DOT               | rust-shop | `cyclops export --format dot --level type`                          | 0          | total           |
+| # situation       | workspace | command                                                             | exit code? | stdout text     | stdout includes? |
+| ----------------- | --------- | ------------------------------------------------------------------- | ---------- | --------------- | ---------------- |
+| Mermaid           | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | classDiagram    | yes              |
+| A member          | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | `+total()`      | yes              |
+| A stereotype      | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | `<<interface>>` | yes              |
+| Composition       | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | `*--`           | yes              |
+| Implementation    | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | `<\|..`         | yes              |
+| Inheritance       | js-shop   | `cyclops export --format mermaid --level type`                      | 0          | `<\|--`         | yes              |
+| A guess           | rust-shop | `cyclops export --format mermaid --level type`                      | 0          | ambiguous       | yes              |
+| Scores            | rust-shop | `cyclops export --format mermaid --level type --overlay cyclomatic` | 0          | cyclomatic 3    | yes              |
+| PlantUML          | rust-shop | `cyclops export --format plantuml --level type`                     | 0          | interface       | yes              |
+| A PlantUML member | rust-shop | `cyclops export --format plantuml --level type`                     | 0          | `+total()`      | yes              |
+| DOT               | rust-shop | `cyclops export --format dot --level type`                          | 0          | total           | yes              |
 
 ## Test code
 
@@ -167,7 +168,7 @@ labelled with its confidence, so that it stays a guess outside Cyclops too.
 
 [//]: # "decisionTable Cli -- snooze until 2099-12-31"
 
-| # situation | workspace | command                                                   | exit code? | stdout has?                    |
-| ----------- | --------- | --------------------------------------------------------- | ---------- | ------------------------------ |
-| Left out    | rust-shop | `cyclops query 'kind = function and role = test'`         | 0          | nothing                        |
-| Included    | rust-shop | `cyclops query 'kind = function and role = test' --tests` | 0          | shop::notes::tests::says_hello |
+| # situation | workspace | command                                                   | exit code? | stdout text                    | stdout includes? |
+| ----------- | --------- | --------------------------------------------------------- | ---------- | ------------------------------ | ---------------- |
+| Left out    | rust-shop | `cyclops query 'kind = function and role = test'`         | 0          | nothing                        | yes              |
+| Included    | rust-shop | `cyclops query 'kind = function and role = test' --tests` | 0          | shop::notes::tests::says_hello | yes              |

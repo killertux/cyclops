@@ -16,13 +16,13 @@ The interface opens on Overview, with the focus on the project. The metric start
 [//]: # "import Spec.Fixtures"
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation        | workspace | steps                    | view?    | mode?  | focus? | metric?    | filter? | tests? | has?                                    |
-| ------------------ | --------- | ------------------------ | -------- | ------ | ------ | ---------- | ------- | ------ | --------------------------------------- |
-| No history         | rust-shop |                          | Overview | NORMAL | shop   | cyclomatic | none    | off    | shop                                    |
-| With history       | rust-shop | `git init`               | Overview | NORMAL | shop   | hotspot    | none    | off    | shop                                    |
-| Test code on       | rust-shop | `set tests.include true` | Overview | NORMAL | shop   | cyclomatic | none    | on     | shop                                    |
-| Nothing to analyze | docs-only |                          | Overview | NORMAL | none   | cyclomatic | none    | off    | No source files found.                  |
-| Bad settings       | rust-shop | `break config`           | Overview | NORMAL | none   | cyclomatic | none    | off    | .cyclops/config.toml is not valid TOML. |
+| # situation        | workspace | steps                    | view?    | mode?  | focus? | metric?    | filter? | tests? | text                                    | includes? |
+| ------------------ | --------- | ------------------------ | -------- | ------ | ------ | ---------- | ------- | ------ | --------------------------------------- | --------- |
+| No history         | rust-shop |                          | Overview | NORMAL | shop   | cyclomatic | none    | off    | shop                                    | yes       |
+| With history       | rust-shop | `git init`               | Overview | NORMAL | shop   | hotspot    | none    | off    | shop                                    | yes       |
+| Test code on       | rust-shop | `set tests.include true` | Overview | NORMAL | shop   | cyclomatic | none    | on     | shop                                    | yes       |
+| Nothing to analyze | docs-only |                          | Overview | NORMAL | none   | cyclomatic | none    | off    | No source files found.                  | yes       |
+| Bad settings       | rust-shop | `break config`           | Overview | NORMAL | none   | cyclomatic | none    | off    | .cyclops/config.toml is not valid TOML. | yes       |
 
 ## Views
 
@@ -69,17 +69,17 @@ has finished, and `precise` after it.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation   | workspace | steps                                       | keys                                  | has?             |
-| ------------- | --------- | ------------------------------------------- | ------------------------------------- | ---------------- |
-| The metric    | rust-shop |                                             | `Mcognitive<CR>`                      | metric cognitive |
-| The filter    | rust-shop |                                             | `fkind = struct<CR>`                  | kind = struct    |
-| Test code     | rust-shop |                                             | `<Space>t`                            | tests on         |
-| Syntax layer  | rust-shop |                                             |                                       | layer syntax     |
-| Precise layer | rust-shop | `precise analysis`                          |                                       | layer precise    |
-| Alert count   | rust-shop | `add alert cyclomatic function > 1 warning` |                                       | 2 alerts         |
-| Problem count | broken    |                                             |                                       | 2 problems       |
-| Fresh         | rust-shop |                                             |                                       | fresh            |
-| Changed files | rust-shop |                                             | `<step edit src/orders.rs><wait 500>` | stale            |
+| # situation   | workspace | steps                                       | keys                                  | text             | includes? |
+| ------------- | --------- | ------------------------------------------- | ------------------------------------- | ---------------- | --------- |
+| The metric    | rust-shop |                                             | `Mcognitive<CR>`                      | metric cognitive | yes       |
+| The filter    | rust-shop |                                             | `fkind = struct<CR>`                  | kind = struct    | yes       |
+| Test code     | rust-shop |                                             | `<Space>t`                            | tests on         | yes       |
+| Syntax layer  | rust-shop |                                             |                                       | layer syntax     | yes       |
+| Precise layer | rust-shop | `precise analysis`                          |                                       | layer precise    | yes       |
+| Alert count   | rust-shop | `add alert cyclomatic function > 1 warning` |                                       | 2 alerts         | yes       |
+| Problem count | broken    |                                             |                                       | 2 problems       | yes       |
+| Fresh         | rust-shop |                                             |                                       | fresh            | yes       |
+| Changed files | rust-shop |                                             | `<step edit src/orders.rs><wait 500>` | stale            | yes       |
 
 ## The hint line
 
@@ -89,11 +89,11 @@ hint line drops the menu.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys       | has?       | lacks?     |
-| ----------- | --------- | ---------- | ---------- | ---------- |
-| Always      | rust-shop |            | Space menu | none       |
-| In a view   | rust-shop | `<Space>d` | depth      | none       |
-| In a prompt | rust-shop | `f`        | apply      | Space menu |
+| # situation | workspace | keys       | text       | includes? | other text | other includes? |
+| ----------- | --------- | ---------- | ---------- | --------- | ---------- | --------------- |
+| Always      | rust-shop |            | Space menu | yes       | none       | no              |
+| In a view   | rust-shop | `<Space>d` | depth      | yes       | none       | no              |
+| In a prompt | rust-shop | `f`        | apply      | yes       | Space menu | no              |
 
 ## Sizes
 
@@ -105,14 +105,14 @@ other pane instead of beside it. `panes?` lists what is showing. Below 80 column
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation  | workspace | size   | keys              | panes?               | has?                                              | running? |
-| ------------ | --------- | ------ | ----------------- | -------------------- | ------------------------------------------------- | -------- |
-| Side by side | rust-shop |        | `<Space>eK`       | structure, inspector | Inspector                                         | yes      |
-| At the limit | rust-shop | 100x30 | `<Space>eK`       | structure, inspector | Inspector                                         | yes      |
-| Over it      | rust-shop | 99x30  | `<Space>eK`       | inspector            | Inspector                                         | yes      |
-| Smallest     | rust-shop | 80x24  | `<Space>e`        | structure            | Structure                                         | yes      |
-| Too small    | rust-shop | 79x24  |                   | none                 | The terminal is too small. Cyclops needs 80 x 24. | yes      |
-| Grows again  | rust-shop | 79x24  | `<resize 120x36>` | metrics, ranking     | Overview                                          | yes      |
+| # situation  | workspace | size   | keys              | panes?               | text                                              | includes? | running? |
+| ------------ | --------- | ------ | ----------------- | -------------------- | ------------------------------------------------- | --------- | -------- |
+| Side by side | rust-shop |        | `<Space>eK`       | structure, inspector | Inspector                                         | yes       | yes      |
+| At the limit | rust-shop | 100x30 | `<Space>eK`       | structure, inspector | Inspector                                         | yes       | yes      |
+| Over it      | rust-shop | 99x30  | `<Space>eK`       | inspector            | Inspector                                         | yes       | yes      |
+| Smallest     | rust-shop | 80x24  | `<Space>e`        | structure            | Structure                                         | yes       | yes      |
+| Too small    | rust-shop | 79x24  |                   | none                 | The terminal is too small. Cyclops needs 80 x 24. | yes       | yes      |
+| Grows again  | rust-shop | 79x24  | `<resize 120x36>` | metrics, ranking     | Overview                                          | yes       | yes      |
 
 Resizing keeps the view, the lens and the selection.
 

@@ -28,10 +28,10 @@ Rules from your [own file](../project/configuration.md#your-own-settings) are la
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps                                                | keys       | has?       |
-| ----------- | --------- | ---------------------------------------------------- | ---------- | ---------- |
-| Disabled    | rust-shop | `add alert cyclomatic function > 1 warning disabled` | `<Space>a` | (disabled) |
-| Your own    | rust-shop | `add user alert cyclomatic function > 1 warning`     | `<Space>a` | (yours)    |
+| # situation | workspace | steps                                                | keys       | text       | includes? |
+| ----------- | --------- | ---------------------------------------------------- | ---------- | ---------- | --------- |
+| Disabled    | rust-shop | `add alert cyclomatic function > 1 warning disabled` | `<Space>a` | (disabled) | yes       |
+| Your own    | rust-shop | `add user alert cyclomatic function > 1 warning`     | `<Space>a` | (yours)    | yes       |
 
 ## Stepping through hits
 
@@ -55,13 +55,13 @@ here but never change the exit code. The view says how many it left out.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps                                                                  | keys       | has?                        |
-| ----------- | --------- | ---------------------------------------------------------------------- | ---------- | --------------------------- |
-| It passes   | rust-shop | `add alert cyclomatic function > 2 warning`                            | `<Space>a` | Exit code 0                 |
-| It fails    | rust-shop | `add alert cyclomatic function > 2 error`                              | `<Space>a` | Exit code 1                 |
-| Stricter    | rust-shop | `add alert cyclomatic function > 2 warning; set check.fail_on warning` | `<Space>a` | Exit code 1                 |
-| Your rules  | rust-shop | `add user alert cyclomatic function > 2 error`                         | `<Space>a` | Exit code 0                 |
-| Saying so   | rust-shop | `add user alert cyclomatic function > 2 error`                         | `<Space>a` | Leaves out 1 rule of yours. |
+| # situation | workspace | steps                                                                  | keys       | text                        | includes? |
+| ----------- | --------- | ---------------------------------------------------------------------- | ---------- | --------------------------- | --------- |
+| It passes   | rust-shop | `add alert cyclomatic function > 2 warning`                            | `<Space>a` | Exit code 0                 | yes       |
+| It fails    | rust-shop | `add alert cyclomatic function > 2 error`                              | `<Space>a` | Exit code 1                 | yes       |
+| Stricter    | rust-shop | `add alert cyclomatic function > 2 warning; set check.fail_on warning` | `<Space>a` | Exit code 1                 | yes       |
+| Your rules  | rust-shop | `add user alert cyclomatic function > 2 error`                         | `<Space>a` | Exit code 0                 | yes       |
+| Saying so   | rust-shop | `add user alert cyclomatic function > 2 error`                         | `<Space>a` | Leaves out 1 rule of yours. | yes       |
 
 ## A new rule
 
@@ -81,12 +81,12 @@ before it is saved. The rule is checked as you type, with the messages from
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation     | workspace | keys                                       | mode? | rule?                                | hits? | has?                        |
-| --------------- | --------- | ------------------------------------------ | ----- | ------------------------------------ | ----- | --------------------------- |
-| From a function | rust-shop | `<C-p>Order::total<CR>A`                   | EDIT  | cyclomatic function >= 3 warning     | 1     | + [[alerts]]                |
-| From a module   | rust-shop | `<Space>ejMinstability<CR>A`               | EDIT  | instability module >= 1.00 warning   | 1     | + [[alerts]]                |
-| Trying a value  | rust-shop | `<C-p>Order::total<CR>Ai<C-u>> 1<CR>`      | EDIT  | cyclomatic function > 1 warning      | 2     | Next closest                |
-| A bad value     | rust-shop | `<C-p>Order::total<CR>Ai<C-u>around 1<CR>` | EDIT  | cyclomatic function around 1 warning | 0     | Invalid threshold: around 1 |
+| # situation     | workspace | keys                                       | mode? | rule?                                | hits? | text                        | includes? |
+| --------------- | --------- | ------------------------------------------ | ----- | ------------------------------------ | ----- | --------------------------- | --------- |
+| From a function | rust-shop | `<C-p>Order::total<CR>A`                   | EDIT  | cyclomatic function >= 3 warning     | 1     | + [[alerts]]                | yes       |
+| From a module   | rust-shop | `<Space>ejMinstability<CR>A`               | EDIT  | instability module >= 1.00 warning   | 1     | + [[alerts]]                | yes       |
+| Trying a value  | rust-shop | `<C-p>Order::total<CR>Ai<C-u>> 1<CR>`      | EDIT  | cyclomatic function > 1 warning      | 2     | Next closest                | yes       |
+| A bad value     | rust-shop | `<C-p>Order::total<CR>Ai<C-u>around 1<CR>` | EDIT  | cyclomatic function around 1 warning | 0     | Invalid threshold: around 1 | yes       |
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
@@ -104,22 +104,22 @@ after, with no parsing. A rule that could not work is refused, and nothing is wr
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation   | workspace | steps                          | keys                                             | mode?  | config has?           | config lacks? |
-| ------------- | --------- | ------------------------------ | ------------------------------------------------ | ------ | --------------------- | ------------- |
-| Saving        | rust-shop |                                | `<C-p>Order::total<CR>A:w<CR>`                   | NORMAL | metric = "cyclomatic" | none          |
-| Leaving       | rust-shop |                                | `<C-p>Order::total<CR>A:q<CR>`                   | NORMAL | none                  | [[alerts]]    |
-| Refused       | rust-shop |                                | `<C-p>Order::total<CR>Ai<C-u>around 1<CR>:w<CR>` | EDIT   | none                  | [[alerts]]    |
-| Comments stay | rust-shop | `add config comment keep this` | `<C-p>Order::total<CR>A:w<CR>`                   | NORMAL | # keep this           | none          |
-| Hits appear   | rust-shop |                                | `<C-p>Order::total<CR>A:w<CR><Space>a`           | NORMAL | [[alerts]]            | none          |
+| # situation   | workspace | steps                          | keys                                             | mode?  | config text           | config includes? | other config text | other config includes? |
+| ------------- | --------- | ------------------------------ | ------------------------------------------------ | ------ | --------------------- | ---------------- | ----------------- | ---------------------- |
+| Saving        | rust-shop |                                | `<C-p>Order::total<CR>A:w<CR>`                   | NORMAL | metric = "cyclomatic" | yes              | none              | no                     |
+| Leaving       | rust-shop |                                | `<C-p>Order::total<CR>A:q<CR>`                   | NORMAL | none                  | yes              | [[alerts]]        | no                     |
+| Refused       | rust-shop |                                | `<C-p>Order::total<CR>Ai<C-u>around 1<CR>:w<CR>` | EDIT   | none                  | yes              | [[alerts]]        | no                     |
+| Comments stay | rust-shop | `add config comment keep this` | `<C-p>Order::total<CR>A:w<CR>`                   | NORMAL | # keep this           | yes              | none              | no                     |
+| Hits appear   | rust-shop |                                | `<C-p>Order::total<CR>A:w<CR><Space>a`           | NORMAL | [[alerts]]            | yes              | none              | no                     |
 
 `:w user` saves the rule to [your own file](../project/configuration.md#your-own-settings)
-instead. `user config has?` reads that file.
+instead. `user config text` and `user config includes?` read that file.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys                                | mode?  | user config has?      | config lacks? |
-| ----------- | --------- | ----------------------------------- | ------ | --------------------- | ------------- |
-| Your own    | rust-shop | `<C-p>Order::total<CR>A:w user<CR>` | NORMAL | metric = "cyclomatic" | [[alerts]]    |
+| # situation | workspace | keys                                | mode?  | user config text      | user config includes? | config text | config includes? |
+| ----------- | --------- | ----------------------------------- | ------ | --------------------- | --------------------- | ----------- | ---------------- |
+| Your own    | rust-shop | `<C-p>Order::total<CR>A:w user<CR>` | NORMAL | metric = "cyclomatic" | yes                   | [[alerts]]  | no               |
 
 ## Changing a rule
 
@@ -127,16 +127,16 @@ instead. `user config has?` reads that file.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps                                                | keys                           | config has?     |
-| ----------- | --------- | ---------------------------------------------------- | ------------------------------ | --------------- |
-| Editing     | rust-shop | `add alert cyclomatic function > 2 warning`          | `<Space>aei<C-u>> 1<CR>:w<CR>` | when = "> 1"    |
-| Disabling   | rust-shop | `add alert cyclomatic function > 2 warning`          | `<Space>ax`                    | enabled = false |
-| Enabling    | rust-shop | `add alert cyclomatic function > 2 warning disabled` | `<Space>ax`                    | enabled = true  |
+| # situation | workspace | steps                                                | keys                           | config text     | config includes? |
+| ----------- | --------- | ---------------------------------------------------- | ------------------------------ | --------------- | ---------------- |
+| Editing     | rust-shop | `add alert cyclomatic function > 2 warning`          | `<Space>aei<C-u>> 1<CR>:w<CR>` | when = "> 1"    | yes              |
+| Disabling   | rust-shop | `add alert cyclomatic function > 2 warning`          | `<Space>ax`                    | enabled = false | yes              |
+| Enabling    | rust-shop | `add alert cyclomatic function > 2 warning disabled` | `<Space>ax`                    | enabled = true  | yes              |
 
 A rule stays in the file it came from.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps                                            | keys                           | user config has? | config lacks? |
-| ----------- | --------- | ------------------------------------------------ | ------------------------------ | ---------------- | ------------- |
-| Your own    | rust-shop | `add user alert cyclomatic function > 2 warning` | `<Space>aei<C-u>> 1<CR>:w<CR>` | when = "> 1"     | [[alerts]]    |
+| # situation | workspace | steps                                            | keys                           | user config text | user config includes? | config text | config includes? |
+| ----------- | --------- | ------------------------------------------------ | ------------------------------ | ---------------- | --------------------- | ----------- | ---------------- |
+| Your own    | rust-shop | `add user alert cyclomatic function > 2 warning` | `<Space>aei<C-u>> 1<CR>:w<CR>` | when = "> 1"     | yes                   | [[alerts]]  | no               |

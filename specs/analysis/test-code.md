@@ -13,7 +13,7 @@ A file's path can mark all of it as test code. In Rust, code inside a file can b
 test code too. `role?` can be read whether or not test code is left out.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace | steps                                  | subject            | role?      |
 | ------------------- | --------- | -------------------------------------- | ------------------ | ---------- |
@@ -41,7 +41,7 @@ test code too. `role?` can be read whether or not test code is left out.
 
 Excluded test code is hidden everywhere, and it contributes to no metric.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace | steps                    | subject                        | found? |
 | --------------- | --------- | ------------------------ | ------------------------------ | ------ |

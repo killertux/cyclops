@@ -8,14 +8,27 @@ mod symbols;
 
 use cyclops_application::ports::{FileSource, LanguageAdapter, Linked, SourceFile};
 use cyclops_domain::facts::FileFacts;
+use cyclops_domain::language::LanguageId;
 use cyclops_domain::path::RelativePath;
+
+/// Raise it whenever the facts this adapter extracts change, so that cached ones from an
+/// older version are parsed again.
+const VERSION: u32 = 1;
 
 #[derive(Debug, Default)]
 pub struct TypeScriptAdapter;
 
 impl LanguageAdapter for TypeScriptAdapter {
-    fn handles(&self, path: &RelativePath) -> bool {
-        language::of(path).is_some()
+    fn name(&self) -> &'static str {
+        "typescript"
+    }
+
+    fn version(&self) -> u32 {
+        VERSION
+    }
+
+    fn language_of(&self, path: &RelativePath) -> Option<LanguageId> {
+        language::of(path)
     }
 
     fn extract(&self, source: &SourceFile<'_>) -> FileFacts {

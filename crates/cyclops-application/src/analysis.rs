@@ -70,6 +70,7 @@ pub struct ProjectAnalysis {
     measurements: BTreeMap<(Subject, MetricId), f64>,
     problems: Vec<Problem>,
     tests: TestCode,
+    files_parsed: usize,
 }
 
 impl ProjectAnalysis {
@@ -79,6 +80,7 @@ impl ProjectAnalysis {
         measurements: Vec<Measurement>,
         problems: Vec<Problem>,
         tests: TestCode,
+        files_parsed: usize,
     ) -> Self {
         let measurements = measurements
             .into_iter()
@@ -90,7 +92,14 @@ impl ProjectAnalysis {
             measurements,
             problems,
             tests,
+            files_parsed,
         }
+    }
+
+    /// How many files this analysis parsed, rather than taking from the cache.
+    #[must_use]
+    pub const fn files_parsed(&self) -> usize {
+        self.files_parsed
     }
 
     /// The symbols that are visible, which leaves out test code when it is excluded.

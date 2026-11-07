@@ -84,10 +84,10 @@ The menu shows the current test code setting, so it says what the key will chang
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps                    | keys      | has?           |
-| ----------- | --------- | ------------------------ | --------- | -------------- |
-| Off         | rust-shop |                          | `<Space>` | Test code: off |
-| On          | rust-shop | `set tests.include true` | `<Space>` | Test code: on  |
+| # situation | workspace | steps                    | keys      | text           | includes? |
+| ----------- | --------- | ------------------------ | --------- | -------------- | --------- |
+| Off         | rust-shop |                          | `<Space>` | Test code: off | yes       |
+| On          | rust-shop | `set tests.include true` | `<Space>` | Test code: on  | yes       |
 
 ## Other prefixes
 
@@ -133,11 +133,11 @@ and changes nothing.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation     | workspace | keys            | mode?   | has?                      | created?             |
-| --------------- | --------- | --------------- | ------- | ------------------------- | -------------------- |
-| Unknown         | rust-shop | `:nonsense<CR>` | NORMAL  | Unknown command: nonsense | none                 |
-| Completion      | rust-shop | `:exp<Tab>`     | COMMAND | :export                   | none                 |
-| Saving settings | rust-shop | `:init<CR>`     | NORMAL  | none                      | .cyclops/config.toml |
+| # situation     | workspace | keys            | mode?   | text                      | includes? | created?             |
+| --------------- | --------- | --------------- | ------- | ------------------------- | --------- | -------------------- |
+| Unknown         | rust-shop | `:nonsense<CR>` | NORMAL  | Unknown command: nonsense | yes       | none                 |
+| Completion      | rust-shop | `:exp<Tab>`     | COMMAND | :export                   | yes       | none                 |
+| Saving settings | rust-shop | `:init<CR>`     | NORMAL  | none                      | yes       | .cyclops/config.toml |
 
 ## Help
 
@@ -145,8 +145,8 @@ and changes nothing.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys        | popup? | has?         |
-| ----------- | --------- | ----------- | ------ | ------------ |
-| This view   | rust-shop | `<Space>d?` | help   | Diagram keys |
-| Every key   | rust-shop | `<Space>?`  | help   | All keys     |
-| Closing     | rust-shop | `?<Esc>`    | none   | none         |
+| # situation | workspace | keys        | popup? | text         | includes? |
+| ----------- | --------- | ----------- | ------ | ------------ | --------- |
+| This view   | rust-shop | `<Space>d?` | help   | Diagram keys | yes       |
+| Every key   | rust-shop | `<Space>?`  | help   | All keys     | yes       |
+| Closing     | rust-shop | `?<Esc>`    | none   | none         | yes       |

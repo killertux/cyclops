@@ -1,11 +1,12 @@
 //! Finds and reads the files of a project on disk.
 
-use cyclops_application::ports::{Discovered, FileSource, SourceError};
+use cyclops_application::ports::{Discovered, FileSource, FileStamp, SourceError};
 use cyclops_domain::path::RelativePath;
 use ignore::WalkBuilder;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 use thiserror::Error;
 
 /// Folders that hold what other tools installed or built, whatever `.gitignore` says.
@@ -99,6 +100,17 @@ impl FileSource for ProjectFiles {
         discovered.files.sort();
         discovered.unreadable.sort();
         Ok(discovered)
+    }
+
+    fn stamp(&self, path: &RelativePath) -> Result<FileStamp, SourceError> {
+        let unreadable = |_| SourceError::Unreadable(path.clone());
+        let metadata = fs::metadata(self.root.join(path.as_str())).map_err(unreadable)?;
+        let modified = metadata.modified().map_err(unreadable)?;
+        let since_epoch = modified.duration_since(UNIX_EPOCH).unwrap_or_default();
+        Ok(FileStamp {
+            size: metadata.len(),
+            modified: u64::try_from(since_epoch.as_nanos()).unwrap_or(u64::MAX),
+        })
     }
 
     fn read(&self, path: &RelativePath) -> Result<Vec<u8>, SourceError> {

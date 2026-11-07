@@ -271,7 +271,7 @@ impl Linker {
 mod tests {
     use super::*;
     use crate::extract::extract;
-    use cyclops_application::ports::{Discovered, SourceError};
+    use cyclops_application::ports::{Discovered, FileStamp, SourceError};
     use cyclops_domain::path::RelativePath;
     use cyclops_domain::symbol::Symbol;
 
@@ -284,6 +284,10 @@ mod tests {
 
         fn discover(&self) -> Result<Discovered, SourceError> {
             Ok(Discovered::default())
+        }
+
+        fn stamp(&self, path: &RelativePath) -> Result<FileStamp, SourceError> {
+            Err(SourceError::Unreadable(path.clone()))
         }
 
         fn read(&self, path: &RelativePath) -> Result<Vec<u8>, SourceError> {

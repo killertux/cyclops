@@ -24,7 +24,8 @@ Each row is one independent scenario. Columns ending in `?` are what we expect t
 see. The other columns are inputs. Columns starting with `#` are comments that
 temoc ignores.
 
-An empty input means it is not used. `none` means an empty list or no value, and
+An empty input means it is not used, and an empty expected cell means the value is
+empty. `none` means an empty list or no value, and
 `n/a` means a metric does not apply or cannot be worked out. Ratios have two decimal
 places. Lists are separated by commas and in alphabetical order.
 
@@ -164,6 +165,22 @@ layout changes.
 
 Other columns are described on the page that uses them.
 
+### Looking for text
+
+temoc compares a whole value, so a table that looks for text names it in a `text` column
+and asks `includes?`, which is `yes` or `no`. `nothing` as the text asks whether there is
+no text at all. A prefix says where to look, as in `stdout text` and `stdout includes?`,
+and a table that looks for two texts names the second one `other text`.
+
+| Prefix        | Where it looks                          |
+| ------------- | --------------------------------------- |
+| none          | The screen of the interface.            |
+| `stdout`      | What a command printed.                 |
+| `stderr`      | What a command printed as errors.       |
+| `config`      | `.cyclops/config.toml`.                 |
+| `user config` | Your own settings file.                 |
+| `exported`    | The file an export wrote.               |
+
 ### Tui expected values
 
 These read the interface once it has settled. Lists that show an order on screen, such
@@ -185,15 +202,10 @@ as `rows?`, are in that order rather than alphabetical.
 | `popup?`           | The popup that is open, or `none`.                     |
 | `popup keys?`      | The keys the open popup lists.                         |
 | `trail?`           | The place on the trail, as `POSITION/LENGTH`.          |
-| `has?`             | Text that must be on the screen.                       |
-| `lacks?`           | Text that must not be on the screen.                   |
 | `running?`         | `yes` if the interface is still open.                  |
 | `marks?`           | The marks of the `subject`, or `none`.                 |
 | `opened?`          | The file and line sent to the editor, or `none`.       |
 | `clipboard?`       | What was copied.                                       |
-| `config has?`      | Text that must be in `.cyclops/config.toml`.           |
-| `config lacks?`    | Text that must not be in `.cyclops/config.toml`.       |
-| `user config has?` | Text that must be in your own settings file.           |
 | `rules?`           | The alert rules listed, in order.                      |
 | `field?`           | The field of a rule being edited.                      |
 | `rule?`            | The rule being edited.                                 |

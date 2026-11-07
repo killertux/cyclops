@@ -70,10 +70,10 @@ Hovering shows what a click would do in the hint line, and changes nothing.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys                                  | depth? | selected? | inspector width? | has?         |
-| ----------- | --------- | ------------------------------------- | ------ | --------- | ---------------- | ------------ |
-| Depth up    | rust-shop | `<Space>d<ctrl-wheel up>`             | 2      | shop      | closed           | depth 2      |
-| Depth down  | rust-shop | `<Space>d><ctrl-wheel down>`          | 1      | shop      | closed           | depth 1      |
-| A divider   | rust-shop | `<Space>eK<drag divider -5>`          | none   | shop      | 63               | Inspector    |
-| Hovering    | rust-shop | `<Space>e<hover symbol shop::orders>` | none   | shop      | closed           | shop::orders |
-| The wheel   | rust-shop | `<Space>e<wheel down>`                | none   | shop      | closed           | shop         |
+| # situation | workspace | keys                                  | depth? | selected? | inspector width? | text         | includes? |
+| ----------- | --------- | ------------------------------------- | ------ | --------- | ---------------- | ------------ | --------- |
+| Depth up    | rust-shop | `<Space>d<ctrl-wheel up>`             | 2      | shop      | closed           | depth 2      | yes       |
+| Depth down  | rust-shop | `<Space>d><ctrl-wheel down>`          | 1      | shop      | closed           | depth 1      | yes       |
+| A divider   | rust-shop | `<Space>eK<drag divider -5>`          | none   | shop      | 63               | Inspector    | yes       |
+| Hovering    | rust-shop | `<Space>e<hover symbol shop::orders>` | none   | shop      | closed           | shop::orders | yes       |
+| The wheel   | rust-shop | `<Space>e<wheel down>`                | none   | shop      | closed           | shop         | yes       |

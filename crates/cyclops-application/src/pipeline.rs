@@ -1,20 +1,22 @@
-//! The analysis pipeline: discover, extract, link, analyze.
+//! The analysis pipeline: discover, check the cache, extract, link, analyze.
 
 use crate::analysis::{AnalysisInput, AnalyzedFile, ProjectAnalysis};
-use crate::ports::{Analyzer, FileSource, LanguageAdapter, SourceError, SourceFile};
+use crate::ports::{
+    Analyzer, CacheAccess, CacheEntry, CachedFacts, ContentHash, FactStore, FileSource, FileStamp,
+    LanguageAdapter, SourceError, SourceFile,
+};
 use cyclops_domain::facts::FileFacts;
-use cyclops_domain::model::{ModelView, ProjectModel, TestCode};
+use cyclops_domain::glob::Glob;
+use cyclops_domain::language::LanguageId;
+use cyclops_domain::model::{ModelView, ProjectModel};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
+use cyclops_domain::settings::Settings;
+use cyclops_domain::symbol::CodeRole;
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct AnalysisOptions {
-    pub tests: TestCode,
-}
 
 #[derive(Debug, Error)]
 pub enum AnalysisError {
@@ -35,17 +37,45 @@ pub struct AnalysisService {
     analyzers: Vec<Box<dyn Analyzer>>,
 }
 
-/// A file some adapter understands.
+/// A file some adapter understands, and what the cache knows about it.
 struct Candidate<'a> {
     index: usize,
     adapter: &'a dyn LanguageAdapter,
     path: RelativePath,
+    cached: Option<CachedFacts>,
+}
+
+/// Where a file's facts came from.
+enum Origin {
+    /// Unchanged since the cache saw it.
+    Cache,
+    /// The same contents with a new time, so the cache needs the new time.
+    Touched(FileStamp, ContentHash),
+    Parsed(FileStamp, ContentHash),
 }
 
 /// The facts of one file, and which adapter they came from.
 struct Extracted {
     adapter: usize,
     facts: FileFacts,
+    origin: Origin,
+}
+
+fn hash(bytes: &[u8]) -> ContentHash {
+    *blake3::hash(bytes).as_bytes()
+}
+
+/// Settings that mark more files as test code apply after the cache, so that changing
+/// them never parses anything again.
+fn mark_test_paths(facts: &mut FileFacts, test_paths: &[Glob]) {
+    let path = facts.path.as_str();
+    if test_paths.iter().any(|pattern| pattern.matches(path)) {
+        facts.role = CodeRole::Test;
+        facts.test_lines = facts.lines;
+        for symbol in &mut facts.symbols {
+            symbol.role = CodeRole::Test;
+        }
+    }
 }
 
 impl AnalysisService {
@@ -57,7 +87,29 @@ impl AnalysisService {
         }
     }
 
+    /// The languages a project has, among those Cyclops knows.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the project cannot be listed at all.
+    pub fn languages_in(&self, source: &dyn FileSource) -> Result<Vec<LanguageId>, AnalysisError> {
+        let mut languages: Vec<LanguageId> = source
+            .discover()?
+            .files
+            .iter()
+            .filter_map(|path| {
+                self.adapters
+                    .iter()
+                    .find_map(|adapter| adapter.language_of(path))
+            })
+            .collect();
+        languages.sort();
+        languages.dedup();
+        Ok(languages)
+    }
+
     /// Analyzes a project. One bad file never stops it, and only shows up as a problem.
+    /// Without a cache, or with one that fails, every file is parsed.
     ///
     /// # Errors
     ///
@@ -65,42 +117,78 @@ impl AnalysisService {
     pub fn analyze(
         &self,
         source: &dyn FileSource,
-        options: AnalysisOptions,
+        cache: CacheAccess<'_>,
+        settings: &Settings,
     ) -> Result<ProjectAnalysis, AnalysisError> {
+        let mut problems = Vec::new();
+        let mut cache = match cache {
+            CacheAccess::Store(store) => Some(store),
+            CacheAccess::Unavailable(error) => {
+                problems.push(Problem::CacheUnavailable(error.to_string()));
+                None
+            }
+            CacheAccess::None => None,
+        };
+        let mut known = match cache.as_mut().map(|store| store.load()) {
+            Some(Ok(known)) => known,
+            Some(Err(error)) => {
+                problems.push(Problem::CacheUnavailable(error.to_string()));
+                cache = None;
+                HashMap::new()
+            }
+            None => HashMap::new(),
+        };
+
         let discovered = source.discover()?;
-        let sources = self.source_files(discovered.files);
-        let found_any = !sources.is_empty();
+        let present: HashSet<&RelativePath> = discovered.files.iter().collect();
+        let gone: Vec<RelativePath> = known
+            .keys()
+            .filter(|path| !present.contains(path))
+            .cloned()
+            .collect();
+        let candidates = self.candidates(discovered.files.clone(), settings, &mut known);
+        let found_any = !candidates.is_empty();
+        problems.extend(discovered.unreadable.into_iter().map(Problem::Unreadable));
+
         let workers = ThreadPoolBuilder::new()
             .stack_size(WORKER_STACK_BYTES)
             .build()?;
         let outcomes: Vec<Result<Extracted, Problem>> = workers.install(|| {
-            sources
-                .par_iter()
-                .map(|file| Self::extract(file, source))
+            candidates
+                .into_par_iter()
+                .map(|candidate| Self::extract(candidate, source))
                 .collect()
         });
 
-        let mut problems: Vec<Problem> = discovered
-            .unreadable
-            .into_iter()
-            .map(Problem::Unreadable)
-            .collect();
         let mut extracted = Vec::new();
         for outcome in outcomes {
             match outcome {
-                Ok(file) if file.facts.syntax_error => {
-                    problems.push(Problem::SyntaxError(file.facts.path.clone()));
+                Ok(file) => {
+                    if file.facts.syntax_error {
+                        problems.push(Problem::SyntaxError(file.facts.path.clone()));
+                    }
                     extracted.push(file);
                 }
-                Ok(file) => extracted.push(file),
                 Err(problem) => problems.push(problem),
             }
         }
         if !found_any && problems.is_empty() {
             problems.push(Problem::NoSourceFiles);
         }
+        let parsed = extracted
+            .iter()
+            .filter(|file| matches!(file.origin, Origin::Parsed(..)))
+            .count();
+        if let Some(store) = cache
+            && let Err(error) = self.remember(store, &extracted, &gone)
+        {
+            problems.push(Problem::CacheUnavailable(error.to_string()));
+        }
         Problem::sort(&mut problems);
 
+        for file in &mut extracted {
+            mark_test_paths(&mut file.facts, &settings.test_paths);
+        }
         let (model, test_files) = self.link(&extracted, source);
         let mut files: Vec<AnalyzedFile> = extracted
             .iter()
@@ -113,9 +201,9 @@ impl AnalysisService {
             file.make_test_code();
         }
         let input = AnalysisInput {
-            model: ModelView::new(&model, options.tests),
+            model: ModelView::new(&model, settings.tests),
             files: &files,
-            tests: options.tests,
+            tests: settings.tests,
         };
         let measurements = self
             .analyzers
@@ -128,41 +216,111 @@ impl AnalysisService {
             files,
             measurements,
             problems,
-            options.tests,
+            settings.tests,
+            parsed,
         ))
     }
 
-    /// The files some adapter understands, with that adapter.
-    fn source_files(&self, paths: Vec<RelativePath>) -> Vec<Candidate<'_>> {
+    /// The files to analyze, with the adapter for each and what the cache knows.
+    fn candidates(
+        &self,
+        paths: Vec<RelativePath>,
+        settings: &Settings,
+        known: &mut HashMap<RelativePath, CachedFacts>,
+    ) -> Vec<Candidate<'_>> {
         paths
             .into_iter()
-            .filter_map(|path| {
-                let (index, adapter) = self
-                    .adapters
+            .filter(|path| {
+                !settings
+                    .exclude
                     .iter()
-                    .enumerate()
-                    .find(|(_, adapter)| adapter.handles(&path))?;
-                let adapter = adapter.as_ref();
+                    .any(|pattern| pattern.matches(path.as_str()))
+            })
+            .filter_map(|path| {
+                let (index, adapter, language) =
+                    self.adapters
+                        .iter()
+                        .enumerate()
+                        .find_map(|(index, adapter)| {
+                            let language = adapter.language_of(&path)?;
+                            Some((index, adapter.as_ref(), language))
+                        })?;
+                if !settings.languages.contains(&language) {
+                    return None;
+                }
+                let cached = known.remove(&path).filter(|cached| {
+                    cached.adapter == adapter.name() && cached.version == adapter.version()
+                });
                 Some(Candidate {
                     index,
                     adapter,
                     path,
+                    cached,
                 })
             })
             .collect()
     }
 
-    fn extract(file: &Candidate<'_>, source: &dyn FileSource) -> Result<Extracted, Problem> {
-        let path = &file.path;
-        let bytes = source
-            .read(path)
-            .map_err(|_| Problem::Unreadable(path.clone()))?;
+    fn extract(candidate: Candidate<'_>, source: &dyn FileSource) -> Result<Extracted, Problem> {
+        let path = &candidate.path;
+        let unreadable = |_| Problem::Unreadable(path.clone());
+        let stamp = source.stamp(path).map_err(unreadable)?;
+        if let Some(cached) = candidate
+            .cached
+            .as_ref()
+            .filter(|cached| cached.stamp == stamp)
+        {
+            return Ok(Extracted {
+                adapter: candidate.index,
+                facts: cached.facts.clone(),
+                origin: Origin::Cache,
+            });
+        }
+        let bytes = source.read(path).map_err(unreadable)?;
+        let digest = hash(&bytes);
+        if let Some(cached) = candidate.cached.filter(|cached| cached.hash == digest) {
+            return Ok(Extracted {
+                adapter: candidate.index,
+                facts: cached.facts,
+                origin: Origin::Touched(stamp, digest),
+            });
+        }
         let text = String::from_utf8(bytes).map_err(|_| Problem::NotUtf8(path.clone()))?;
-        let facts = file.adapter.extract(&SourceFile { path, text: &text });
+        let facts = candidate.adapter.extract(&SourceFile { path, text: &text });
         Ok(Extracted {
-            adapter: file.index,
+            adapter: candidate.index,
             facts,
+            origin: Origin::Parsed(stamp, digest),
         })
+    }
+
+    fn remember(
+        &self,
+        store: &mut dyn FactStore,
+        extracted: &[Extracted],
+        gone: &[RelativePath],
+    ) -> Result<(), crate::ports::CacheError> {
+        let changed: Vec<CacheEntry<'_>> = extracted
+            .iter()
+            .filter_map(|file| {
+                let (stamp, hash) = match file.origin {
+                    Origin::Cache => return None,
+                    Origin::Touched(stamp, hash) | Origin::Parsed(stamp, hash) => (stamp, hash),
+                };
+                let adapter = self.adapters.get(file.adapter)?;
+                Some(CacheEntry {
+                    adapter: adapter.name(),
+                    version: adapter.version(),
+                    stamp,
+                    hash,
+                    facts: &file.facts,
+                })
+            })
+            .collect();
+        if changed.is_empty() && gone.is_empty() {
+            return Ok(());
+        }
+        store.save(&changed, gone)
     }
 
     fn link(

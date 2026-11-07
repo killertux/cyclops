@@ -9,12 +9,14 @@ pub enum Problem {
     SyntaxError(RelativePath),
     NotUtf8(RelativePath),
     Unreadable(RelativePath),
+    /// The cache could not be used, so everything was parsed again.
+    CacheUnavailable(String),
 }
 
 impl Problem {
     fn path(&self) -> Option<&RelativePath> {
         match self {
-            Self::NoSourceFiles => None,
+            Self::NoSourceFiles | Self::CacheUnavailable(_) => None,
             Self::SyntaxError(path) | Self::NotUtf8(path) | Self::Unreadable(path) => Some(path),
         }
     }
@@ -32,6 +34,7 @@ impl fmt::Display for Problem {
             Self::SyntaxError(path) => write!(f, "{path}: syntax error"),
             Self::NotUtf8(path) => write!(f, "{path}: not valid UTF-8"),
             Self::Unreadable(path) => write!(f, "{path}: cannot be read"),
+            Self::CacheUnavailable(reason) => write!(f, "The cache cannot be used: {reason}"),
         }
     }
 }

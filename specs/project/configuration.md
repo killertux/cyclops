@@ -11,7 +11,7 @@ Settings live in two files, and both are optional because every setting has a de
 The `setting` column names the setting to read.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # meaning                     | workspace | setting                        | value?                       |
 | ----------------------------- | --------- | ------------------------------ | ---------------------------- |
@@ -30,7 +30,7 @@ A command line flag beats an environment variable, which beats the project file,
 which beats your own file, which beats the default. Each setting has an environment
 variable named after it, such as `CYCLOPS_TESTS_INCLUDE`.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace | steps                                                                     | tests included? |
 | ------------------- | --------- | ------------------------------------------------------------------------- | --------------- |
@@ -47,7 +47,7 @@ one setting at a time, so a project only overrides what it mentions. A list is o
 setting, so a project's list replaces yours instead of adding to it. `XDG_CONFIG_HOME`
 moves the file, as it does for other tools.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace | steps                                                          | tests included? | setting         | value?  |
 | ------------------- | --------- | -------------------------------------------------------------- | --------------- | --------------- | ------- |
@@ -55,8 +55,8 @@ moves the file, as it does for other tools.
 | The project wins    | rust-shop | `set user tests.include true; set tests.include false`         | false           |                 |         |
 | Environment wins    | rust-shop | `set user tests.include true; env CYCLOPS_TESTS_INCLUDE false` | false           |                 |         |
 | Other settings stay | rust-shop | `set user tests.include true; set check.fail_on warning`       | true            | check.fail_on   | warning |
-| A list is replaced  | rust-shop | `set user project.exclude a/**; set project.exclude b/**`      |                 | project.exclude | b/**    |
-| A list of yours     | rust-shop | `set user project.exclude a/**`                                |                 | project.exclude | a/**    |
+| A list is replaced  | rust-shop | `set user project.exclude a/**; set project.exclude b/**`      | false           | project.exclude | b/**    |
+| A list of yours     | rust-shop | `set user project.exclude a/**`                                | false           | project.exclude | a/**    |
 | Another place       | rust-shop | `env XDG_CONFIG_HOME other; set user tests.include true`       | true            |                 |         |
 
 Alert rules are not one setting. Rules from both files apply together. When a rule in
@@ -78,7 +78,7 @@ Your own file is not shared, so it is trusted. It is the one file that may set
 `semantic.mode` to `always`. Settings under `ui` are personal, so they can only be
 set here. See [themes](../tui/themes.md).
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation           | workspace | steps                           | analyzed? | problem?                                                   |
 | --------------------- | --------- | ------------------------------- | --------- | ---------------------------------------------------------- |
@@ -92,7 +92,7 @@ A problem with the configuration stops the analysis and says what is wrong. Cycl
 never guesses, and never falls back to the defaults. Your own file is held to the same
 rules, and the message names it.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace | steps                                  | analyzed? | problem?                                                          |
 | ------------------ | --------- | -------------------------------------- | --------- | ----------------------------------------------------------------- |
@@ -111,7 +111,7 @@ never make Cyclops run a command. For the same reason, `always` is refused as a
 [precise analysis](../analysis/precise-analysis.md) mode in that file, because indexing
 can run a project's build scripts.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace | steps                      | analyzed? | problem?                                                                      |
 | ------------------- | --------- | -------------------------- | --------- | ----------------------------------------------------------------------------- |

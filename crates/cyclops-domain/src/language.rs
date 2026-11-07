@@ -1,8 +1,10 @@
 //! The languages Cyclops understands.
 
+use serde::{Deserialize, Serialize};
+
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum LanguageId {
     Rust,
     TypeScript,

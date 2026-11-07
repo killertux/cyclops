@@ -9,6 +9,9 @@ publish = false
 cyclops-application.workspace = true
 cyclops-domain.workspace = true
 ignore.workspace = true
+postcard.workspace = true
+rusqlite.workspace = true
+toml.workspace = true
 thiserror.workspace = true
 
 [lints]

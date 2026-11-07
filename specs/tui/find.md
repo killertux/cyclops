@@ -39,17 +39,17 @@ completes metrics, properties and values, from a list that names each one.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys                                     | mode?  | filter?       | count? | has?                                     |
-| ----------- | --------- | ---------------------------------------- | ------ | ------------- | ------ | ---------------------------------------- |
-| Live        | rust-shop | `<Space>ffkind = struct`                 | FILTER | none          | 3      | 3 of                                     |
-| Unfinished  | rust-shop | `<Space>ffkind = struct<CR>f<C-u>kind =` | FILTER | kind = struct | 3      | Invalid filter: expected a value after = |
+| # situation | workspace | keys                                     | mode?  | filter?       | count? | text                                     | includes? |
+| ----------- | --------- | ---------------------------------------- | ------ | ------------- | ------ | ---------------------------------------- | --------- |
+| Live        | rust-shop | `<Space>ffkind = struct`                 | FILTER | none          | 3      | 3 of                                     | yes       |
+| Unfinished  | rust-shop | `<Space>ffkind = struct<CR>f<C-u>kind =` | FILTER | kind = struct | 3      | Invalid filter: expected a value after = | yes       |
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation  | workspace | keys                     | mode?  | has?                 |
-| ------------ | --------- | ------------------------ | ------ | -------------------- |
-| A completion | rust-shop | `<Space>ffcog<Tab>`      | FILTER | cognitive            |
-| Unknown kind | rust-shop | `<Space>ffkind = widget` | FILTER | Unknown kind: widget |
+| # situation  | workspace | keys                     | mode?  | text                 | includes? |
+| ------------ | --------- | ------------------------ | ------ | -------------------- | --------- |
+| A completion | rust-shop | `<Space>ffcog<Tab>`      | FILTER | cognitive            | yes       |
+| Unknown kind | rust-shop | `<Space>ffkind = widget` | FILTER | Unknown kind: widget | yes       |
 
 `completions?` lists what `Tab` offers, each with a description.
 

@@ -34,11 +34,11 @@ symbol with no value shows `n/a`, and is never shown as 0.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation    | workspace | keys                     | view?   | metric?   | has?              |
-| -------------- | --------- | ------------------------ | ------- | --------- | ----------------- |
-| Across views   | rust-shop | `Mcognitive<CR><Space>e` | Explore | cognitive | cognitive         |
-| To a diagram   | rust-shop | `Mcognitive<CR><Space>d` | Diagram | cognitive | overlay cognitive |
-| Does not apply | rust-shop | `Mlcom<CR><Space>e`      | Explore | lcom      | n/a               |
+| # situation    | workspace | keys                     | view?   | metric?   | text              | includes? |
+| -------------- | --------- | ------------------------ | ------- | --------- | ----------------- | --------- |
+| Across views   | rust-shop | `Mcognitive<CR><Space>e` | Explore | cognitive | cognitive         | yes       |
+| To a diagram   | rust-shop | `Mcognitive<CR><Space>d` | Diagram | cognitive | overlay cognitive | yes       |
+| Does not apply | rust-shop | `Mlcom<CR><Space>e`      | Explore | lcom      | n/a               | yes       |
 
 ## The filter
 
@@ -48,14 +48,14 @@ refused and says why. It stays in the prompt so that it can be fixed.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation     | workspace | keys                                                  | filter?       | mode?  | has?                                     |
-| --------------- | --------- | ----------------------------------------------------- | ------------- | ------ | ---------------------------------------- |
-| Applying        | rust-shop | `fkind = struct<CR>`                                  | kind = struct | NORMAL | kind = struct                            |
-| Cancelling      | rust-shop | `fkind = struct<Esc>`                                 | none          | NORMAL | filter none                              |
-| Clearing        | rust-shop | `fkind = struct<CR>F`                                 | none          | NORMAL | filter none                              |
-| Editing it      | rust-shop | `fkind = struct<CR>f<BS><BS><BS><BS><BS><BS>enum<CR>` | kind = enum   | NORMAL | kind = enum                              |
-| An unknown name | rust-shop | `fnonsense > 1<CR>`                                   | none          | FILTER | Unknown metric or property: nonsense     |
-| Unfinished      | rust-shop | `fcyclomatic ><CR>`                                   | none          | FILTER | Invalid filter: expected a value after > |
+| # situation     | workspace | keys                                                  | filter?       | mode?  | text                                     | includes? |
+| --------------- | --------- | ----------------------------------------------------- | ------------- | ------ | ---------------------------------------- | --------- |
+| Applying        | rust-shop | `fkind = struct<CR>`                                  | kind = struct | NORMAL | kind = struct                            | yes       |
+| Cancelling      | rust-shop | `fkind = struct<Esc>`                                 | none          | NORMAL | filter none                              | yes       |
+| Clearing        | rust-shop | `fkind = struct<CR>F`                                 | none          | NORMAL | filter none                              | yes       |
+| Editing it      | rust-shop | `fkind = struct<CR>f<BS><BS><BS><BS><BS><BS>enum<CR>` | kind = enum   | NORMAL | kind = enum                              | yes       |
+| An unknown name | rust-shop | `fnonsense > 1<CR>`                                   | none          | FILTER | Unknown metric or property: nonsense     | yes       |
+| Unfinished      | rust-shop | `fcyclomatic ><CR>`                                   | none          | FILTER | Invalid filter: expected a value after > | yes       |
 
 The filter narrows every list, tree, map and diagram the same way: a symbol stays when
 it [matches or when something inside it does](../explore/filters.md#in-a-hierarchy). So one
@@ -84,15 +84,15 @@ hidden moves to the nearest thing that is still visible.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation    | workspace | steps                    | keys                          | tests? | focus?      | has?      |
-| -------------- | --------- | ------------------------ | ----------------------------- | ------ | ----------- | --------- |
-| On             | rust-shop |                          | `<Space>t`                    | on     | shop        | tests on  |
-| Off again      | rust-shop |                          | `<Space>t<Space>t`            | off    | shop        | tests off |
-| Starting on    | rust-shop | `set tests.include true` | `<Space>t`                    | off    | shop        | tests off |
-| A hidden focus | rust-shop | `set tests.include true` | `<C-p>says_hello<CR><Space>t` | off    | shop::notes | tests off |
+| # situation    | workspace | steps                    | keys                          | tests? | focus?      | text      | includes? |
+| -------------- | --------- | ------------------------ | ----------------------------- | ------ | ----------- | --------- | --------- |
+| On             | rust-shop |                          | `<Space>t`                    | on     | shop        | tests on  | yes       |
+| Off again      | rust-shop |                          | `<Space>t<Space>t`            | off    | shop        | tests off | yes       |
+| Starting on    | rust-shop | `set tests.include true` | `<Space>t`                    | off    | shop        | tests off | yes       |
+| A hidden focus | rust-shop | `set tests.include true` | `<C-p>says_hello<CR><Space>t` | off    | shop::notes | tests off | yes       |
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys       | config lacks? |
-| ----------- | --------- | ---------- | ------------- |
-| Not saved   | rust-shop | `<Space>t` | tests.include |
+| # situation | workspace | keys       | config text   | config includes? |
+| ----------- | --------- | ---------- | ------------- | ---------------- |
+| Not saved   | rust-shop | `<Space>t` | tests.include | no               |

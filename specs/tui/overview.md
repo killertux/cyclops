@@ -41,9 +41,9 @@ A metric that cannot be worked out stays in the list and says why.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps | has?           |
-| ----------- | --------- | ----- | -------------- |
-| Without git | rust-shop |       | no git history |
+| # situation | workspace | steps | text           | includes? |
+| ----------- | --------- | ----- | -------------- | --------- |
+| Without git | rust-shop |       | no git history | yes       |
 
 ## The ranking
 
@@ -72,13 +72,13 @@ The summary counts what is measured, so it changes with test code.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys       | has?       |
-| ----------- | --------- | ---------- | ---------- |
-| Modules     | rust-shop |            | Modules    |
-| Lines       | rust-shop |            | 55         |
-| With tests  | rust-shop | `<Space>t` | 69         |
-| A language  | rust-shop |            | rust       |
-| Another     | ts-shop   |            | typescript |
+| # situation | workspace | keys       | text       | includes? |
+| ----------- | --------- | ---------- | ---------- | --------- |
+| Modules     | rust-shop |            | Modules    | yes       |
+| Lines       | rust-shop |            | 55         | yes       |
+| With tests  | rust-shop | `<Space>t` | 69         | yes       |
+| A language  | rust-shop |            | rust       | yes       |
+| Another     | ts-shop   |            | typescript | yes       |
 
 ## Alerts
 
@@ -86,14 +86,14 @@ The alert panel shows the count at each severity, and the hits of each rule.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation     | workspace | steps                                                     | has?                    |
-| --------------- | --------- | --------------------------------------------------------- | ----------------------- |
-| No rules        | rust-shop |                                                           | No alert rules          |
-| Quiet           | rust-shop | `add alert cyclomatic function > 99 warning`              | 0 warning               |
-| A warning       | rust-shop | `add alert cyclomatic function > 2 warning`               | 1 warning               |
-| An error        | rust-shop | `add alert instability module >= 1 error`                 | 1 error                 |
-| A named rule    | rust-shop | `add alert cyclomatic function > 2 warning named Complex` | Complex                 |
-| An unnamed rule | rust-shop | `add alert cyclomatic function > 2 warning`               | cyclomatic function > 2 |
+| # situation     | workspace | steps                                                     | text                    | includes? |
+| --------------- | --------- | --------------------------------------------------------- | ----------------------- | --------- |
+| No rules        | rust-shop |                                                           | No alert rules          | yes       |
+| Quiet           | rust-shop | `add alert cyclomatic function > 99 warning`              | 0 warning               | yes       |
+| A warning       | rust-shop | `add alert cyclomatic function > 2 warning`               | 1 warning               | yes       |
+| An error        | rust-shop | `add alert instability module >= 1 error`                 | 1 error                 | yes       |
+| A named rule    | rust-shop | `add alert cyclomatic function > 2 warning named Complex` | Complex                 | yes       |
+| An unnamed rule | rust-shop | `add alert cyclomatic function > 2 warning`               | cyclomatic function > 2 | yes       |
 
 ## Analysis
 
@@ -106,11 +106,11 @@ The [mascot](design/README.md#the-mascot) lives here, and shows the same state.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation     | workspace | steps                   | keys                                                       | mascot?      | has?                   |
-| --------------- | --------- | ----------------------- | ---------------------------------------------------------- | ------------ | ---------------------- |
-| Idle            | rust-shop |                         |                                                            | watching     | no index               |
-| Analyzing       | rust-shop | `pause before link`     |                                                            | scanning     | Extract                |
-| Indexing        | rust-shop | `pause before indexing` | `<Space>py`                                                | scanning     | rust-analyzer          |
-| Indexed         | rust-shop | `precise analysis`      |                                                            | watching     | Precise                |
-| New alerts      | rust-shop |                         | `<step add alert cyclomatic function > 1 warning><Space>r` | found        | 2 warning              |
-| Nothing to read | docs-only |                         |                                                            | nothing here | No source files found. |
+| # situation     | workspace | steps                   | keys                                                       | mascot?      | text                   | includes? |
+| --------------- | --------- | ----------------------- | ---------------------------------------------------------- | ------------ | ---------------------- | --------- |
+| Idle            | rust-shop |                         |                                                            | watching     | no index               | yes       |
+| Analyzing       | rust-shop | `pause before link`     |                                                            | scanning     | Extract                | yes       |
+| Indexing        | rust-shop | `pause before indexing` | `<Space>py`                                                | scanning     | rust-analyzer          | yes       |
+| Indexed         | rust-shop | `precise analysis`      |                                                            | watching     | Precise                | yes       |
+| New alerts      | rust-shop |                         | `<step add alert cyclomatic function > 1 warning><Space>r` | found        | 2 warning              | yes       |
+| Nothing to read | docs-only |                         |                                                            | nothing here | No source files found. | yes       |

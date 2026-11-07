@@ -15,6 +15,7 @@ cyclops-lang-rust = { path = "crates/cyclops-lang-rust" }
 cyclops-lang-typescript = { path = "crates/cyclops-lang-typescript" }
 
 anyhow = "1"
+blake3 = "1"
 clap = { version = "4", features = ["derive"] }
 ignore = "0.4"
 # The oxc_* crates break their APIs often, so they are pinned on purpose, all to one version.
@@ -27,9 +28,13 @@ oxc_syntax = "=0.157.0"
 # The ra_ap_* crates break their APIs often, so this is pinned on purpose. It also pins
 # unicode-ident, so Cargo.lock keeps unicode-properties on the same Unicode version.
 ra_ap_syntax = "=0.0.360"
+postcard = { version = "1", features = ["use-std"] }
 rayon = "1"
+rusqlite = { version = "0.41", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 toml = "1"
+toml_edit = "0.25"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

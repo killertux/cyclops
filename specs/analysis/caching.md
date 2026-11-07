@@ -7,7 +7,7 @@ On a large repository, a repeat analysis must only pay for what changed. The
 has 6 source files, and `ts-shop` has 5.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace | steps                                            | files parsed? |
 | ------------------ | --------- | ------------------------------------------------ | ------------- |
@@ -23,7 +23,7 @@ has 6 source files, and `ts-shop` has 5.
 
 Thresholds and filters apply to what is already known, so they never re-parse.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace | steps                                                      | files parsed? |
 | ------------------ | --------- | ---------------------------------------------------------- | ------------- |
@@ -37,7 +37,7 @@ Thresholds and filters apply to what is already known, so they never re-parse.
 The cache is disposable. When it is missing, damaged or out of date, Cyclops rebuilds
 it, and that is not a problem to report.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace | steps                           | files parsed? | problems? |
 | ------------------- | --------- | ------------------------------- | ------------- | --------- |
@@ -51,7 +51,7 @@ it, and that is not a problem to report.
 
 A cached result is the same as a fresh one.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps                   | subject                    | cyclomatic? | lines? |
 | ----------- | --------- | ----------------------- | -------------------------- | ----------- | ------ |

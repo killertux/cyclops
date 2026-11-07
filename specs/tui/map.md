@@ -82,6 +82,6 @@ A kept tile keeps its whole value, so the legend says how much the filter left o
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys                           | has?         |
-| ----------- | --------- | ------------------------------ | ------------ |
-| Filtered    | rust-shop | `fpath ~ "src/o*"<CR><Space>m` | 1 of 4 tiles |
+| # situation | workspace | keys                           | text         | includes? |
+| ----------- | --------- | ------------------------------ | ------------ | --------- |
+| Filtered    | rust-shop | `fpath ~ "src/o*"<CR><Space>m` | 1 of 4 tiles | yes       |

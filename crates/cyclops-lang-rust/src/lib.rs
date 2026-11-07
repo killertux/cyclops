@@ -9,17 +9,29 @@ mod link;
 
 use cyclops_application::ports::{FileSource, LanguageAdapter, Linked, SourceFile};
 use cyclops_domain::facts::FileFacts;
+use cyclops_domain::language::LanguageId;
 use cyclops_domain::path::RelativePath;
 use std::path::Path;
+
+/// Raise it whenever the facts this adapter extracts change, so that cached ones from an
+/// older version are parsed again.
+const VERSION: u32 = 1;
 
 #[derive(Debug, Default)]
 pub struct RustAdapter;
 
 impl LanguageAdapter for RustAdapter {
-    fn handles(&self, path: &RelativePath) -> bool {
-        Path::new(path.as_str())
-            .extension()
-            .is_some_and(|extension| extension == "rs")
+    fn name(&self) -> &'static str {
+        "rust"
+    }
+
+    fn version(&self) -> u32 {
+        VERSION
+    }
+
+    fn language_of(&self, path: &RelativePath) -> Option<LanguageId> {
+        let extension = Path::new(path.as_str()).extension()?;
+        (extension == "rs").then_some(LanguageId::Rust)
     }
 
     fn extract(&self, source: &SourceFile<'_>) -> FileFacts {

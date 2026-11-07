@@ -1,11 +1,13 @@
 //! Facts: what a language adapter extracts from one file. Nothing here depends on any
 //! other file, so facts can be worked out in parallel and cached by content.
 
+use serde::{Deserialize, Serialize};
+
 use crate::language::LanguageId;
 use crate::path::RelativePath;
 use crate::symbol::{CodeRole, Span, SymbolKind, Visibility};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileFacts {
     pub path: RelativePath,
     pub language: LanguageId,
@@ -24,7 +26,7 @@ pub struct FileFacts {
 }
 
 /// Each line of a file is exactly one of these.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LineCounts {
     pub code: u32,
     pub comment: u32,
@@ -53,7 +55,7 @@ impl LineCounts {
 }
 
 /// A symbol as one file sees it, before the project gives it a full name.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SymbolFact {
     pub name: String,
     /// The index in `FileFacts::symbols` of the symbol around this one. It always comes
@@ -71,7 +73,7 @@ pub struct SymbolFact {
 }
 
 /// A name a file brings into scope.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Import {
     /// The name used in the file, or nothing when it brings in everything at `path`.
     pub alias: Option<String>,
@@ -79,7 +81,7 @@ pub struct Import {
 }
 
 /// What the body of a function contains.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BodyFacts {
     pub decisions: Vec<DecisionPoint>,
     pub parameters: u32,
@@ -88,7 +90,7 @@ pub struct BodyFacts {
 }
 
 /// One thing in a function that adds to its complexity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DecisionPoint {
     pub kind: DecisionKind,
     pub line: u32,
@@ -98,7 +100,7 @@ pub struct DecisionPoint {
 }
 
 /// What each language's constructs map to. Complexity is written once, against these.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DecisionKind {
     If,
     ElseIf,

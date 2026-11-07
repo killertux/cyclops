@@ -34,11 +34,11 @@ when there is nothing inside it.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation     | workspace | keys          | selected? | has?    |
-| --------------- | --------- | ------------- | --------- | ------- |
-| To the parent   | rust-shop | `<Space>ejh`  | shop      | shop    |
-| Then up         | rust-shop | `<Space>ejhh` | shop      | shop    |
-| Open everything | rust-shop | `<Space>ezR`  | shop      | is_free |
+| # situation     | workspace | keys          | selected? | text    | includes? |
+| --------------- | --------- | ------------- | --------- | ------- | --------- |
+| To the parent   | rust-shop | `<Space>ejh`  | shop      | shop    | yes       |
+| Then up         | rust-shop | `<Space>ejhh` | shop      | shop    | yes       |
+| Open everything | rust-shop | `<Space>ezR`  | shop      | is_free | yes       |
 
 ## Marks
 
@@ -66,17 +66,17 @@ move through its sections, which wrap around. `section?` is the open section, an
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation  | workspace | keys            | section?  | has?      |
-| ------------ | --------- | --------------- | --------- | --------- |
-| Closed       | rust-shop | `<Space>e`      | closed    | Structure |
-| Open         | rust-shop | `<Space>eK`     | Metrics   | Inspector |
-| Closed again | rust-shop | `<Space>eKK`    | closed    | Structure |
-| The next     | rust-shop | `<Space>eKL`    | Why       | Inspector |
-| The third    | rust-shop | `<Space>eKLL`   | Relations | Inspector |
-| The fourth   | rust-shop | `<Space>eKLLL`  | Clones    | Inspector |
-| The fifth    | rust-shop | `<Space>eKLLLL` | Impact    | Inspector |
-| Wraps        | rust-shop | `<Space>eKH`    | Impact    | Inspector |
-| In a diagram | rust-shop | `<Space>dK`     | Metrics   | Inspector |
+| # situation  | workspace | keys            | section?  | text      | includes? |
+| ------------ | --------- | --------------- | --------- | --------- | --------- |
+| Closed       | rust-shop | `<Space>e`      | closed    | Structure | yes       |
+| Open         | rust-shop | `<Space>eK`     | Metrics   | Inspector | yes       |
+| Closed again | rust-shop | `<Space>eKK`    | closed    | Structure | yes       |
+| The next     | rust-shop | `<Space>eKL`    | Why       | Inspector | yes       |
+| The third    | rust-shop | `<Space>eKLL`   | Relations | Inspector | yes       |
+| The fourth   | rust-shop | `<Space>eKLLL`  | Clones    | Inspector | yes       |
+| The fifth    | rust-shop | `<Space>eKLLLL` | Impact    | Inspector | yes       |
+| Wraps        | rust-shop | `<Space>eKH`    | Impact    | Inspector | yes       |
+| In a diagram | rust-shop | `<Space>dK`     | Metrics   | Inspector | yes       |
 
 It stays open and follows the selection.
 
@@ -95,19 +95,19 @@ rest. A metric with no value shows `n/a`. There is no total.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation    | workspace | keys                     | has?    |
-| -------------- | --------- | ------------------------ | ------- |
-| A rank         | rust-shop | `<C-p>Order::total<CR>K` | #1 of 6 |
-| A module       | rust-shop | `<Space>ejK`             | #1 of 4 |
-| Does not apply | rust-shop | `<Space>ejK`             | n/a     |
+| # situation    | workspace | keys                     | text    | includes? |
+| -------------- | --------- | ------------------------ | ------- | --------- |
+| A rank         | rust-shop | `<C-p>Order::total<CR>K` | #1 of 6 | yes       |
+| A module       | rust-shop | `<Space>ejK`             | #1 of 4 | yes       |
+| Does not apply | rust-shop | `<Space>ejK`             | n/a     | yes       |
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace   | steps                                       | keys                     | has?      |
-| ----------- | ----------- | ------------------------------------------- | ------------------------ | --------- |
-| Its alerts  | rust-shop   | `add alert cyclomatic function > 2 warning` | `<Space>ejK`             | 1 warning |
-| Its cycle   | rust-cycles |                                             | `<C-p>cycles::a<CR>K`    | size 2    |
-| Confidence  | rust-shop   |                                             | `<C-p>Order::total<CR>K` | ambiguous |
+| # situation | workspace   | steps                                       | keys                     | text      | includes? |
+| ----------- | ----------- | ------------------------------------------- | ------------------------ | --------- | --------- |
+| Its alerts  | rust-shop   | `add alert cyclomatic function > 2 warning` | `<Space>ejK`             | 1 warning | yes       |
+| Its cycle   | rust-cycles |                                             | `<C-p>cycles::a<CR>K`    | size 2    | yes       |
+| Confidence  | rust-shop   |                                             | `<C-p>Order::total<CR>K` | ambiguous | yes       |
 
 ### Relations
 
@@ -116,11 +116,11 @@ confidence. `Enter` jumps to it.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys                                 | focus?                          | has?      |
-| ----------- | --------- | ------------------------------------ | ------------------------------- | --------- |
-| Listing     | rust-shop | `<C-p>Order::total<CR>KLL`           | shop::orders::Order::total      | calls     |
-| A guess     | rust-shop | `<C-p>Order::total<CR>KLL`           | shop::orders::Order::total      | ambiguous |
-| Jumping     | rust-shop | `<C-p>Order::total<CR>KLL<C-w>l<CR>` | shop::billing::Invoice::is_free | is_free   |
+| # situation | workspace | keys                                 | focus?                          | text      | includes? |
+| ----------- | --------- | ------------------------------------ | ------------------------------- | --------- | --------- |
+| Listing     | rust-shop | `<C-p>Order::total<CR>KLL`           | shop::orders::Order::total      | calls     | yes       |
+| A guess     | rust-shop | `<C-p>Order::total<CR>KLL`           | shop::orders::Order::total      | ambiguous | yes       |
+| Jumping     | rust-shop | `<C-p>Order::total<CR>KLL<C-w>l<CR>` | shop::billing::Invoice::is_free | is_free   | yes       |
 
 ### Clones
 
@@ -129,10 +129,10 @@ confidence. `Enter` jumps to it.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | keys               | section? | has?          |
-| ----------- | --------- | ------------------ | -------- | ------------- |
-| Clones      | clones    | `<C-p>first<CR>gc` | Clones   | src/second.rs |
-| None        | rust-shop | `<Space>ejgc`      | Clones   | No clones.    |
+| # situation | workspace | keys               | section? | text          | includes? |
+| ----------- | --------- | ------------------ | -------- | ------------- | --------- |
+| Clones      | clones    | `<C-p>first<CR>gc` | Clones   | src/second.rs | yes       |
+| None        | rust-shop | `<Space>ejgc`      | Clones   | No clones.    | yes       |
 
 ## Opening the editor
 
@@ -141,8 +141,8 @@ editor closes. Without either, it says so. `opened?` is the file and line.
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"
 
-| # situation | workspace | steps             | keys                      | opened?          | has?                       |
-| ----------- | --------- | ----------------- | ------------------------- | ---------------- | -------------------------- |
-| A function  | rust-shop | `env EDITOR fake` | `<C-p>Order::total<CR>gf` | src/orders.rs:13 | Structure                  |
-| A module    | rust-shop | `env EDITOR fake` | `<Space>ejgf`             | src/orders.rs:1  | Structure                  |
-| No editor   | rust-shop |                   | `<Space>ejgf`             | none             | Set $EDITOR to open files. |
+| # situation | workspace | steps             | keys                      | opened?          | text                       | includes? |
+| ----------- | --------- | ----------------- | ------------------------- | ---------------- | -------------------------- | --------- |
+| A function  | rust-shop | `env EDITOR fake` | `<C-p>Order::total<CR>gf` | src/orders.rs:13 | Structure                  | yes       |
+| A module    | rust-shop | `env EDITOR fake` | `<Space>ejgf`             | src/orders.rs:1  | Structure                  | yes       |
+| No editor   | rust-shop |                   | `<Space>ejgf`             | none             | Set $EDITOR to open files. | yes       |

@@ -1,5 +1,7 @@
 //! Symbols: the packages, modules, types and members of a project.
 
+use serde::{Deserialize, Serialize};
+
 use crate::facts::{BodyFacts, SymbolFact};
 use crate::path::RelativePath;
 use std::collections::HashMap;
@@ -53,7 +55,7 @@ impl SymbolIds {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SymbolKind {
     Package,
     Module,
@@ -97,7 +99,7 @@ impl SymbolKind {
 }
 
 /// Whether code is part of the product or only tests it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CodeRole {
     Production,
     Test,
@@ -114,7 +116,7 @@ impl CodeRole {
 }
 
 /// Who can reach a symbol. `Restricted` is anything between the two ends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Visibility {
     Public,
     Restricted,
@@ -133,7 +135,7 @@ impl Visibility {
 }
 
 /// The lines a symbol covers, counted from 1.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Span {
     pub start_line: u32,
     pub end_line: u32,

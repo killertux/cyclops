@@ -6,7 +6,7 @@ Cyclops analyzes the source files of a project in the languages it knows. Everyt
 else is skipped without complaint. The `files?` column lists what was analyzed.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation          | workspace | steps                                   | files?                                                                       |
 | -------------------- | --------- | --------------------------------------- | ---------------------------------------------------------------------------- |
@@ -24,7 +24,7 @@ else is skipped without complaint. The `files?` column lists what was analyzed.
 
 `project.languages` limits the analysis to some languages.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation  | workspace | steps                                                | files?                                                         |
 | ------------ | --------- | ---------------------------------------------------- | -------------------------------------------------------------- |
