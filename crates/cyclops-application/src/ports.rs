@@ -3,10 +3,10 @@
 use crate::analysis::AnalysisInput;
 use cyclops_domain::facts::FileFacts;
 use cyclops_domain::language::LanguageId;
-use cyclops_domain::metric::Measurement;
+use cyclops_domain::metric::{Measurement, MetricId};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::relation::Relation;
-use cyclops_domain::symbol::{Symbol, SymbolId};
+use cyclops_domain::symbol::{CodeRole, Symbol, SymbolId};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -294,6 +294,9 @@ pub trait SemanticProvider: Send + Sync {
     /// The name precise analysis gives its languages, such as `TypeScript`.
     fn label(&self) -> &'static str;
 
+    /// The name of the indexer it runs, such as `rust-analyzer`.
+    fn indexer(&self) -> &'static str;
+
     fn languages(&self) -> &[LanguageId];
 
     /// Whether the tools it needs are there.
@@ -323,4 +326,126 @@ pub struct StoredIndex {
     pub covered: Vec<RelativePath>,
     /// Which symbol uses which: the innermost symbol around each use, and what it uses.
     pub uses: Vec<(SymbolId, SymbolId)>,
+}
+
+/// A step of the analysis. See `specs/tui/status.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Step {
+    Discover,
+    Check,
+    Extract,
+    Link,
+    Enrich,
+    /// Running the indexers, inside `Enrich`. Only a precise analysis has it.
+    Indexing,
+    History,
+    Analyze,
+    Evaluate,
+}
+
+impl Step {
+    /// The steps every analysis takes, in order.
+    pub const PIPELINE: [Self; 8] = [
+        Self::Discover,
+        Self::Check,
+        Self::Extract,
+        Self::Link,
+        Self::Enrich,
+        Self::History,
+        Self::Analyze,
+        Self::Evaluate,
+    ];
+
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Discover => "discover",
+            Self::Check => "check",
+            Self::Extract => "extract",
+            Self::Link => "link",
+            Self::Enrich => "enrich",
+            Self::Indexing => "indexing",
+            Self::History => "history",
+            Self::Analyze => "analyze",
+            Self::Evaluate => "evaluate",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::PIPELINE
+            .into_iter()
+            .chain([Self::Indexing])
+            .find(|step| step.name() == name)
+    }
+}
+
+/// What one step of an analysis did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StepReport {
+    pub step: Step,
+    pub millis: u64,
+    /// What it found, such as `5 from cache, 1 changed`.
+    pub result: String,
+}
+
+/// A function as one file shows it, before the project is linked.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PartialFunction {
+    pub file: RelativePath,
+    /// Its name within the file, such as `Order::total`.
+    pub name: String,
+    pub role: CodeRole,
+    /// The metrics one file is enough for.
+    pub values: Vec<(MetricId, f64)>,
+}
+
+/// What is known before the whole project is: the functions of the files read so far.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Partial {
+    pub files: usize,
+    pub functions: Vec<PartialFunction>,
+}
+
+/// Hears how an analysis is going, and may stop it.
+pub trait Progress: Sync {
+    /// A step is about to start. Returning `false` stops the analysis there.
+    fn step(&self, step: Step) -> bool;
+
+    /// How many files have been read, of how many.
+    fn files(&self, done: usize, of: usize);
+
+    /// What is known so far, before linking.
+    fn partial(&self, partial: Partial);
+
+    /// An indexer is about to run, before the `Indexing` step starts.
+    fn indexing(&self, _indexer: &str) {}
+}
+
+/// Progress nobody listens to.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Silent;
+
+impl Progress for Silent {
+    fn step(&self, _: Step) -> bool {
+        true
+    }
+
+    fn files(&self, _: usize, _: usize) {}
+
+    fn partial(&self, _: Partial) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Step;
+
+    #[test]
+    fn steps_are_found_by_name() {
+        for step in Step::PIPELINE {
+            assert_eq!(Step::parse(step.name()), Some(step));
+        }
+        assert_eq!(Step::parse("indexing"), Some(Step::Indexing));
+        assert_eq!(Step::parse("lunch"), None);
+    }
 }

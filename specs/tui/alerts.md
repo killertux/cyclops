@@ -106,11 +106,11 @@ after, with no parsing. A rule that could not work is refused, and nothing is wr
 
 | # situation   | workspace | steps                          | keys                                             | mode?  | config text           | config includes? | other config text | other config includes? |
 | ------------- | --------- | ------------------------------ | ------------------------------------------------ | ------ | --------------------- | ---------------- | ----------------- | ---------------------- |
-| Saving        | rust-shop |                                | `<C-p>Order::total<CR>A:w<CR>`                   | NORMAL | metric = "cyclomatic" | yes              | none              | no                     |
+| Saving        | rust-shop |                                | `<C-p>Order::total<CR>A:w<CR>`                   | NORMAL | metric = "cyclomatic" | yes              |                   |                        |
 | Leaving       | rust-shop |                                | `<C-p>Order::total<CR>A:q<CR>`                   | NORMAL | none                  | yes              | [[alerts]]        | no                     |
 | Refused       | rust-shop |                                | `<C-p>Order::total<CR>Ai<C-u>around 1<CR>:w<CR>` | EDIT   | none                  | yes              | [[alerts]]        | no                     |
-| Comments stay | rust-shop | `add config comment keep this` | `<C-p>Order::total<CR>A:w<CR>`                   | NORMAL | # keep this           | yes              | none              | no                     |
-| Hits appear   | rust-shop |                                | `<C-p>Order::total<CR>A:w<CR><Space>a`           | NORMAL | [[alerts]]            | yes              | none              | no                     |
+| Comments stay | rust-shop | `add config comment keep this` | `<C-p>Order::total<CR>A:w<CR>`                   | NORMAL | # keep this           | yes              |                   |                        |
+| Hits appear   | rust-shop |                                | `<C-p>Order::total<CR>A:w<CR><Space>a`           | NORMAL | [[alerts]]            | yes              |                   |                        |
 
 `:w user` saves the rule to [your own file](../project/configuration.md#your-own-settings)
 instead. `user config text` and `user config includes?` read that file.

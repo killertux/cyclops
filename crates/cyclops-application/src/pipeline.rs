@@ -1,11 +1,13 @@
 //! The analysis pipeline: discover, check the cache, extract, link, analyze.
 
 use crate::analysis::{AnalysisInput, AnalyzedFile, Extras, ProjectAnalysis, Unavailable};
+use crate::analyzers::ComplexityAnalyzer;
 use crate::duplication::Duplication;
 use crate::history::{self, churn, start_of};
 use crate::ports::{
     Analyzer, CacheAccess, CacheEntry, CachedFacts, Commit, ContentHash, FactStore, FileSource,
-    FileStamp, HistoryError, HistorySource, KnownHistory, LanguageAdapter, SourceError, SourceFile,
+    FileStamp, HistoryError, HistorySource, KnownHistory, LanguageAdapter, Partial,
+    PartialFunction, Progress, SourceError, SourceFile, Step, StepReport,
 };
 use crate::precise::{self, CurrentFile, Precise};
 use crate::rollups::roll_up;
@@ -13,17 +15,18 @@ use cyclops_domain::alert::AlertRule;
 use cyclops_domain::facts::FileFacts;
 use cyclops_domain::glob::Glob;
 use cyclops_domain::language::LanguageId;
-use cyclops_domain::metric::{MetricId, Subject};
+use cyclops_domain::metric::{Measurement, MetricId, Subject};
 use cyclops_domain::model::{ModelView, ProjectModel};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
-use cyclops_domain::relation::Relation;
+use cyclops_domain::relation::{Confidence, Relation};
 use cyclops_domain::settings::{Settings, SettingsError};
 use cyclops_domain::symbol::{CodeRole, Symbol, SymbolId};
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -34,6 +37,105 @@ pub enum AnalysisError {
     Workers(#[from] rayon::ThreadPoolBuildError),
     #[error(transparent)]
     Settings(#[from] SettingsError),
+    /// Whoever asked for the analysis stopped it.
+    #[error("the analysis was stopped")]
+    Stopped,
+}
+
+/// The steps of one analysis as they happen.
+struct Run<'a> {
+    progress: &'a dyn Progress,
+    steps: Vec<StepReport>,
+    started: Instant,
+}
+
+impl Run<'_> {
+    /// Starts a step, unless whoever asked for the analysis stops it here.
+    fn begin(&mut self, step: Step) -> Result<(), AnalysisError> {
+        if !self.progress.step(step) {
+            return Err(AnalysisError::Stopped);
+        }
+        self.started = Instant::now();
+        self.steps.push(StepReport {
+            step,
+            millis: 0,
+            result: String::new(),
+        });
+        Ok(())
+    }
+
+    /// Says what the step that started last did.
+    fn end(&mut self, result: String) {
+        if let Some(report) = self.steps.last_mut() {
+            report.millis = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            report.result = result;
+        }
+    }
+}
+
+/// The files as the analyzers see them, with what linking said about each.
+fn analyzed_files(extracted: &[Extracted], linked: &LinkedFiles) -> Vec<AnalyzedFile> {
+    let mut files: Vec<AnalyzedFile> = extracted
+        .iter()
+        .map(|file| AnalyzedFile::from_facts(&file.facts))
+        .collect();
+    for file in &mut files {
+        if linked.test_files.contains(&file.path) {
+            file.make_test_code();
+        }
+        file.module = linked.file_modules.get(&file.path).cloned();
+    }
+    files
+}
+
+/// The name of a symbol within its file, such as `Order::total`.
+fn local_name(facts: &FileFacts, index: usize) -> String {
+    let mut parts = Vec::new();
+    let mut current = facts.symbols.get(index);
+    while let Some(symbol) = current {
+        parts.push(symbol.name.clone());
+        if let Some(owner) = &symbol.owner {
+            parts.extend(owner.iter().rev().cloned());
+            break;
+        }
+        current = symbol.parent.and_then(|parent| facts.symbols.get(parent));
+    }
+    parts.reverse();
+    parts.join("::")
+}
+
+/// What files alone say about their functions, before the project is linked.
+fn partial_of(facts: &[&FileFacts]) -> Partial {
+    let mut functions = Vec::new();
+    for file in facts {
+        for (index, symbol) in file.symbols.iter().enumerate() {
+            let Some(body) = &symbol.body else {
+                continue;
+            };
+            functions.push(PartialFunction {
+                file: file.path.clone(),
+                name: local_name(file, index),
+                role: symbol.role,
+                values: vec![
+                    (
+                        MetricId::Cyclomatic,
+                        f64::from(ComplexityAnalyzer::cyclomatic(body)),
+                    ),
+                    (
+                        MetricId::Cognitive,
+                        f64::from(ComplexityAnalyzer::cognitive(body)),
+                    ),
+                    (MetricId::MaxNesting, f64::from(body.max_nesting)),
+                    (MetricId::Lines, f64::from(symbol.code_lines)),
+                    (MetricId::Parameters, f64::from(body.parameters)),
+                ],
+            });
+        }
+    }
+    Partial {
+        files: facts.len(),
+        functions,
+    }
 }
 
 /// Walking a syntax tree recurses, and a long chain such as `a + b + c` is a deep tree
@@ -54,6 +156,8 @@ pub struct Sources<'a> {
     /// The history of the files, if the project has one.
     pub history: Option<&'a dyn HistorySource>,
     pub precise: Precise<'a>,
+    /// Who hears how it goes, and may stop it.
+    pub progress: &'a dyn Progress,
 }
 
 /// The time now, in seconds since 1970.
@@ -185,6 +289,11 @@ impl AnalysisService {
         settings: &Settings,
     ) -> Result<ProjectAnalysis, AnalysisError> {
         let rules = AlertRule::all(&settings.alerts)?;
+        let mut run = Run {
+            progress: sources.progress,
+            steps: Vec::new(),
+            started: Instant::now(),
+        };
         let mut problems = Vec::new();
         let mut cache = match sources.cache {
             CacheAccess::Store(store) => Some(store),
@@ -195,12 +304,20 @@ impl AnalysisService {
             CacheAccess::None => None,
         };
         let (mut extracted, parsed) =
-            self.gather(sources.files, &mut cache, settings, &mut problems)?;
-
+            self.gather(sources.files, &mut cache, settings, &mut problems, &mut run)?;
         for file in &mut extracted {
             mark_test_paths(&mut file.facts, &settings.test_paths);
         }
+
+        run.begin(Step::Link)?;
         let (symbols, relations, linked) = self.link(&extracted, sources.files);
+        run.end(format!(
+            "{} symbols, {} relations",
+            symbols.len(),
+            relations.len()
+        ));
+
+        run.begin(Step::Enrich)?;
         let current: Vec<CurrentFile<'_>> = extracted
             .iter()
             .map(|file| CurrentFile {
@@ -216,22 +333,66 @@ impl AnalysisService {
             &current,
             &mut cache,
             &mut problems,
-        );
+            run.progress,
+        )
+        .ok_or(AnalysisError::Stopped)?;
         let relations = precise::enrich(relations, &symbols, &indexes, &current);
+        run.end(if indexes.is_empty() {
+            "skipped: no index yet".to_owned()
+        } else {
+            let exact = relations
+                .iter()
+                .filter(|relation| relation.confidence == Confidence::Exact)
+                .count();
+            format!("{exact} of {} relations exact", relations.len())
+        });
         let model = ProjectModel::new(symbols, relations);
-        let mut files: Vec<AnalyzedFile> = extracted
-            .iter()
-            .map(|file| AnalyzedFile::from_facts(&file.facts))
-            .collect();
-        for file in &mut files {
-            if linked.test_files.contains(&file.path) {
-                file.make_test_code();
-            }
-            file.module = linked.file_modules.get(&file.path).cloned();
-        }
+
+        run.begin(Step::History)?;
+        let history = read_history(sources.history, &mut cache, &mut problems);
+        run.end(match &history {
+            Ok((_, read)) => format!("{read} new commits"),
+            Err(error) => error.to_string(),
+        });
+
+        run.begin(Step::Analyze)?;
+        let files = analyzed_files(&extracted, &linked);
+        let (measurements, mut extras) =
+            self.measure(&model, &files, &extracted, settings, history);
+        extras.precise = precise_status;
+        run.end(format!("{} measurements", measurements.len()));
+        Problem::sort(&mut problems);
+
+        run.begin(Step::Evaluate)?;
+        let mut analysis = ProjectAnalysis::new(
+            model,
+            files,
+            measurements,
+            problems,
+            settings.tests,
+            parsed,
+            extras,
+        );
+        let alerts = analysis.fire(&rules);
+        run.end(format!("{} alerts", alerts.len()));
+        analysis.set_alerts(alerts);
+        analysis.set_steps(run.steps);
+        analysis.set_rules(rules);
+        Ok(analysis)
+    }
+
+    /// Runs the analyzers, the rollups, duplication and history over the linked project.
+    fn measure(
+        &self,
+        model: &ProjectModel,
+        files: &[AnalyzedFile],
+        extracted: &[Extracted],
+        settings: &Settings,
+        history: Result<(Vec<Commit>, usize), HistoryError>,
+    ) -> (Vec<Measurement>, Extras) {
         let input = AnalysisInput {
-            model: ModelView::new(&model, settings.tests),
-            files: &files,
+            model: ModelView::new(model, settings.tests),
+            files,
             tests: settings.tests,
         };
         let mut measurements: Vec<_> = self
@@ -247,10 +408,9 @@ impl AnalysisService {
         measurements.extend(duplication.measure(&input));
         let mut extras = Extras {
             duplication,
-            precise: precise_status,
             ..Extras::default()
         };
-        match read_history(sources.history, &mut cache, &mut problems) {
+        match history {
             Ok((commits, read)) => {
                 extras.commits_read = read;
                 let paths: Vec<&RelativePath> = files.iter().map(|file| &file.path).collect();
@@ -272,20 +432,7 @@ impl AnalysisService {
                 reason: error.to_string(),
             }),
         }
-        Problem::sort(&mut problems);
-
-        let mut analysis = ProjectAnalysis::new(
-            model,
-            files,
-            measurements,
-            problems,
-            settings.tests,
-            parsed,
-            extras,
-        );
-        let alerts = analysis.fire(&rules);
-        analysis.set_alerts(alerts);
-        Ok(analysis)
+        (measurements, extras)
     }
 
     /// Finds the files, and extracts their facts or takes them from the cache. Says how
@@ -296,7 +443,9 @@ impl AnalysisService {
         cache: &mut Option<&mut dyn FactStore>,
         settings: &Settings,
         problems: &mut Vec<Problem>,
+        run: &mut Run<'_>,
     ) -> Result<(Vec<Extracted>, usize), AnalysisError> {
+        run.begin(Step::Discover)?;
         let mut known = match cache.as_mut().map(|store| store.load()) {
             Some(Ok(known)) => known,
             Some(Err(error)) => {
@@ -313,9 +462,23 @@ impl AnalysisService {
             .filter(|path| !present.contains(path))
             .cloned()
             .collect();
+        run.end(format!("{} files", discovered.files.len()));
+        run.begin(Step::Check)?;
         let candidates = self.candidates(discovered.files.clone(), settings, &mut known);
         let found_any = !candidates.is_empty();
         problems.extend(discovered.unreadable.into_iter().map(Problem::Unreadable));
+        let unchanged = candidates
+            .iter()
+            .filter(|candidate| candidate.cached.is_some())
+            .count();
+        run.end(format!(
+            "{unchanged} from cache, {} changed",
+            candidates.len() - unchanged
+        ));
+        run.begin(Step::Extract)?;
+        let total = candidates.len();
+        let done = AtomicUsize::new(0);
+        let progress = run.progress;
 
         let workers = ThreadPoolBuilder::new()
             .stack_size(WORKER_STACK_BYTES)
@@ -323,7 +486,11 @@ impl AnalysisService {
         let outcomes: Vec<Result<Extracted, Problem>> = workers.install(|| {
             candidates
                 .into_par_iter()
-                .map(|candidate| Self::extract(candidate, source))
+                .map(|candidate| {
+                    let outcome = Self::extract(candidate, source);
+                    progress.files(done.fetch_add(1, Ordering::Relaxed) + 1, total);
+                    outcome
+                })
                 .collect()
         });
         let mut extracted = Vec::new();
@@ -350,6 +517,9 @@ impl AnalysisService {
         {
             problems.push(Problem::CacheUnavailable(error.to_string()));
         }
+        run.end(format!("{parsed} parsed"));
+        let facts: Vec<&FileFacts> = extracted.iter().map(|file| &file.facts).collect();
+        run.progress.partial(partial_of(&facts));
         Ok((extracted, parsed))
     }
 

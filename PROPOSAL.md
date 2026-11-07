@@ -339,6 +339,12 @@ after Extract and are marked partial. Metrics that need the whole project, or gi
 history, report what they are waiting for until their step has finished. The read model
 therefore starts empty and fills in, rather than appearing at the end.
 
+Each step tells a `Progress` port that it is about to start, and the port may stop the
+analysis there. Extract also reports each file it reads, and then what the files alone
+say about their functions. The interface shows that as "so far", the specification uses
+it to hold an analysis before a step, and quitting uses it to stop one: what was already
+extracted stays in the cache.
+
 Syntax trees are dropped as soon as a file's facts are extracted, so memory scales
 with the size of the facts rather than the size of the ASTs. A file that fails to
 parse produces a recorded diagnostic and never stops the run.

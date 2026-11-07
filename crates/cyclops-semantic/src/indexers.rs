@@ -72,6 +72,10 @@ impl SemanticProvider for RustIndexer {
         "Rust"
     }
 
+    fn indexer(&self) -> &'static str {
+        "rust-analyzer"
+    }
+
     fn languages(&self) -> &[LanguageId] {
         &[LanguageId::Rust]
     }
@@ -120,6 +124,10 @@ impl TypeScriptIndexer {
 impl SemanticProvider for TypeScriptIndexer {
     fn label(&self) -> &'static str {
         "TypeScript"
+    }
+
+    fn indexer(&self) -> &'static str {
+        "scip-typescript"
     }
 
     fn languages(&self) -> &[LanguageId] {

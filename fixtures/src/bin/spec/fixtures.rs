@@ -1843,14 +1843,103 @@ impl Tui {
     #[must_use]
     pub fn marks(&self) -> String {
         self.read(|session| {
-            let marks: Vec<String> = session
+            session
                 .app
-                .marks_of(&SymbolId::new(&self.subject))
+                .tree_marks()
+                .get(&SymbolId::new(&self.subject))
+                .cloned()
+                .unwrap_or_else(|| NONE.into())
+        })
+    }
+
+    /// The worst of the current metric, as the Overview row of it says.
+    #[must_use]
+    pub fn worst(&self) -> String {
+        self.read(|session| {
+            let Some(analysis) = session.app.analysis() else {
+                return NONE.into();
+            };
+            analysis.worst(session.app.lens().metric).map_or_else(
+                || NONE.into(),
+                |worst| {
+                    let names: Vec<String> =
+                        worst.subjects.iter().map(ToString::to_string).collect();
+                    list(&names)
+                },
+            )
+        })
+    }
+
+    /// The value on the Overview row of the current metric.
+    #[must_use]
+    pub fn value(&self) -> String {
+        self.read(|session| {
+            let metric = session.app.lens().metric;
+            session
+                .app
+                .analysis()
+                .and_then(|analysis| analysis.worst(metric))
+                .map_or_else(
+                    || NOT_APPLICABLE.into(),
+                    |worst| metric.descriptor().format(worst.value),
+                )
+        })
+    }
+
+    #[must_use]
+    pub fn ranking(&self) -> String {
+        self.read(|session| {
+            let ranked: Vec<String> = session
+                .app
+                .ranking()
                 .iter()
                 .map(ToString::to_string)
                 .collect();
-            list(&marks)
+            list(&ranked)
         })
+    }
+
+    #[must_use]
+    pub fn mascot(&self) -> String {
+        self.read(|session| session.app.pose().name().to_owned())
+    }
+
+    #[must_use]
+    pub fn opened(&self) -> String {
+        self.read(|session| session.app.opened().unwrap_or(NONE).to_owned())
+    }
+
+    #[must_use]
+    pub fn clipboard(&self) -> String {
+        self.read(|session| session.app.copied().unwrap_or(NONE).to_owned())
+    }
+
+    #[must_use]
+    pub fn completions(&self) -> String {
+        self.read(|session| {
+            let names: Vec<String> = session
+                .app
+                .completions()
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect();
+            list(&names)
+        })
+    }
+
+    #[must_use]
+    pub fn sorted_by(&self) -> String {
+        self.read(|session| {
+            let (metric, lowest_first) = session.app.sorted_by();
+            let order = if lowest_first { "asc" } else { "desc" };
+            format!("{} {order}", metric.name())
+        })
+    }
+
+    /// How many files the last analysis parsed.
+    #[must_use]
+    pub fn parsed(&self) -> String {
+        self.read(|session| session.app.parsed_by_refresh().to_string())
     }
 
     #[must_use]

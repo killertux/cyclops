@@ -33,6 +33,19 @@ impl Comparison {
         }
     }
 
+    /// How a filter writes it.
+    #[must_use]
+    pub const fn symbol(self) -> &'static str {
+        match self {
+            Self::Equal => "=",
+            Self::NotEqual => "!=",
+            Self::Greater => ">",
+            Self::GreaterOrEqual => ">=",
+            Self::Less => "<",
+            Self::LessOrEqual => "<=",
+        }
+    }
+
     /// Whether `value` compares this way to `threshold`. Values are compared to two
     /// decimal places, the way they are written.
     #[must_use]
@@ -155,6 +168,97 @@ fn tokens(text: &str) -> Result<Vec<String>, FilterError> {
         }
     }
     Ok(found)
+}
+
+/// Every kind a filter can name.
+const KINDS: [SymbolKind; 11] = [
+    SymbolKind::Package,
+    SymbolKind::Module,
+    SymbolKind::Struct,
+    SymbolKind::Class,
+    SymbolKind::Enum,
+    SymbolKind::Interface,
+    SymbolKind::Alias,
+    SymbolKind::Function,
+    SymbolKind::Method,
+    SymbolKind::Field,
+    SymbolKind::Constant,
+];
+
+/// The properties a filter can test, besides metrics, and what each one is.
+const PROPERTIES: [(&str, &str); 5] = [
+    ("kind", "What sort of symbol it is"),
+    ("role", "Production or test code"),
+    ("language", "The language it is written in"),
+    ("path", "The file it is in"),
+    ("in_cycle", "Whether its module is in a cycle"),
+];
+
+/// What can finish the last word of a filter being written, each with what it means:
+/// a metric or a property, or a value after `property =`.
+#[must_use]
+pub fn completions(written: &str) -> Vec<(String, String)> {
+    let words: Vec<&str> = written.split_whitespace().collect();
+    let after_operator = words
+        .last()
+        .is_some_and(|last| Comparison::parse(last).is_some() || *last == "~");
+    let ends_in_space = written.ends_with(char::is_whitespace) || after_operator;
+    let (before, partial) = if ends_in_space {
+        (words.as_slice(), "")
+    } else {
+        match words.split_last() {
+            Some((last, before)) => (before, *last),
+            None => (&[][..], ""),
+        }
+    };
+    let values: Option<Vec<(String, String)>> = match before {
+        [.., property, "=" | "!="] => match *property {
+            "kind" => Some(
+                KINDS
+                    .iter()
+                    .map(|kind| (kind.name().to_owned(), "a kind of symbol".to_owned()))
+                    .collect(),
+            ),
+            "role" => Some(vec![
+                ("production".to_owned(), "the product itself".to_owned()),
+                ("test".to_owned(), "code that tests it".to_owned()),
+            ]),
+            "language" => Some(
+                [
+                    LanguageId::Rust,
+                    LanguageId::TypeScript,
+                    LanguageId::JavaScript,
+                ]
+                .iter()
+                .map(|language| (language.name().to_owned(), "a language".to_owned()))
+                .collect(),
+            ),
+            "in_cycle" => Some(vec![
+                ("true".to_owned(), "in a cycle".to_owned()),
+                ("false".to_owned(), "not in a cycle".to_owned()),
+            ]),
+            _ => None,
+        },
+        _ => None,
+    };
+    let candidates = values.unwrap_or_else(|| {
+        let names = MetricId::ALL
+            .iter()
+            .map(|metric| (metric.name().to_owned(), metric.measures().to_owned()));
+        let properties = PROPERTIES
+            .iter()
+            .map(|(name, meaning)| ((*name).to_owned(), (*meaning).to_owned()));
+        let mut all: Vec<(String, String)> = names.chain(properties).collect();
+        all.sort();
+        all
+    });
+    if partial.is_empty() && !ends_in_space && !words.is_empty() {
+        return Vec::new();
+    }
+    candidates
+        .into_iter()
+        .filter(|(name, _)| name.starts_with(partial))
+        .collect()
 }
 
 fn kind(name: &str) -> Option<SymbolKind> {
@@ -489,6 +593,30 @@ mod tests {
             "Invalid filter: expected a value after >"
         );
         assert_eq!(error("kind = widget"), "Unknown kind: widget");
+    }
+
+    #[test]
+    fn completions_finish_a_metric_a_property_or_a_value() {
+        let names = |written: &str| -> Vec<String> {
+            completions(written)
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect()
+        };
+        assert_eq!(names("cog"), vec!["cognitive"]);
+        assert_eq!(
+            names("kind = struct and cy"),
+            vec!["cycle_size", "cyclomatic"]
+        );
+        assert_eq!(names("role = "), vec!["production", "test"]);
+        assert_eq!(names("role ="), vec!["production", "test"]);
+        assert_eq!(names("kind = st"), vec!["struct"]);
+        assert_eq!(
+            completions("cognitive")
+                .first()
+                .map(|(_, meaning)| meaning.as_str()),
+            Some("Difficulty to follow")
+        );
         assert_eq!(error("(kind = struct"), "Invalid filter: expected )");
         assert_eq!(
             error("cyclomatic > 1 kind"),

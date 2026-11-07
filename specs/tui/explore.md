@@ -46,7 +46,7 @@ A row shows `!` when it or anything inside it has a warning, `!!` when it has an
 error, and `@` when it is in a cycle. Rollups do the same, so the path to a problem
 is visible from the top of the tree.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace   | steps                                                                                | subject       | marks? |
 | --------------- | ----------- | ------------------------------------------------------------------------------------ | ------------- | ------ |
@@ -101,7 +101,7 @@ rest. A metric with no value shows `n/a`. There is no total.
 | A module       | rust-shop | `<Space>ejK`             | #1 of 4 | yes       |
 | Does not apply | rust-shop | `<Space>ejK`             | n/a     | yes       |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace   | steps                                       | keys                     | text      | includes? |
 | ----------- | ----------- | ------------------------------------------- | ------------------------ | --------- | --------- |
@@ -114,7 +114,7 @@ rest. A metric with no value shows `n/a`. There is no total.
 Relations lists what the focus uses and what uses it. Each one shows its kind and its
 confidence. `Enter` jumps to it.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                                 | focus?                          | text      | includes? |
 | ----------- | --------- | ------------------------------------ | ------------------------------- | --------- | --------- |
@@ -127,7 +127,7 @@ confidence. `Enter` jumps to it.
 `gc` opens the clones of the focus. `]d` and `[d` step through the symbols that have
 [copies](../metrics/duplication.md).
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys               | section? | text          | includes? |
 | ----------- | --------- | ------------------ | -------- | ------------- | --------- |
@@ -139,7 +139,7 @@ confidence. `Enter` jumps to it.
 `gf` opens the focus in `$VISUAL`, or `$EDITOR`, at its line, and comes back when the
 editor closes. Without either, it says so. `opened?` is the file and line.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps             | keys                      | opened?          | text                       | includes? |
 | ----------- | --------- | ----------------- | ------------------------- | ---------------- | -------------------------- | --------- |

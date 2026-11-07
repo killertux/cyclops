@@ -2,8 +2,11 @@
 
 use crate::scratch::Scratch;
 use cyclops_application::analysis::ProjectAnalysis;
+use cyclops_application::ports::Progress;
 use cyclops_application::ports::{FileSource, LanguageAdapter, Linked, SourceFile};
-use cyclops_cli::{Environment, adapters, analyze_with, flag_layer, settings, user_config_path};
+use cyclops_cli::{
+    Environment, adapters, analyze_heard, analyze_with, flag_layer, settings, user_config_path,
+};
 use cyclops_domain::facts::FileFacts;
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::path::RelativePath;
@@ -47,6 +50,20 @@ impl LanguageAdapter for Upgraded {
     }
 }
 
+/// Every adapter, with the ones a row upgraded.
+fn with_upgrades(upgraded: &[String]) -> Vec<Box<dyn LanguageAdapter>> {
+    adapters()
+        .into_iter()
+        .map(|adapter| {
+            if upgraded.iter().any(|name| name == adapter.name()) {
+                Box::new(Upgraded(adapter)) as Box<dyn LanguageAdapter>
+            } else {
+                adapter
+            }
+        })
+        .collect()
+}
+
 pub struct Scenario {
     pub scratch: Scratch,
     variables: HashMap<String, String>,
@@ -58,6 +75,8 @@ pub struct Scenario {
     indexers_ran: Cell<bool>,
     /// What the terminal says its background is, if anything.
     background: Option<String>,
+    /// The step an analysis waits before, for the interface to be seen mid-way.
+    pause: Option<String>,
 }
 
 /// The tools the indexers need look for their own files under the home folder, which a
@@ -148,6 +167,7 @@ impl Scenario {
             precise: false,
             indexers_ran: Cell::new(false),
             background: None,
+            pause: None,
         }
     }
 
@@ -167,6 +187,38 @@ impl Scenario {
         flag_layer(self.tests_flag)
     }
 
+    /// The step an analysis should wait before, if a step said.
+    pub fn pause(&self) -> Option<&str> {
+        self.pause.as_deref()
+    }
+
+    /// Remembers that an indexer ran.
+    pub fn note_indexers(&self, analysis: &ProjectAnalysis) {
+        if !analysis.precise().ran.is_empty() {
+            self.indexers_ran.set(true);
+        }
+    }
+
+    /// An analysis the interface asks for, to run on a thread of its own.
+    pub fn analysis_job(
+        &self,
+        tests: Option<bool>,
+        precise: bool,
+    ) -> impl FnOnce(&dyn Progress) -> Result<ProjectAnalysis, String> + Send + 'static {
+        let root = self.root().to_path_buf();
+        let environment = self.environment();
+        let flags = match tests {
+            Some(_) => flag_layer(tests),
+            None => self.flags(),
+        };
+        let upgraded = self.upgraded.clone();
+        move |progress: &dyn Progress| {
+            let adapters = with_upgrades(&upgraded);
+            analyze_heard(&root, &environment, &flags, adapters, precise, progress)
+                .map_err(|error| error.to_string())
+        }
+    }
+
     /// What the terminal says its background is, if a step said.
     pub fn background(&self) -> Option<&str> {
         self.background.as_deref()
@@ -181,30 +233,6 @@ impl Scenario {
         Ok(())
     }
 
-    /// Analyzes the way the interface asks to: `tests` overrides the test code setting.
-    pub fn analyze_for(
-        &self,
-        tests: Option<bool>,
-        precise: bool,
-    ) -> Result<ProjectAnalysis, String> {
-        let flags = match tests {
-            Some(_) => flag_layer(tests),
-            None => self.flags(),
-        };
-        let analysis = analyze_with(
-            self.root(),
-            &self.environment(),
-            &flags,
-            adapters(),
-            precise,
-        )
-        .map_err(|error| error.to_string())?;
-        if !analysis.precise().ran.is_empty() {
-            self.indexers_ran.set(true);
-        }
-        Ok(analysis)
-    }
-
     /// Whether any analysis of the row ran an indexer.
     pub fn indexers_ran(&self) -> bool {
         self.indexers_ran.get()
@@ -216,16 +244,7 @@ impl Scenario {
     }
 
     fn analyze_asking(&self, precise: bool) -> Result<ProjectAnalysis, String> {
-        let adapters: Vec<Box<dyn LanguageAdapter>> = adapters()
-            .into_iter()
-            .map(|adapter| {
-                if self.upgraded.iter().any(|name| name == adapter.name()) {
-                    Box::new(Upgraded(adapter)) as Box<dyn LanguageAdapter>
-                } else {
-                    adapter
-                }
-            })
-            .collect();
+        let adapters = with_upgrades(&self.upgraded);
         let analysis = analyze_with(
             self.root(),
             &self.environment(),
@@ -490,6 +509,10 @@ impl Scenario {
             .and_then(|rest| rest.strip_suffix(" adapter"))
         {
             self.upgraded.push(language.to_owned());
+            return Ok(());
+        }
+        if let Some(name) = step.strip_prefix("pause before ") {
+            self.pause = Some(name.to_owned());
             return Ok(());
         }
         if let Some(value) = step.strip_prefix("terminal background ") {

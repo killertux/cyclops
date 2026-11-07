@@ -37,14 +37,14 @@ Results update as you type, and the filter is checked as you type. While it cann
 understood, the last good results stay and the reason shows beside the prompt. `Tab`
 completes metrics, properties and values, from a list that names each one.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                                     | mode?  | filter?       | count? | text                                     | includes? |
 | ----------- | --------- | ---------------------------------------- | ------ | ------------- | ------ | ---------------------------------------- | --------- |
 | Live        | rust-shop | `<Space>ffkind = struct`                 | FILTER | none          | 3      | 3 of                                     | yes       |
 | Unfinished  | rust-shop | `<Space>ffkind = struct<CR>f<C-u>kind =` | FILTER | kind = struct | 3      | Invalid filter: expected a value after = | yes       |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys                     | mode?  | text                 | includes? |
 | ------------ | --------- | ------------------------ | ------ | -------------------- | --------- |
@@ -53,7 +53,7 @@ completes metrics, properties and values, from a list that names each one.
 
 `completions?` lists what `Tab` offers, each with a description.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys               | completions?     |
 | ----------- | --------- | ------------------ | ---------------- |
@@ -62,7 +62,7 @@ completes metrics, properties and values, from a list that names each one.
 
 `Up` and `Down` step through the filters used in this session.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                                   | filter?       |
 | ----------- | --------- | -------------------------------------- | ------------- |
@@ -73,7 +73,7 @@ completes metrics, properties and values, from a list that names each one.
 `s` picks a column to sort by, and picking the same column again turns the order
 around. Clicking a column does the same. `sorted by?` reads the current order.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys                               | sorted by?      | metric?    |
 | ------------ | --------- | ---------------------------------- | --------------- | ---------- |
@@ -102,7 +102,7 @@ views.
 as a [`cyclops query`](../cli/commands.md#querying) command, so that an answer found here
 can go into a script.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                           | clipboard?                                             |
 | ----------- | --------- | ------------------------------ | ------------------------------------------------------ |

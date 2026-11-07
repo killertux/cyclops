@@ -17,6 +17,8 @@ cyclops-semantic = { path = "crates/cyclops-semantic" }
 cyclops-tui = { path = "crates/cyclops-tui" }
 
 anyhow = "1"
+# Only to copy with `yy`: some terminals block the escape codes for it.
+arboard = { version = "3", default-features = false }
 blake3 = "1"
 # Only reading history: no network, no worktree changes.
 gix = { version = "0.90", default-features = false, features = ["blob-diff", "revision", "sha1"] }

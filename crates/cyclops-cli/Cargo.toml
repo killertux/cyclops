@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+arboard.workspace = true
 clap.workspace = true
 cyclops-application.workspace = true
 cyclops-domain.workspace = true

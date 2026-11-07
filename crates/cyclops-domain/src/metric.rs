@@ -49,6 +49,31 @@ impl MetricId {
         Self::Hotspot,
     ];
 
+    /// What it measures, as the catalog says.
+    #[must_use]
+    pub const fn measures(self) -> &'static str {
+        match self {
+            Self::Cyclomatic => "Paths through code",
+            Self::Cognitive => "Difficulty to follow",
+            Self::MaxNesting => "Deepest control flow",
+            Self::Lines => "Lines of code",
+            Self::CommentLines => "Lines of comments",
+            Self::BlankLines => "Blank lines",
+            Self::Parameters => "Function parameters",
+            Self::Members => "Fields and methods",
+            Self::Duplication => "Share of copied lines",
+            Self::Lcom => "Unrelated method groups",
+            Self::Afferent => "Modules depending on it",
+            Self::Efferent => "Modules it depends on",
+            Self::Instability => "Share of outgoing dependencies",
+            Self::Abstractness => "Share of interfaces",
+            Self::Distance => "Imbalance of the two",
+            Self::CycleSize => "Modules in its cycle",
+            Self::Churn => "Commits changing it",
+            Self::Hotspot => "Churn and complexity",
+        }
+    }
+
     /// Finds a metric by the name filters and alerts use.
     #[must_use]
     pub fn parse(name: &str) -> Option<Self> {
@@ -167,6 +192,17 @@ pub enum Scope {
 }
 
 impl Scope {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Function => "function",
+            Self::Type => "type",
+            Self::File => "file",
+            Self::Module => "module",
+            Self::Project => "project",
+        }
+    }
+
     #[must_use]
     pub fn parse(name: &str) -> Option<Self> {
         match name {

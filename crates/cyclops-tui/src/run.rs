@@ -1,11 +1,13 @@
 //! Running the interface in a real terminal: the event loop, analysis on a worker thread
 //! so that the interface never blocks, and the terminal's own background.
 
-use crate::app::App;
+use crate::app::{App, Heard};
 use crate::input::{Input, Key, MouseKind};
 use crate::state::{Effect, Startup, ThemeChoice};
 use crate::{Core, draw};
 use cyclops_application::analysis::ProjectAnalysis;
+use cyclops_application::ports::{Partial, Progress, Step};
+use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
     MouseButton, MouseEventKind,
@@ -13,6 +15,7 @@ use ratatui::crossterm::event::{
 use ratatui::crossterm::execute;
 use std::io;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -32,6 +35,7 @@ pub trait Backend: Core + Send + Sync {
 /// What reaches the loop.
 enum Message {
     Input(Input),
+    Heard(Heard),
     Analyzed(Box<Result<ProjectAnalysis, String>>),
     Initialized(Result<String, String>),
 }
@@ -135,36 +139,105 @@ fn background() -> Option<ThemeChoice> {
     }
 }
 
-/// Does what the interface asked for, on threads of its own.
-fn perform(effects: Vec<Effect>, backend: &Arc<dyn Backend>, sender: &Sender<Message>) -> bool {
+/// Tells the loop how an analysis goes, and stops it once the interface has closed.
+struct Relay {
+    sender: Sender<Message>,
+    stop: Arc<AtomicBool>,
+}
+
+impl Relay {
+    fn tell(&self, heard: Heard) -> bool {
+        self.sender.send(Message::Heard(heard)).is_ok() && !self.stop.load(Ordering::Relaxed)
+    }
+}
+
+impl Progress for Relay {
+    fn step(&self, step: Step) -> bool {
+        self.tell(Heard::Step(step))
+    }
+
+    fn files(&self, done: usize, of: usize) {
+        self.tell(Heard::Files(done, of));
+    }
+
+    fn partial(&self, partial: Partial) {
+        self.tell(Heard::Partial(partial));
+    }
+
+    fn indexing(&self, indexer: &str) {
+        self.tell(Heard::Indexer(indexer.to_owned()));
+    }
+}
+
+/// Gives the terminal back while the editor runs, and takes it again after.
+fn edit(
+    terminal: &mut DefaultTerminal,
+    backend: &Arc<dyn Backend>,
+    path: &str,
+    line: u32,
+) -> io::Result<Result<(), String>> {
+    execute!(io::stdout(), DisableMouseCapture)?;
+    ratatui::restore();
+    let result = backend.open(path, line);
+    *terminal = ratatui::init();
+    execute!(io::stdout(), EnableMouseCapture)?;
+    terminal.clear()?;
+    Ok(result)
+}
+
+/// Does what the interface asked for: analysis on a thread of its own, and anything quick
+/// at once. Says whether to quit.
+fn perform(
+    app: &mut App,
+    terminal: &mut DefaultTerminal,
+    backend: &Arc<dyn Backend>,
+    sender: &Sender<Message>,
+    stop: &Arc<AtomicBool>,
+) -> io::Result<bool> {
     let mut quit = false;
-    for effect in effects {
-        let backend = Arc::clone(backend);
-        let sender = sender.clone();
+    for effect in app.take_effects() {
         match effect {
             Effect::Analyze { tests, precise } => {
+                let backend = Arc::clone(backend);
+                let relay = Relay {
+                    sender: sender.clone(),
+                    stop: Arc::clone(stop),
+                };
                 // Sending fails only once the interface has closed, and then nobody
                 // needs the answer, so the thread just ends with it.
                 thread::spawn(move || {
-                    let result = backend.analyze(tests, precise);
-                    sender.send(Message::Analyzed(Box::new(result)))
+                    let result = backend.analyze(tests, precise, &relay);
+                    relay.sender.send(Message::Analyzed(Box::new(result)))
                 });
             }
             Effect::Init => {
-                thread::spawn(move || {
-                    let result = backend.init();
-                    sender.send(Message::Initialized(result))
-                });
+                let backend = Arc::clone(backend);
+                let sender = sender.clone();
+                thread::spawn(move || sender.send(Message::Initialized(backend.init())));
             }
-            Effect::Quit => quit = true,
+            Effect::CheckPrecise => app.precise_checked(backend.precise_ready()),
+            Effect::Open { path, line } => {
+                let result = edit(terminal, backend, &path, line)?;
+                app.editor_closed(result);
+            }
+            Effect::Copy(text) => {
+                if let Err(reason) = backend.copy(&text) {
+                    app.tell(reason);
+                }
+            }
+            Effect::Quit => {
+                stop.store(true, Ordering::Relaxed);
+                quit = true;
+            }
         }
     }
-    quit
+    Ok(quit)
 }
 
 fn handle(app: &mut App, message: Message) {
     match message {
         Message::Input(input) => app.update(input),
+        Message::Heard(heard) => app.heard(heard),
         Message::Analyzed(result) => app.analyzed(*result),
         Message::Initialized(result) => app.initialized(result),
     }
@@ -175,7 +248,8 @@ fn handle(app: &mut App, message: Message) {
 /// # Errors
 ///
 /// Fails if the terminal cannot be used.
-pub fn run(backend: &Arc<dyn Backend>, theme: ThemeChoice, no_color: bool) -> io::Result<()> {
+/// `startup` says how to open, and the terminal fills in its size and background.
+pub fn run(backend: &Arc<dyn Backend>, startup: Startup) -> io::Result<()> {
     let background = background();
     let mut terminal = ratatui::init();
     execute!(io::stdout(), EnableMouseCapture)?;
@@ -183,11 +257,11 @@ pub fn run(backend: &Arc<dyn Backend>, theme: ThemeChoice, no_color: bool) -> io
     let mut app = App::new(Startup {
         columns: size.width,
         rows: size.height,
-        theme,
         background,
-        no_color,
+        ..startup
     });
     let (sender, receiver): (Sender<Message>, Receiver<Message>) = mpsc::channel();
+    let stop = Arc::new(AtomicBool::new(false));
     let started = Instant::now();
     let events = sender.clone();
     thread::spawn(move || read_events(&events, started));
@@ -197,7 +271,7 @@ pub fn run(backend: &Arc<dyn Backend>, theme: ThemeChoice, no_color: bool) -> io
     }));
     let outcome = (|| -> io::Result<()> {
         loop {
-            if perform(app.take_effects(), backend, &sender) || !app.running() {
+            if perform(&mut app, &mut terminal, backend, &sender, &stop)? || !app.running() {
                 return Ok(());
             }
             terminal.draw(|frame| draw::draw(&mut app, frame.buffer_mut()))?;

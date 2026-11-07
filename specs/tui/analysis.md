@@ -18,16 +18,16 @@ what it is waiting for, and never shows a number it does not have yet.
 and `<resume>` lets it finish.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation       | workspace | steps                            | keys                 | mode?     | view?    | text                    | includes? | other text | other includes? |
 | ----------------- | --------- | -------------------------------- | -------------------- | --------- | -------- | ----------------------- | --------- | ---------- | --------------- |
-| Opens at once     | rust-shop | `pause before extract`           |                      | ANALYZING | Overview | Analysis                | yes       | none       | no              |
-| Partial results   | rust-shop | `pause before link`              |                      | ANALYZING | Overview | so far                  | yes       | none       | no              |
-| Needs the links   | rust-shop | `pause before link`              |                      | ANALYZING | Overview | waiting for link        | yes       | none       | no              |
-| Needs the history | rust-shop | `git init; pause before history` |                      | ANALYZING | Overview | waiting for git history | yes       | none       | no              |
-| Browsing          | rust-shop | `pause before link`              | `<Space>e`           | ANALYZING | Explore  | Structure               | yes       | none       | no              |
-| Filtering         | rust-shop | `pause before link`              | `fkind = struct<CR>` | ANALYZING | Overview | kind = struct           | yes       | none       | no              |
+| Opens at once     | rust-shop | `pause before extract`           |                      | ANALYZING | Overview | Analysis                | yes       |            |                 |
+| Partial results   | rust-shop | `pause before link`              |                      | ANALYZING | Overview | so far                  | yes       |            |                 |
+| Needs the links   | rust-shop | `pause before link`              |                      | ANALYZING | Overview | waiting for link        | yes       |            |                 |
+| Needs the history | rust-shop | `git init; pause before history` |                      | ANALYZING | Overview | waiting for git history | yes       |            |                 |
+| Browsing          | rust-shop | `pause before link`              | `<Space>e`           | ANALYZING | Explore  | Structure               | yes       |            |                 |
+| Filtering         | rust-shop | `pause before link`              | `fkind = struct<CR>` | ANALYZING | Overview | kind = struct           | yes       |            |                 |
 | It finishes       | rust-shop | `pause before link`              | `<resume>`           | NORMAL    | Overview | fresh                   | yes       | so far     | no              |
 | The view stays    | rust-shop | `pause before link`              | `<Space>e<resume>`   | NORMAL    | Explore  | Structure               | yes       | so far     | no              |
 
@@ -43,17 +43,17 @@ Results from a cache need no waiting, and an analysis with nothing to do says so
 Analysis works without `cyclops init`, as [initializing](../project/initializing.md#without-initializing)
 explains. The interface says which settings are in use, and `:init` saves them.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace | steps                                        | keys        | text                    | includes? | other text              | other includes? | created?             |
 | --------------- | --------- | -------------------------------------------- | ----------- | ----------------------- | --------- | ----------------------- | --------------- | -------------------- |
-| Not initialized | rust-shop | `pause before link`                          |             | No project settings yet | yes       | none                    | no              | none                 |
+| Not initialized | rust-shop | `pause before link`                          |             | No project settings yet | yes       |                         |                 | none                 |
 | Saving them     | rust-shop | `pause before link`                          | `:init<CR>` | Analysis                | yes       | No project settings yet | no              | .cyclops/config.toml |
 | Already set up  | rust-shop | `set tests.include false; pause before link` |             | Analysis                | yes       | No project settings yet | no              | none                 |
 
 Quitting during an analysis stops it, and what was finished stays in the cache.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps               | keys       | running? |
 | ----------- | --------- | ------------------- | ---------- | -------- |
@@ -66,7 +66,7 @@ so the screen never moves under you. `Space r` refreshes, and only changed files
 parsed again, as [caching](../analysis/caching.md) describes. `parsed?` is how many
 files the last refresh parsed.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | keys                                  | parsed? | text  | includes? |
 | ------------- | --------- | ------------------------------------- | ------- | ----- | --------- |
@@ -77,7 +77,7 @@ files the last refresh parsed.
 A refresh keeps the view and the lens. If the focus no longer exists, it moves to the
 nearest parent that does, and says so.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                                                     | view?   | focus?                     | text             | includes? |
 | ----------- | --------- | -------------------------------------------------------- | ------- | -------------------------- | ---------------- | --------- |

@@ -75,8 +75,8 @@ the place of the last node in the column, so that what is selected is always on 
 
 | # situation  | workspace | size   | keys                               | popup?     | text      | includes? | other text | other includes? |
 | ------------ | --------- | ------ | ---------------------------------- | ---------- | --------- | --------- | ---------- | --------------- |
-| Too many     | rust-wide | 80x24  | `<C-p>hub<CR><Space>d`             | none       | more      | yes       | none       | no              |
-| Opening it   | rust-wide | 80x24  | `<C-p>hub<CR><Space>d<click more>` | more nodes | wide::m12 | yes       | none       | no              |
+| Too many     | rust-wide | 80x24  | `<C-p>hub<CR><Space>d`             | none       | more      | yes       |            |                 |
+| Opening it   | rust-wide | 80x24  | `<C-p>hub<CR><Space>d<click more>` | more nodes | wide::m12 | yes       |            |                 |
 | Room for all | rust-wide | 200x80 | `<C-p>hub<CR><Space>d`             | none       | wide::m12 | yes       | more       | no              |
 
 [//]: # "decisionTable Tui -- snooze until 2099-12-31"

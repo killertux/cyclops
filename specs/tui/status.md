@@ -41,7 +41,7 @@ project's build scripts. It never starts from a single key press.
 
 ![Asking before indexing](design/screens/status-confirm.dark.png)
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | steps                       | keys            | mode?   | popup?          | indexers run? | text                                             | includes? |
 | ------------- | --------- | --------------------------- | --------------- | ------- | --------------- | ------------- | ------------------------------------------------ | --------- |

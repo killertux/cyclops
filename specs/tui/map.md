@@ -62,7 +62,7 @@ A tile or a group shows `!` when something in it has an alert, and `@` when it i
 a cycle. A filter hides tiles with [nothing that matches](../explore/filters.md#in-a-hierarchy)
 inside them, and the value on a tile stays whole.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace   | steps                                       | keys       | subject      | marks? |
 | ----------- | ----------- | ------------------------------------------- | ---------- | ------------ | ------ |

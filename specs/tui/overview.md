@@ -27,7 +27,7 @@ Moving through the list changes the metric of the lens. The rest of the
 `worst?` and `value?` read the row of the current metric.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace   | keys               | metric?     | worst?                          | value? |
 | ------------- | ----------- | ------------------ | ----------- | ------------------------------- | ------ |
@@ -51,7 +51,7 @@ Under the list, the worst symbols by the current metric. It shows up to eight, f
 the lens, and respects the filter. `Tab` moves into it, and `Enter` opens a symbol in
 Explore. `ranking?` lists it in order.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                   | ranking?                                                                                                                                                                |
 | ----------- | --------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -70,7 +70,7 @@ Explore. `ranking?` lists it in order.
 
 The summary counts what is measured, so it changes with test code.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys       | text       | includes? |
 | ----------- | --------- | ---------- | ---------- | --------- |
@@ -84,7 +84,7 @@ The summary counts what is measured, so it changes with test code.
 
 The alert panel shows the count at each severity, and the hits of each rule.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace | steps                                                     | text                    | includes? |
 | --------------- | --------- | --------------------------------------------------------- | ----------------------- | --------- |
@@ -104,7 +104,7 @@ that are exact, the problem count, and the test code setting. It takes you to
 
 The [mascot](design/README.md#the-mascot) lives here, and shows the same state.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace | steps                   | keys                                                       | mascot?      | text                   | includes? |
 | --------------- | --------- | ----------------------- | ---------------------------------------------------------- | ------------ | ---------------------- | --------- |

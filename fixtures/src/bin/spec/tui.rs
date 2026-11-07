@@ -1,35 +1,128 @@
 //! What the `Tui` fixture needs: the interface opened on a sample, driven by keys, with
-//! time that only passes when a row says so.
+//! time that only passes when a row says so. Analyses run on a thread of their own, as
+//! they do in a terminal, and may be held at a step so that a row can look mid-way.
 
 use crate::scenario::{Scenario, no_cyclops};
 use crate::scratch::Scratch;
 use cyclops_application::analysis::ProjectAnalysis;
-use cyclops_application::ports::FileSource;
-use cyclops_cli::{init, interface_theme};
+use cyclops_application::ports::{FileSource, Partial, Progress, Step};
+use cyclops_cli::{init, interface_startup, precise_ready};
 use cyclops_domain::path::RelativePath;
 use cyclops_infra::ProjectFiles;
-use cyclops_tui::app::space_menu;
+use cyclops_tui::app::{Heard, space_menu};
 use cyclops_tui::canvas::screen_text;
 use cyclops_tui::input::{Gesture, Input, MouseKind, parse_gestures, parse_size};
-use cyclops_tui::state::{Startup, Target, ThemeChoice, View};
-use cyclops_tui::{App, Core, render, settle};
-use std::collections::BTreeMap;
+use cyclops_tui::state::{Effect, Startup, Target, ThemeChoice, View};
+use cyclops_tui::{App, Core, perform, render};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, SendError, Sender};
+use std::thread::{self, JoinHandle};
 use std::time::SystemTime;
 
 /// The size of the terminal when a row does not say.
 const DEFAULT_SIZE: (u16, u16) = (120, 36);
 
-/// The core, as a row's scenario offers it.
+/// The core, as a row's scenario offers it, for everything but analyzing.
 struct Offered<'a>(&'a Scenario);
 
 impl Core for Offered<'_> {
-    fn analyze(&self, tests: Option<bool>, precise: bool) -> Result<ProjectAnalysis, String> {
-        self.0.analyze_for(tests, precise)
+    fn analyze(
+        &self,
+        tests: Option<bool>,
+        precise: bool,
+        progress: &dyn Progress,
+    ) -> Result<ProjectAnalysis, String> {
+        self.0.analysis_job(tests, precise)(progress)
     }
 
     fn init(&self) -> Result<String, String> {
         init(self.0.root()).map_err(|error| error.to_string())
     }
+
+    fn precise_ready(&self) -> Result<(), String> {
+        precise_ready(self.0.root(), &self.0.environment())
+    }
+
+    fn open(&self, _path: &str, _line: u32) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn copy(&self, _text: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// What an analysis thread says.
+enum Event {
+    Heard(Heard),
+    /// It is waiting before the step a row named.
+    Paused,
+    Done(Box<Result<ProjectAnalysis, String>>),
+}
+
+/// Whether a held analysis goes on.
+enum Control {
+    Go,
+    Stop,
+}
+
+/// Passes what an analysis says to the session, and holds it before one step.
+struct Watched {
+    events: Sender<Event>,
+    pause: Option<Step>,
+    control: Mutex<Receiver<Control>>,
+    /// The session stopped listening, so the analysis should stop.
+    closed: AtomicBool,
+}
+
+impl Watched {
+    fn tell(&self, event: Event) {
+        if self.events.send(event).is_err() {
+            self.closed.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Waits for the session to let the analysis go on.
+    fn hold(&self) -> bool {
+        self.tell(Event::Paused);
+        let Ok(control) = self.control.lock() else {
+            return false;
+        };
+        matches!(control.recv(), Ok(Control::Go))
+    }
+}
+
+impl Progress for Watched {
+    fn step(&self, step: Step) -> bool {
+        if self.pause == Some(step) && !self.hold() {
+            return false;
+        }
+        self.tell(Event::Heard(Heard::Step(step)));
+        !self.closed.load(Ordering::Relaxed)
+    }
+
+    fn files(&self, done: usize, of: usize) {
+        self.tell(Event::Heard(Heard::Files(done, of)));
+    }
+
+    fn partial(&self, partial: Partial) {
+        self.tell(Event::Heard(Heard::Partial(partial)));
+    }
+
+    fn indexing(&self, indexer: &str) {
+        self.tell(Event::Heard(Heard::Indexer(indexer.to_owned())));
+    }
+}
+
+/// An analysis running on its thread. The thread ends with the answer it could not give,
+/// if the session stopped listening.
+struct Job {
+    events: Receiver<Event>,
+    control: Sender<Control>,
+    thread: JoinHandle<Result<(), SendError<Event>>>,
+    paused: bool,
 }
 
 /// The files of a project, with when each last changed.
@@ -56,9 +149,12 @@ fn stamps(scenario: &Scenario) -> BTreeMap<RelativePath, (u64, Option<SystemTime
 pub struct Session {
     pub scenario: Scenario,
     pub app: App,
-    pub before: std::collections::BTreeSet<String>,
+    pub before: BTreeSet<String>,
     clock: u64,
     seen: BTreeMap<RelativePath, (u64, Option<SystemTime>)>,
+    job: Option<Job>,
+    /// The step the next analysis waits before, until one has.
+    pause: Option<Step>,
 }
 
 impl Session {
@@ -73,33 +169,119 @@ impl Session {
         } else {
             parse_size(size).ok_or_else(|| format!("not a size: {size}"))?
         };
-        let environment = scenario.environment();
-        let (theme, no_color) = interface_theme(scenario.root(), &environment);
+        let pause = match scenario.pause() {
+            Some(name) => Some(Step::parse(name).ok_or_else(|| format!("no step {name}"))?),
+            None => None,
+        };
         let background = scenario.background().and_then(ThemeChoice::parse);
-        let mut app = App::new(Startup {
+        let app = App::new(Startup {
             columns,
             rows,
-            theme,
             background,
-            no_color,
+            ..interface_startup(scenario.root(), &scenario.environment())
         });
-        settle(&mut app, &Offered(&scenario));
-        let before = crate::cli::files_in(scenario.root());
-        let seen = stamps(&scenario);
-        Ok(Self {
+        let mut session = Self {
+            before: BTreeSet::new(),
+            seen: stamps(&scenario),
             scenario,
             app,
-            before,
             clock: 0,
-            seen,
-        })
+            job: None,
+            pause,
+        };
+        session.settle()?;
+        session.before = crate::cli::files_in(session.scenario.root());
+        Ok(session)
     }
 
-    fn settle(&mut self) {
-        let analyzed = self.app.has_effects();
-        settle(&mut self.app, &Offered(&self.scenario));
-        if analyzed {
-            self.seen = stamps(&self.scenario);
+    fn start(&mut self, tests: Option<bool>, precise: bool) -> Result<(), String> {
+        let (events, heard) = mpsc::channel();
+        let (control, controlled) = mpsc::channel();
+        let job = self.scenario.analysis_job(tests, precise);
+        let watched = Watched {
+            events,
+            pause: self.pause,
+            control: Mutex::new(controlled),
+            closed: AtomicBool::new(false),
+        };
+        let thread = thread::Builder::new()
+            .spawn(move || {
+                let result = job(&watched);
+                watched.events.send(Event::Done(Box::new(result)))
+            })
+            .map_err(|error| error.to_string())?;
+        self.job = Some(Job {
+            events: heard,
+            control,
+            thread,
+            paused: false,
+        });
+        Ok(())
+    }
+
+    /// Lets a held analysis carry on, or stops it.
+    fn release(&mut self, control: Control) {
+        let Some(job) = &mut self.job else {
+            return;
+        };
+        if !job.paused {
+            return;
+        }
+        job.paused = false;
+        if job.control.send(control).is_err() {
+            // The analysis already ended, so there is nothing left to wait for.
+            self.job = None;
+        }
+    }
+
+    /// Does what the interface asked for, and waits for analyses until they finish or
+    /// are held.
+    fn settle(&mut self) -> Result<(), String> {
+        loop {
+            for effect in self.app.take_effects() {
+                match effect {
+                    Effect::Analyze { tests, precise } => {
+                        if self.job.is_none() {
+                            self.start(tests, precise)?;
+                        }
+                    }
+                    Effect::Quit => self.release(Control::Stop),
+                    other => perform(&mut self.app, &Offered(&self.scenario), other),
+                }
+            }
+            let Some(job) = &mut self.job else {
+                if self.app.has_effects() {
+                    continue;
+                }
+                return Ok(());
+            };
+            if job.paused {
+                return Ok(());
+            }
+            match job.events.recv() {
+                Ok(Event::Heard(heard)) => self.app.heard(heard),
+                Ok(Event::Paused) => {
+                    job.paused = true;
+                    self.pause = None;
+                }
+                Ok(Event::Done(result)) => {
+                    if let Some(job) = self.job.take() {
+                        job.thread
+                            .join()
+                            .map_err(|_| "the analysis panicked")?
+                            .map_err(|_| "nobody heard the analysis end")?;
+                    }
+                    if let Ok(analysis) = result.as_ref() {
+                        self.scenario.note_indexers(analysis);
+                    }
+                    self.app.analyzed(*result);
+                    self.seen = stamps(&self.scenario);
+                }
+                Err(_) => {
+                    self.job = None;
+                    return Err("the analysis ended without an answer".to_owned());
+                }
+            }
         }
     }
 
@@ -124,6 +306,10 @@ impl Session {
                     .ok_or_else(|| format!("no menu entry {rest}"))?;
                 Target::Menu(key)
             }
+            "column" => Target::Column(
+                cyclops_domain::metric::MetricId::parse(rest)
+                    .ok_or_else(|| format!("no column {rest}"))?,
+            ),
             other => return Err(format!("unknown target: {other}")),
         };
         self.app
@@ -140,14 +326,14 @@ impl Session {
             match gesture {
                 Gesture::Key(key) => self.app.update(Input::Key(key)),
                 Gesture::Mouse { kind, target } => {
-                    let (column, row) = if matches!(
+                    let wheel = matches!(
                         kind,
                         MouseKind::WheelUp
                             | MouseKind::WheelDown
                             | MouseKind::CtrlWheelUp
                             | MouseKind::CtrlWheelDown
-                    ) && target.is_empty()
-                    {
+                    );
+                    let (column, row) = if wheel && target.is_empty() {
                         (0, 2)
                     } else {
                         self.position_of(&target)?
@@ -165,9 +351,9 @@ impl Session {
                     self.app.update(Input::Resize { columns, rows });
                 }
                 Gesture::Step(step) => self.scenario.steps(&step, &no_cyclops)?,
-                Gesture::Resume => {}
+                Gesture::Resume => self.release(Control::Go),
             }
-            self.settle();
+            self.settle()?;
         }
         Ok(())
     }
@@ -175,5 +361,13 @@ impl Session {
     /// The text on screen.
     pub fn screen(&mut self) -> String {
         screen_text(&render(&mut self.app))
+    }
+}
+
+impl Drop for Session {
+    /// A row may end with an analysis still held. It is told to stop, and its thread ends
+    /// on its own, since nobody listens any more.
+    fn drop(&mut self) {
+        self.release(Control::Stop);
     }
 }

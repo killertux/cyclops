@@ -2,8 +2,10 @@
 
 use crate::duplication::Duplication;
 use crate::history::CommitSummary;
+use crate::ports::StepReport;
 use crate::precise::PreciseStatus;
 use crate::queries::Alert;
+use cyclops_domain::alert::AlertRule;
 use cyclops_domain::facts::{FileFacts, LineCounts};
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::metric::{Measurement, MetricId, Subject};
@@ -109,6 +111,10 @@ pub struct Extras {
     /// The alerts the rules fire.
     pub alerts: Vec<Alert>,
     pub precise: PreciseStatus,
+    /// What each step did.
+    pub steps: Vec<StepReport>,
+    /// The alert rules, enabled or not.
+    pub rules: Vec<AlertRule>,
 }
 
 impl ProjectAnalysis {
@@ -183,6 +189,26 @@ impl ProjectAnalysis {
     #[must_use]
     pub fn alerts(&self) -> &[Alert] {
         &self.extras.alerts
+    }
+
+    pub(crate) fn set_rules(&mut self, rules: Vec<AlertRule>) {
+        self.extras.rules = rules;
+    }
+
+    /// The alert rules, enabled or not, in the order of the settings.
+    #[must_use]
+    pub fn rules(&self) -> &[AlertRule] {
+        &self.extras.rules
+    }
+
+    pub(crate) fn set_steps(&mut self, steps: Vec<StepReport>) {
+        self.extras.steps = steps;
+    }
+
+    /// What each step of the analysis did, in order.
+    #[must_use]
+    pub fn steps(&self) -> &[StepReport] {
+        &self.extras.steps
     }
 
     pub(crate) fn set_alerts(&mut self, alerts: Vec<Alert>) {

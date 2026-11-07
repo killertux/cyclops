@@ -3,7 +3,9 @@
 //! exact, a guess it disproves goes away, and a file that changed since it was indexed
 //! keeps the syntax layer's guesses until the next precise analysis.
 
-use crate::ports::{ContentHash, FactStore, SemanticIndex, SemanticProvider, StoredIndex};
+use crate::ports::{
+    ContentHash, FactStore, Progress, SemanticIndex, SemanticProvider, Step, StoredIndex,
+};
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
@@ -256,7 +258,8 @@ pub(crate) fn run(
     files: &[CurrentFile<'_>],
     cache: &mut Option<&mut dyn FactStore>,
     problems: &mut Vec<Problem>,
-) -> (Vec<StoredIndex>, PreciseStatus) {
+    progress: &dyn Progress,
+) -> Option<(Vec<StoredIndex>, PreciseStatus)> {
     let mut indexes = match cache.as_deref_mut().map(<dyn FactStore>::load_indexes) {
         Some(Ok(indexes)) => indexes,
         Some(Err(error)) => {
@@ -278,6 +281,14 @@ pub(crate) fn run(
     let mut ran = Vec::new();
     if wanted {
         for provider in precise.providers {
+            let languages = provider.languages();
+            if !files.iter().any(|file| languages.contains(&file.language)) {
+                continue;
+            }
+            progress.indexing(provider.indexer());
+            if !progress.step(Step::Indexing) {
+                return None;
+            }
             if let Some(index) = index_with(provider.as_ref(), symbols, files, problems) {
                 if let Some(store) = cache.as_deref_mut()
                     && let Err(error) = store.save_index(&index)
@@ -292,7 +303,7 @@ pub(crate) fn run(
     }
     let current =
         (!indexes.is_empty()).then(|| indexes.iter().all(|index| is_current(index, files)));
-    (indexes, PreciseStatus { ran, current })
+    Some((indexes, PreciseStatus { ran, current }))
 }
 
 /// Runs one indexer, if the project has any of its languages.
@@ -628,6 +639,10 @@ mod tests {
             "Rust"
         }
 
+        fn indexer(&self) -> &'static str {
+            "rust-analyzer"
+        }
+
         fn languages(&self) -> &[LanguageId] {
             &[LanguageId::Rust]
         }
@@ -665,7 +680,9 @@ mod tests {
             &files,
             &mut None,
             &mut problems,
-        );
+            &crate::ports::Silent,
+        )
+        .unwrap();
         (indexes, status, problems)
     }
 

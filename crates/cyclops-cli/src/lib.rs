@@ -13,13 +13,16 @@ use cyclops_application::analyzers::{CohesionAnalyzer, ComplexityAnalyzer, SizeA
 use cyclops_application::diagram::{DiagramRequest, Level};
 use cyclops_application::graph::CouplingAnalyzer;
 use cyclops_application::pipeline::{AnalysisService, Sources};
-use cyclops_application::ports::{CacheAccess, CacheError, HistorySource, LanguageAdapter};
+use cyclops_application::ports::{
+    CacheAccess, CacheError, HistorySource, IndexError, LanguageAdapter, Progress, Silent,
+};
 use cyclops_application::precise::Precise;
 use cyclops_application::queries::Order;
 use cyclops_domain::filter::Filter;
 use cyclops_domain::metric::{MetricId, Subject};
+use cyclops_domain::problem::Problem;
 use cyclops_domain::settings::{
-    Layer, Origin, RawValue, Settings, SettingsError, Severity, Theme, initial_config,
+    Layer, Origin, RawValue, SemanticMode, Settings, SettingsError, Severity, Theme, initial_config,
 };
 use cyclops_domain::symbol::SymbolId;
 use cyclops_infra::{
@@ -29,7 +32,7 @@ use cyclops_infra::{
 use cyclops_lang_rust::RustAdapter;
 use cyclops_lang_typescript::TypeScriptAdapter;
 use cyclops_semantic::{Tools, providers};
-use cyclops_tui::state::ThemeChoice;
+use cyclops_tui::state::{Startup, ThemeChoice};
 use cyclops_tui::{Backend, Core};
 use std::collections::BTreeMap;
 use std::io::{self, ErrorKind, Write};
@@ -128,9 +131,35 @@ pub fn analyze_with(
     adapters: Vec<Box<dyn LanguageAdapter>>,
     precise: bool,
 ) -> Result<ProjectAnalysis> {
+    analyze_heard(root, environment, flags, adapters, precise, &Silent)
+}
+
+/// Analyzes the project in a folder, telling `progress` how it goes. `progress` may
+/// stop it.
+///
+/// # Errors
+///
+/// Fails if the folder is not a project, its settings are wrong, it cannot be listed,
+/// or the analysis was stopped.
+pub fn analyze_heard(
+    root: &Path,
+    environment: &Environment,
+    flags: &Layer,
+    adapters: Vec<Box<dyn LanguageAdapter>>,
+    precise: bool,
+    progress: &dyn Progress,
+) -> Result<ProjectAnalysis> {
     let files = ProjectFiles::open(root)?;
     let settings = settings(root, environment, flags, true)?;
-    run_analysis(root, environment, &files, &settings, adapters, precise)
+    run_analysis(
+        root,
+        environment,
+        &files,
+        &settings,
+        adapters,
+        precise,
+        progress,
+    )
 }
 
 /// Analyzes with settings already worked out, using the project's cache and history.
@@ -141,6 +170,7 @@ fn run_analysis(
     settings: &Settings,
     adapters: Vec<Box<dyn LanguageAdapter>>,
     precise: bool,
+    progress: &dyn Progress,
 ) -> Result<ProjectAnalysis> {
     let folder = ProjectFolder::of(root);
     let tools = Tools::new(environment.get("PATH"));
@@ -168,6 +198,7 @@ fn run_analysis(
             providers: &indexers,
             asked: precise,
         },
+        progress,
     };
     Ok(service.analyze(sources, settings)?)
 }
@@ -434,19 +465,39 @@ struct Interactive {
 }
 
 impl Core for Interactive {
-    fn analyze(&self, tests: Option<bool>, precise: bool) -> Result<ProjectAnalysis, String> {
-        analyze_with(
+    fn analyze(
+        &self,
+        tests: Option<bool>,
+        precise: bool,
+        progress: &dyn Progress,
+    ) -> Result<ProjectAnalysis, String> {
+        analyze_heard(
             &self.root,
             &self.environment,
             &flag_layer(tests),
             adapters(),
             precise,
+            progress,
         )
         .map_err(|error| error.to_string())
     }
 
     fn init(&self) -> Result<String, String> {
         init(&self.root).map_err(|error| error.to_string())
+    }
+
+    fn precise_ready(&self) -> Result<(), String> {
+        precise_ready(&self.root, &self.environment)
+    }
+
+    fn open(&self, path: &str, line: u32) -> Result<(), String> {
+        open_in_editor(&self.root, &self.environment, path, line)
+    }
+
+    fn copy(&self, text: &str) -> Result<(), String> {
+        arboard::Clipboard::new()
+            .and_then(|mut clipboard| clipboard.set_text(text))
+            .map_err(|error| format!("The clipboard cannot be used: {error}"))
     }
 }
 
@@ -456,10 +507,90 @@ impl Backend for Interactive {
     }
 }
 
-/// How the interface starts for a project and an environment: the theme from your own
-/// settings, and whether `NO_COLOR` is set.
+/// The editor of an environment: `$VISUAL`, or else `$EDITOR`.
 #[must_use]
-pub fn interface_theme(root: &Path, environment: &Environment) -> (ThemeChoice, bool) {
+pub fn editor(environment: &Environment) -> Option<String> {
+    ["VISUAL", "EDITOR"]
+        .into_iter()
+        .filter_map(|name| environment.get(name))
+        .map(str::trim)
+        .find(|editor| !editor.is_empty())
+        .map(str::to_owned)
+}
+
+/// Opens a file of a project in the editor at a line, and waits for it to close.
+///
+/// # Errors
+///
+/// Says why the editor could not run.
+pub fn open_in_editor(
+    root: &Path,
+    environment: &Environment,
+    path: &str,
+    line: u32,
+) -> Result<(), String> {
+    let editor = editor(environment).ok_or("Set $EDITOR to open files.")?;
+    let mut words = editor.split_whitespace();
+    let program = words.next().ok_or("Set $EDITOR to open files.")?;
+    let status = std::process::Command::new(program)
+        .args(words)
+        .arg(format!("+{line}"))
+        .arg(path)
+        .current_dir(root)
+        .status()
+        .map_err(|error| format!("{program} cannot run: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("{program} ended with {status}"))
+    }
+}
+
+/// Whether precise analysis can run on a project: it is not turned off, and an indexer
+/// for one of its languages has the tools it needs.
+///
+/// # Errors
+///
+/// Says why it cannot, such as `rust-analyzer is not installed.`
+pub fn precise_ready(root: &Path, environment: &Environment) -> Result<(), String> {
+    let files = ProjectFiles::open(root).map_err(|error| error.to_string())?;
+    let settings =
+        settings(root, environment, &flag_layer(None), true).map_err(|error| error.to_string())?;
+    if settings.semantic == SemanticMode::Off {
+        return Err(Problem::PreciseOff.to_string());
+    }
+    let languages = analysis_service(adapters())
+        .languages_in(&files)
+        .map_err(|error| error.to_string())?;
+    let tools = Tools::new(environment.get("PATH"));
+    let folder = ProjectFolder::of(root);
+    let cache = folder.cache_path();
+    let mut missing = None;
+    for provider in providers(root, cache.parent().unwrap_or(root), &tools) {
+        if !provider
+            .languages()
+            .iter()
+            .any(|language| languages.contains(language))
+        {
+            continue;
+        }
+        match provider.availability() {
+            Ok(()) => return Ok(()),
+            Err(error) => missing = missing.or(Some(error)),
+        }
+    }
+    Err(match missing {
+        Some(IndexError::Missing(tool)) => format!("{tool} is not installed."),
+        Some(IndexError::Failed(reason)) => reason,
+        None => "Nothing here can be indexed.".to_owned(),
+    })
+}
+
+/// How the interface starts for a project and an environment: the theme from your own
+/// settings, whether `NO_COLOR` is set, whether the project has settings of its own, and
+/// whether there is an editor.
+#[must_use]
+pub fn interface_startup(root: &Path, environment: &Environment) -> Startup {
     let theme =
         match settings(root, environment, &flag_layer(None), true).map(|settings| settings.theme) {
             Ok(Theme::Dark) => ThemeChoice::Dark,
@@ -469,18 +600,26 @@ pub fn interface_theme(root: &Path, environment: &Environment) -> (ThemeChoice, 
     let no_color = environment
         .get("NO_COLOR")
         .is_some_and(|value| !value.is_empty());
-    (theme, no_color)
+    Startup {
+        columns: 0,
+        rows: 0,
+        theme,
+        background: None,
+        no_color,
+        initialized: ProjectFolder::of(root).has_config(),
+        editor: editor(environment).is_some(),
+    }
 }
 
 /// Opens the terminal interface.
 fn interactive(root: &Path, environment: &Environment) -> Result<ExitCode> {
     ProjectFiles::open(root)?;
-    let (theme, no_color) = interface_theme(root, environment);
+    let startup = interface_startup(root, environment);
     let backend: Arc<dyn Backend> = Arc::new(Interactive {
         root: root.to_path_buf(),
         environment: environment.clone(),
     });
-    cyclops_tui::run(&backend, theme, no_color)?;
+    cyclops_tui::run(&backend, startup)?;
     Ok(ExitCode::SUCCESS)
 }
 
@@ -513,7 +652,15 @@ fn check(
     };
     let files = ProjectFiles::open(root)?;
     let settings = settings(root, environment, flags, false)?;
-    let analysis = run_analysis(root, environment, &files, &settings, adapters(), false)?;
+    let analysis = run_analysis(
+        root,
+        environment,
+        &files,
+        &settings,
+        adapters(),
+        false,
+        &Silent,
+    )?;
     let threshold = fail_on.unwrap_or(settings.fail_on);
     let mut failed = false;
     for alert in analysis.alerts() {

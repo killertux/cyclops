@@ -34,6 +34,24 @@ fn required<'a>(source: &'a AlertSource, field: &str) -> Result<&'a str, Setting
 }
 
 impl AlertRule {
+    /// What the rule says, such as `cyclomatic function > 2`.
+    #[must_use]
+    pub fn describe(&self) -> String {
+        let threshold = self.metric.descriptor().format(self.threshold);
+        format!(
+            "{} {} {} {threshold}",
+            self.metric.name(),
+            self.scope.name(),
+            self.comparison.symbol()
+        )
+    }
+
+    /// Its name, or what it says when it has none.
+    #[must_use]
+    pub fn title(&self) -> String {
+        self.name.clone().unwrap_or_else(|| self.describe())
+    }
+
     /// Checks a rule as a settings file wrote it.
     ///
     /// # Errors

@@ -19,7 +19,7 @@ fn measure(symbol: &Symbol, metric: MetricId, value: u32) -> Measurement {
 pub struct ComplexityAnalyzer;
 
 impl ComplexityAnalyzer {
-    fn cyclomatic(body: &BodyFacts) -> u32 {
+    pub(crate) fn cyclomatic(body: &BodyFacts) -> u32 {
         1 + body
             .decisions
             .iter()
@@ -27,7 +27,7 @@ impl ComplexityAnalyzer {
             .sum::<u32>()
     }
 
-    fn cognitive(body: &BodyFacts) -> u32 {
+    pub(crate) fn cognitive(body: &BodyFacts) -> u32 {
         body.decisions
             .iter()
             .map(|point| point.kind.points(point.nesting))

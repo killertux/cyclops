@@ -1,20 +1,23 @@
 //! What the interface looks like: the shell, each view, the inspector and the popups.
 //! See `specs/tui/design/`.
 
-use crate::app::{App, MIN_COLUMNS, MIN_ROWS, SIDE_BY_SIDE, hints, picked, space_menu};
+use crate::app::{App, MIN_COLUMNS, MIN_ROWS, Running, SIDE_BY_SIDE, hints, picked, space_menu};
 use crate::canvas::{Canvas, fit, width};
+use crate::state::Pose;
 use crate::state::{
     OVERVIEW_METRICS, Pane, Popup, PromptKind, Section, Target, View, metric_label,
 };
 use crate::tokens::Token;
 use cyclops_application::analysis::ProjectAnalysis;
 use cyclops_application::diagram::Level;
+use cyclops_application::ports::Step;
 use cyclops_domain::metric::{Heat, MetricId, Scope, Subject};
+use cyclops_domain::relation::Confidence;
 use cyclops_domain::settings::Severity;
-use cyclops_domain::symbol::{Symbol, SymbolId, SymbolKind};
+use cyclops_domain::symbol::CodeRole;
+use cyclops_domain::symbol::{Symbol, SymbolKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use std::collections::HashMap;
 
 /// Draws the interface into a buffer, and remembers where the mouse can point.
 pub fn draw(app: &mut App, buffer: &mut Buffer) {
@@ -455,51 +458,6 @@ fn bar(value: f64, highest: f64, cells: u16) -> (String, String) {
     (filled, rest)
 }
 
-/// `!`, `!!` or `@` for each symbol that has an alert or a cycle, or holds one.
-fn marks(analysis: &ProjectAnalysis) -> HashMap<SymbolId, String> {
-    let view = analysis.view();
-    let mut severity: HashMap<SymbolId, Severity> = HashMap::new();
-    for alert in analysis.alerts() {
-        let Subject::Symbol(id) = &alert.subject else {
-            continue;
-        };
-        let mut current = view.symbol(id);
-        while let Some(symbol) = current {
-            let entry = severity.entry(symbol.id.clone()).or_insert(alert.severity);
-            if alert.severity > *entry {
-                *entry = alert.severity;
-            }
-            current = symbol
-                .parent
-                .as_ref()
-                .and_then(|parent| view.symbol(parent));
-        }
-    }
-    let mut marks: HashMap<SymbolId, String> = HashMap::new();
-    for (id, severity) in severity {
-        let mark = if severity == Severity::Error {
-            "!!"
-        } else {
-            "!"
-        };
-        marks.insert(id, mark.to_owned());
-    }
-    for symbol in view.symbols() {
-        if symbol.kind == SymbolKind::Module
-            && analysis
-                .value(&Subject::Symbol(symbol.id.clone()), MetricId::CycleSize)
-                .is_some()
-        {
-            let mark = marks.entry(symbol.id.clone()).or_default();
-            if !mark.is_empty() {
-                mark.push(' ');
-            }
-            mark.push('@');
-        }
-    }
-    marks
-}
-
 fn structure(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
     let inside = canvas.pane(area, "Structure", active);
     let Some(analysis) = app.analysis() else {
@@ -513,7 +471,7 @@ fn structure(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
     let value_right = inside.x + inside.width.saturating_sub(bar_cells + 2);
     canvas.text_right(value_right, inside.y, &heading, Token::Faint, inside);
     let rows = app.tree();
-    let marks = marks(analysis);
+    let marks = app.tree_marks();
     let highest = rows
         .iter()
         .filter_map(|row| analysis.value(&Subject::Symbol(row.symbol.id.clone()), metric))
@@ -603,21 +561,11 @@ fn inspector(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
         return;
     };
     canvas.text(inside.x + 1, inside.y, &symbol.name, Token::B, inside);
-    canvas.text_right(
-        inside.x + inside.width - 1,
-        inside.y,
-        symbol.kind.name(),
-        Token::Dim,
-        inside,
-    );
+    let right = inside.x + inside.width - 1;
+    canvas.text_right(right, inside.y, symbol.kind.name(), Token::Dim, inside);
     if let Some(location) = &symbol.location {
-        canvas.text(
-            inside.x + 1,
-            inside.y + 1,
-            location.file.as_str(),
-            Token::Dim,
-            inside,
-        );
+        let file = location.file.as_str();
+        canvas.text(inside.x + 1, inside.y + 1, file, Token::Dim, inside);
     }
     let mut x = inside.x + 2;
     let open = app.inspector().unwrap_or(Section::Metrics);
@@ -635,17 +583,16 @@ fn inspector(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
         ..inside
     };
     match open {
-        Section::Metrics => inspector_metrics(analysis, symbol, canvas, body),
+        Section::Metrics => inspector_metrics(app, analysis, symbol, canvas, body),
         Section::Why => inspector_why(app, analysis, symbol, canvas, body),
-        Section::Relations => inspector_relations(analysis, symbol, canvas, body),
-        Section::Clones => {
-            canvas.text(body.x + 1, body.y, "Copies of its code", Token::Dim, body);
-        }
+        Section::Relations => inspector_relations(app, symbol, canvas, body, active),
+        Section::Clones => inspector_clones(analysis, symbol, canvas, body),
         Section::Impact => inspector_impact(analysis, symbol, canvas, body),
     }
 }
 
 fn inspector_metrics(
+    app: &App,
     analysis: &ProjectAnalysis,
     symbol: &Symbol,
     canvas: &mut Canvas<'_>,
@@ -653,34 +600,84 @@ fn inspector_metrics(
 ) {
     canvas.text(body.x + 1, body.y, "metric", Token::Faint, body);
     canvas.text(body.x + 15, body.y, "value", Token::Faint, body);
-    canvas.text(body.x + 22, body.y, "rank", Token::Faint, body);
+    canvas.text(body.x + 22, body.y, "among", Token::Faint, body);
     let subject = Subject::Symbol(symbol.id.clone());
     let mut y = body.y + 1;
-    for metric in MetricId::ALL {
-        let Some(scope) = scope_of(symbol) else {
-            break;
-        };
-        if !metric.descriptor().applies_to(scope) {
-            continue;
-        }
-        let value = analysis.value(&subject, metric);
-        let shown = value.map_or_else(
-            || "n/a".to_owned(),
-            |value| metric.descriptor().format(value),
-        );
-        let token = value_token(analysis, symbol, metric);
-        canvas.text(body.x + 1, y, metric_label(metric), Token::Fg, body);
-        canvas.text_right(body.x + 20, y, &shown, token, body);
-        if let Some(rank) = analysis.rank(&subject, metric) {
-            canvas.text(
-                body.x + 22,
-                y,
-                &format!("#{} of {}", rank.position, rank.of),
-                Token::Dim,
-                body,
+    if let Some(scope) = scope_of(symbol) {
+        for metric in MetricId::ALL {
+            if !metric.descriptor().applies_to(scope) {
+                continue;
+            }
+            let value = analysis.value(&subject, metric);
+            let shown = value.map_or_else(
+                || "n/a".to_owned(),
+                |value| metric.descriptor().format(value),
             );
+            let token = value_token(analysis, symbol, metric);
+            canvas.text(body.x + 1, y, metric_label(metric), Token::Fg, body);
+            canvas.text_right(body.x + 20, y, &shown, token, body);
+            if let Some(rank) = analysis.rank(&subject, metric) {
+                let rank = format!("#{} of {}", rank.position, rank.of);
+                canvas.text(body.x + 22, y, &rank, Token::Dim, body);
+            }
+            y += 1;
         }
-        y += 1;
+    }
+    y += 1;
+    let inside_it: Vec<_> = analysis
+        .alerts()
+        .iter()
+        .filter(|alert| match &alert.subject {
+            Subject::Symbol(id) => analysis.view().is_within(id, &symbol.id),
+            Subject::File(_) => false,
+        })
+        .collect();
+    if !inside_it.is_empty() {
+        let errors = inside_it
+            .iter()
+            .filter(|alert| alert.severity == Severity::Error)
+            .count();
+        let counts = format!(
+            "{errors} error   {} warning   of {} in the project",
+            inside_it.len() - errors,
+            analysis.alerts().len()
+        );
+        canvas.text(body.x + 1, y, "Alerts inside", Token::B, body);
+        canvas.text(body.x + 1, y + 1, &counts, Token::Fg, body);
+        y += 3;
+    }
+    if let Some(path) = analysis.cycle_path(&symbol.id) {
+        let names: Vec<String> = path
+            .iter()
+            .map(|(from, _, _)| {
+                app.symbol(from)
+                    .map_or_else(|| from.to_string(), |symbol| symbol.name.clone())
+            })
+            .collect();
+        let line = format!("@ {}   size {}", names.join(", "), names.len());
+        canvas.text(body.x + 1, y, "Cycle", Token::B, body);
+        canvas.text(body.x + 1, y + 1, &line, Token::H2, body);
+        y += 3;
+    }
+    let mut counts = [0_usize; 3];
+    for relation in analysis.view().relations() {
+        if (relation.from == symbol.id || relation.to == symbol.id)
+            && let Some(count) = counts.get_mut(confidence_index(relation.confidence))
+        {
+            *count += 1;
+        }
+    }
+    let [exact, inferred, ambiguous] = counts;
+    let line = format!("{exact} exact   {inferred} inferred   {ambiguous} ambiguous ~");
+    canvas.text(body.x + 1, y, "Relations", Token::B, body);
+    canvas.text(body.x + 1, y + 1, &line, Token::Fg, body);
+}
+
+const fn confidence_index(confidence: Confidence) -> usize {
+    match confidence {
+        Confidence::Exact => 0,
+        Confidence::Inferred => 1,
+        Confidence::Ambiguous => 2,
     }
 }
 
@@ -744,34 +741,48 @@ fn inspector_why(
 }
 
 fn inspector_relations(
-    analysis: &ProjectAnalysis,
+    app: &App,
     symbol: &Symbol,
     canvas: &mut Canvas<'_>,
     body: Rect,
+    active: bool,
 ) {
-    let view = analysis.view();
-    let outgoing = view
-        .relations()
-        .filter(|relation| relation.from == symbol.id)
-        .count();
-    let incoming = view
-        .relations()
-        .filter(|relation| relation.to == symbol.id)
-        .count();
-    canvas.text(
-        body.x + 1,
-        body.y,
-        &format!("Depends on {outgoing}"),
-        Token::Fg,
-        body,
-    );
-    canvas.text(
-        body.x + 1,
-        body.y + 1,
-        &format!("Depended on by {incoming}"),
-        Token::Fg,
-        body,
-    );
+    let relations = app.relations_of(&symbol.id);
+    if relations.is_empty() {
+        canvas.text(body.x + 1, body.y, "No relations.", Token::Dim, body);
+        return;
+    }
+    let mut y = body.y;
+    let mut heading = None;
+    for (index, (other, kind, confidence, incoming)) in relations.iter().enumerate() {
+        let title = if *incoming { "Used by" } else { "Uses" };
+        if heading != Some(title) {
+            if heading.is_some() {
+                y += 1;
+            }
+            canvas.text(body.x + 1, y, title, Token::B, body);
+            y += 1;
+            heading = Some(title);
+        }
+        let line = Rect {
+            y,
+            height: 1,
+            ..body
+        };
+        let guess = if *confidence == Confidence::Exact {
+            ""
+        } else {
+            " ~"
+        };
+        canvas.text(body.x + 1, y, kind.name(), Token::Dim, line);
+        canvas.text(body.x + 12, y, other.as_str(), Token::Fg, line);
+        let sure = format!("{}{guess}", confidence.name());
+        canvas.text_right(body.x + body.width - 1, y, &sure, Token::Dim, line);
+        if active && index == app.inspector_row() {
+            canvas.paint(line, Token::Sel);
+        }
+        y += 1;
+    }
 }
 
 fn inspector_impact(
@@ -868,6 +879,9 @@ fn overview_left(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
 fn summary_pane(app: &App, canvas: &mut Canvas<'_>, area: Rect, project: &str) {
     let inside = canvas.pane(area, project, false);
     let Some(analysis) = app.analysis() else {
+        let files = app.running_analysis().map_or(0, |running| running.files.1);
+        canvas.text(inside.x + 1, inside.y, "Files", Token::Fg, inside);
+        canvas.text_right(inside.x + 19, inside.y, &grouped(files), Token::B, inside);
         return;
     };
     let view = analysis.view();
@@ -880,6 +894,16 @@ fn summary_pane(app: &App, canvas: &mut Canvas<'_>, area: Rect, project: &str) {
         .symbols()
         .filter(|symbol| symbol.kind.is_type())
         .count();
+    let tests = analysis.tests();
+    let counted: Vec<_> = analysis
+        .files()
+        .iter()
+        .filter(|file| tests.shows(file.role))
+        .collect();
+    let lines: u32 = counted
+        .iter()
+        .map(|file| file.counted_lines(tests).code)
+        .sum();
     let rows = [
         ("Packages", count(&[SymbolKind::Package])),
         ("Modules", count(&[SymbolKind::Module])),
@@ -888,26 +912,77 @@ fn summary_pane(app: &App, canvas: &mut Canvas<'_>, area: Rect, project: &str) {
             "Functions",
             count(&[SymbolKind::Function, SymbolKind::Method]),
         ),
-        ("Files", analysis.files().len()),
+        ("Files", counted.len()),
+        ("Lines", usize::try_from(lines).unwrap_or_default()),
     ];
     for (index, (label, value)) in rows.iter().enumerate() {
         let y = inside.y + u16::try_from(index).unwrap_or_default();
         canvas.text(inside.x + 1, y, label, Token::Fg, inside);
         canvas.text_right(inside.x + 19, y, &grouped(*value), Token::B, inside);
     }
-    let tests = if app.lens().tests {
+    let note = if app.lens().tests {
         "tests counted"
     } else {
         "tests left out"
     };
-    canvas.text(inside.x + 21, inside.y + 4, tests, Token::Dim, inside);
+    canvas.text(inside.x + 21, inside.y + 5, note, Token::Dim, inside);
+    let mut by_language: Vec<(&'static str, u32)> = Vec::new();
+    for file in &counted {
+        let name = file.language.name();
+        let code = file.counted_lines(tests).code;
+        match by_language
+            .iter_mut()
+            .find(|(language, _)| *language == name)
+        {
+            Some((_, total)) => *total += code,
+            None => by_language.push((name, code)),
+        }
+    }
+    by_language.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+    for (index, (language, code)) in by_language.iter().take(2).enumerate() {
+        let y = inside.y + 7 + u16::try_from(index).unwrap_or_default();
+        let share = if lines > 0 {
+            f64::from(*code) / f64::from(lines)
+        } else {
+            0.0
+        };
+        let (filled, rest) = bar(share, 1.0, 18);
+        canvas.text(inside.x + 1, y, language, Token::Fg, inside);
+        let x = canvas.text(inside.x + 12, y, &filled, Token::Acc, inside);
+        let x = canvas.text(x, y, &rest, Token::Track, inside);
+        let percent = steps(share, 100);
+        canvas.text(x + 2, y, &format!("{percent}%"), Token::Fg, inside);
+    }
 }
 
 fn alerts_pane(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
     let inside = canvas.pane(area, "Alerts", false);
     let Some(analysis) = app.analysis() else {
+        canvas.text(
+            inside.x + 1,
+            inside.y,
+            "Waiting for analysis.",
+            Token::Dim,
+            inside,
+        );
         return;
     };
+    let rules: Vec<_> = analysis
+        .rules()
+        .iter()
+        .filter(|rule| rule.enabled)
+        .collect();
+    if rules.is_empty() {
+        canvas.text(inside.x + 1, inside.y, "No alert rules", Token::Dim, inside);
+        canvas.text(
+            inside.x + 1,
+            inside.y + 1,
+            "A adds one from here",
+            Token::Dim,
+            inside,
+        );
+        return;
+    }
     let errors = analysis
         .alerts()
         .iter()
@@ -916,54 +991,116 @@ fn alerts_pane(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
     let warnings = analysis.alerts().len() - errors;
     let counts = format!("{errors} error   {warnings} warning");
     canvas.text(inside.x + 1, inside.y, &counts, Token::Fg, inside);
+    for (index, rule) in rules.iter().enumerate() {
+        let y = inside.y + 2 + u16::try_from(index).unwrap_or(u16::MAX);
+        let hits = analysis
+            .alerts()
+            .iter()
+            .filter(|alert| alert.metric == rule.metric && alert.rule == rule.name)
+            .count();
+        let (mark, token) = if rule.severity == Severity::Error {
+            ("!!", Token::H3)
+        } else {
+            ("!", Token::H2)
+        };
+        canvas.text(inside.x + 1, y, mark, token, inside);
+        canvas.text(inside.x + 5, y, &hits.to_string(), Token::Fg, inside);
+        canvas.text(inside.x + 9, y, &rule.title(), Token::Fg, inside);
+    }
 }
 
+/// What the analysis is doing now, or how far to trust what it found.
 fn analysis_pane(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
     let inside = canvas.pane(area, "Analysis", false);
-    let syntax = if app.analyzing() {
-        "running"
-    } else if app.stale() {
-        "stale"
+    let line = |index: u16| inside.y + index;
+    if let Some(running) = app.running_analysis() {
+        running_lines(app, running, canvas, inside);
     } else {
-        "fresh"
-    };
-    canvas.text(
-        inside.x + 1,
-        inside.y,
-        &format!("Syntax  {syntax}"),
-        Token::Fg,
-        inside,
-    );
-    let precise = if app.precise_layer() {
-        "indexed"
-    } else {
-        "no index"
-    };
-    canvas.text(
-        inside.x + 1,
-        inside.y + 1,
-        &format!("Precise {precise}"),
-        Token::Fg,
-        inside,
-    );
-    let mut y = inside.y + 3;
-    if let Some(failure) = app.failure() {
-        canvas.text(inside.x + 1, y, failure, Token::H2, inside);
-        y += 1;
-    }
-    if let Some(analysis) = app.analysis() {
-        let problems = format!("Problems {}", analysis.problems().len());
-        canvas.text(inside.x + 1, y, &problems, Token::Fg, inside);
-        y += 1;
-        for problem in analysis.problems().iter().take(3) {
-            canvas.text(inside.x + 1, y, &problem.to_string(), Token::Dim, inside);
-            y += 1;
+        let syntax = if app.stale() { "stale" } else { "fresh" };
+        canvas.text(
+            inside.x + 1,
+            line(0),
+            &format!("Syntax  {syntax}"),
+            Token::Fg,
+            inside,
+        );
+        let precise = if app.precise_layer() {
+            "indexed"
+        } else {
+            "no index"
+        };
+        canvas.text(
+            inside.x + 1,
+            line(1),
+            &format!("Precise {precise}"),
+            Token::Fg,
+            inside,
+        );
+        if let Some(analysis) = app.analysis() {
+            let relations: Vec<_> = analysis.view().relations().collect();
+            let exact = relations
+                .iter()
+                .filter(|relation| relation.confidence == Confidence::Exact)
+                .count();
+            let share = if relations.is_empty() {
+                "n/a".to_owned()
+            } else {
+                let share = steps(
+                    f64::from(u32::try_from(exact).unwrap_or(u32::MAX))
+                        / f64::from(u32::try_from(relations.len()).unwrap_or(u32::MAX)),
+                    100,
+                );
+                format!("{share}%")
+            };
+            canvas.text(
+                inside.x + 1,
+                line(3),
+                &format!("Exact   {share}"),
+                Token::Fg,
+                inside,
+            );
+            let problems = format!("Problems {}", analysis.problems().len());
+            canvas.text(inside.x + 1, line(4), &problems, Token::Fg, inside);
+            let tests = if app.lens().tests {
+                "counted"
+            } else {
+                "left out"
+            };
+            canvas.text(
+                inside.x + 1,
+                line(5),
+                &format!("Tests   {tests}"),
+                Token::Fg,
+                inside,
+            );
+            if let Some(problem) = analysis.problems().first() {
+                canvas.text(
+                    inside.x + 1,
+                    line(7),
+                    &problem.to_string(),
+                    Token::Dim,
+                    inside,
+                );
+            }
         }
+        if let Some(failure) = app.failure() {
+            canvas.text(inside.x + 1, line(7), failure, Token::H2, inside);
+        }
+        canvas.text(inside.x + 1, line(9), "Space s details", Token::Dim, inside);
     }
+    mascot(app, canvas, inside);
 }
 
 fn overview_metrics(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
     let inside = canvas.pane(area, "Metrics", active);
+    if let Some(failure) = app.failure() {
+        canvas.text(inside.x + 1, inside.y, failure, Token::H2, inside);
+        return;
+    }
+    let Some(analysis) = app.analysis() else {
+        partial_metrics(app, canvas, inside);
+        return;
+    };
     canvas.text(inside.x + 1, inside.y, "metric", Token::Faint, inside);
     canvas.text(inside.x + 15, inside.y, "spread", Token::Faint, inside);
     canvas.text(inside.x + 25, inside.y, "highest", Token::Faint, inside);
@@ -974,17 +1111,6 @@ fn overview_metrics(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool
         Token::Faint,
         inside,
     );
-    let Some(analysis) = app.analysis() else {
-        nothing_yet(
-            app,
-            canvas,
-            Rect {
-                y: inside.y + 1,
-                ..inside
-            },
-        );
-        return;
-    };
     for (index, metric) in OVERVIEW_METRICS.iter().enumerate() {
         let y = inside.y + 1 + u16::try_from(index).unwrap_or_default();
         if y >= inside.y + inside.height {
@@ -1001,36 +1127,18 @@ fn overview_metrics(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool
         } else {
             let scope = metric.descriptor().measured_on();
             if let Some(spread) = analysis.spread(scope, *metric) {
-                let glyphs = ['▁', '▂', '▃', '▄', '▅', '▆', '▇'];
-                let highest = spread.iter().copied().max().unwrap_or(1).max(1);
-                let text: String = spread
-                    .iter()
-                    .map(|count| {
-                        if *count == 0 {
-                            ' '
-                        } else {
-                            let level = (count * 6).div_ceil(highest);
-                            glyphs.get(level.min(6)).copied().unwrap_or('▁')
-                        }
-                    })
-                    .collect();
-                canvas.text(inside.x + 15, y, &text, Token::Dim, line);
+                canvas.text(inside.x + 15, y, &sparkline(&spread), Token::Dim, line);
             }
             match analysis.worst(*metric) {
                 Some(worst) => {
                     let names: Vec<String> =
                         worst.subjects.iter().take(3).map(short_subject).collect();
                     let value = metric.descriptor().format(worst.value);
-                    canvas.text(
-                        inside.x + 25,
-                        y,
-                        &names.join(", "),
-                        Token::Fg,
-                        Rect {
-                            width: inside.width.saturating_sub(34),
-                            ..line
-                        },
-                    );
+                    let room = Rect {
+                        width: inside.width.saturating_sub(34),
+                        ..line
+                    };
+                    canvas.text(inside.x + 25, y, &names.join(", "), Token::Fg, room);
                     canvas.text_right(inside.x + inside.width - 1, y, &value, Token::Fg, line);
                 }
                 None => {
@@ -1061,9 +1169,47 @@ fn short_subject(subject: &Subject) -> String {
 
 fn overview_ranking(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
     let metric = app.lens().metric;
-    let title = format!("Highest by {}", metric_label(metric));
+    let partial = app
+        .running_analysis()
+        .and_then(|running| running.partial.as_ref());
+    let title = if app.analysis().is_none() && partial.is_some() {
+        format!("Highest by {}, so far", metric_label(metric))
+    } else {
+        format!("Highest by {}", metric_label(metric))
+    };
     let inside = canvas.pane(area, &title, active);
+    if !app.has_settings() {
+        let y = inside.y + inside.height.saturating_sub(2);
+        let note = "No project settings yet: defaults, local cache only.";
+        canvas.text(inside.x + 1, y, note, Token::Dim, inside);
+        canvas.text(
+            inside.x + 1,
+            y + 1,
+            ":init saves settings for the team.",
+            Token::Dim,
+            inside,
+        );
+    }
     let Some(analysis) = app.analysis() else {
+        if let Some(partial) = partial {
+            let mut ranked: Vec<(&str, f64)> = partial
+                .functions
+                .iter()
+                .filter_map(|function| {
+                    let value = function.values.iter().find(|(one, _)| *one == metric)?.1;
+                    Some((function.name.as_str(), value))
+                })
+                .collect();
+            ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+            for (index, (name, value)) in ranked.iter().take(8).enumerate() {
+                let y = inside.y + u16::try_from(index).unwrap_or_default();
+                canvas.text(inside.x + 1, y, name, Token::Fg, inside);
+                let shown = metric.descriptor().format(*value);
+                canvas.text_right(inside.x + inside.width - 1, y, &shown, Token::Fg, inside);
+            }
+            let note = format!("From {} files. This list will change.", partial.files);
+            canvas.text(inside.x + 1, inside.y + 9, &note, Token::Dim, inside);
+        }
         return;
     };
     for (index, subject) in app.ranking().iter().enumerate() {
@@ -1073,16 +1219,15 @@ fn overview_ranking(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool
             height: 1,
             ..inside
         };
-        let name = match subject {
-            Subject::File(path) => path.to_string(),
-            Subject::Symbol(id) => id.to_string(),
-        };
-        canvas.text(inside.x + 1, y, &name, Token::Fg, line);
+        canvas.text(inside.x + 1, y, &subject.to_string(), Token::Fg, line);
         let value = analysis.value(subject, metric).map_or_else(
             || "n/a".to_owned(),
             |value| metric.descriptor().format(value),
         );
         canvas.text_right(inside.x + inside.width - 1, y, &value, Token::Fg, line);
+        if active && index == app.ranking_row() {
+            canvas.paint(line, Token::Sel);
+        }
         if let Subject::Symbol(id) = subject {
             canvas.hit(line, Target::Symbol(id.clone()));
         }
@@ -1283,17 +1428,38 @@ fn find(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
         Token::Dim,
         inside,
     );
+    let (sort, lowest_first) = app.sorted_by();
+    let order = if lowest_first {
+        "lowest first"
+    } else {
+        "highest first"
+    };
+    let summary = format!(
+        "{} of {total}   sorted by {} {order}",
+        found.len(),
+        metric_label(sort)
+    );
     canvas.text_right(
         inside.x + inside.width - 1,
         inside.y,
-        &format!("{} of {total}", found.len()),
+        &summary,
         Token::Dim,
         inside,
     );
-    let metric = app.lens().metric;
+    let mut columns: Vec<MetricId> =
+        vec![MetricId::Cyclomatic, MetricId::Cognitive, MetricId::Lines];
+    if !columns.contains(&sort) {
+        columns.push(sort);
+    }
+    let width: u16 = 13;
+    let first_column = (inside.x + inside.width)
+        .saturating_sub(width * u16::try_from(columns.len()).unwrap_or(1) + 1);
+    let heading_y = inside.y + 2;
+    find_headings(canvas, inside, heading_y, first_column, &columns, sort);
     let selected = app.selected();
+    let marks = app.tree_marks();
     for (index, symbol) in found.iter().enumerate() {
-        let y = inside.y + 2 + u16::try_from(index).unwrap_or(u16::MAX);
+        let y = heading_y + 1 + u16::try_from(index).unwrap_or(u16::MAX);
         if y >= inside.y + inside.height {
             break;
         }
@@ -1302,14 +1468,26 @@ fn find(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
             height: 1,
             ..inside
         };
-        canvas.text(inside.x + 1, y, symbol.id.as_str(), Token::Fg, line);
-        canvas.text_right(
-            inside.x + inside.width - 1,
+        if let Some(mark) = marks.get(&symbol.id).filter(|mark| mark.starts_with('!')) {
+            canvas.text(inside.x + 1, y, mark, Token::H2, line);
+        }
+        let name_room = Rect {
+            width: first_column.saturating_sub(inside.x + 12),
+            ..line
+        };
+        canvas.text(inside.x + 4, y, symbol.id.as_str(), Token::Fg, name_room);
+        canvas.text(
+            first_column.saturating_sub(10),
             y,
-            &app.shown_value(&symbol.id, metric),
-            Token::Fg,
+            symbol.kind.name(),
+            Token::Dim,
             line,
         );
+        for (column, metric) in columns.iter().enumerate() {
+            let right = first_column + width * (u16::try_from(column).unwrap_or_default() + 1);
+            let value = app.shown_value(&symbol.id, *metric);
+            canvas.text_right(right, y, &value, Token::Fg, line);
+        }
         canvas.hit(line, Target::Symbol(symbol.id.clone()));
         if selected.as_ref() == Some(&symbol.id) {
             canvas.paint(line, Token::Sel);
@@ -1433,6 +1611,8 @@ fn popups(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
         Some(Popup::SpaceMenu) => space_menu_popup(app, canvas, body),
         Some(Popup::MetricPicker { typed }) => metric_picker(canvas, body, typed),
         Some(Popup::Help { all }) => help(app, canvas, body, *all),
+        Some(Popup::ConfirmPrecise) => confirm_precise(canvas, body),
+        Some(Popup::SortPicker { typed }) => picker(canvas, body, "Sort by", typed),
         None => {}
     }
 }
@@ -1487,7 +1667,40 @@ fn space_menu_popup(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
     }
 }
 
+fn confirm_precise(canvas: &mut Canvas<'_>, body: Rect) {
+    let area = Rect {
+        x: body.x + body.width.saturating_sub(64) / 2,
+        y: body.y + body.height / 3,
+        width: 64.min(body.width),
+        height: 7.min(body.height),
+    };
+    popup_frame(canvas, area, "");
+    canvas.text(
+        area.x + 2,
+        area.y + 1,
+        "Run precise analysis?",
+        Token::Popb,
+        area,
+    );
+    canvas.text(
+        area.x + 2,
+        area.y + 3,
+        "Indexing is slow, and may run the project's build scripts.",
+        Token::Pop,
+        area,
+    );
+    let x = canvas.text(area.x + 2, area.y + 5, "y", Token::Popk, area);
+    let x = canvas.text(x + 1, area.y + 5, "run it", Token::Pop, area);
+    let x = canvas.text(x + 3, area.y + 5, "n", Token::Popk, area);
+    canvas.text(x + 1, area.y + 5, "not now", Token::Pop, area);
+}
+
 fn metric_picker(canvas: &mut Canvas<'_>, body: Rect, typed: &str) {
+    picker(canvas, body, "Metric", typed);
+}
+
+/// A list of metrics that narrows as you type.
+fn picker(canvas: &mut Canvas<'_>, body: Rect, title: &str, typed: &str) {
     let choices = picked(typed);
     let height = u16::try_from(choices.len()).unwrap_or_default() + 4;
     let area = Rect {
@@ -1496,7 +1709,7 @@ fn metric_picker(canvas: &mut Canvas<'_>, body: Rect, typed: &str) {
         width: 60.min(body.width),
         height: height.min(body.height),
     };
-    popup_frame(canvas, area, "Metric");
+    popup_frame(canvas, area, title);
     canvas.text(
         area.x + 2,
         area.y + 1,
@@ -1508,6 +1721,7 @@ fn metric_picker(canvas: &mut Canvas<'_>, body: Rect, typed: &str) {
         let y = area.y + 3 + u16::try_from(index).unwrap_or_default();
         let token = if index == 0 { Token::Pops } else { Token::Pop };
         canvas.text(area.x + 2, y, metric_label(*metric), token, area);
+        canvas.text(area.x + 18, y, metric.measures(), Token::Popd, area);
         if metric.descriptor().heat.is_none() {
             canvas.text_right(area.x + area.width - 2, y, "neutral", Token::Popd, area);
         }
@@ -1541,5 +1755,248 @@ fn help(app: &App, canvas: &mut Canvas<'_>, body: Rect, all: bool) {
         let y = area.y + 3 + u16::try_from(index).unwrap_or_default();
         canvas.text(area.x + 2, y, key, Token::Popk, area);
         canvas.text(area.x + 12, y, &fit(meaning, 40), Token::Pop, area);
+    }
+}
+
+/// The step an analysis is on, how far it has got, and what comes next.
+fn running_lines(app: &App, running: &Running, canvas: &mut Canvas<'_>, inside: Rect) {
+    let elapsed = app.now().saturating_sub(running.since) / 1000;
+    if running.step == Some(Step::Indexing) || running.indexer.is_some() {
+        canvas.text(
+            inside.x + 1,
+            inside.y,
+            "Precise running",
+            Token::Accb,
+            inside,
+        );
+        canvas.text(
+            inside.x + 1,
+            inside.y + 1,
+            &format!("for {elapsed}s"),
+            Token::Fg,
+            inside,
+        );
+        let indexer = running.indexer.as_deref().unwrap_or("the indexer");
+        canvas.text(inside.x + 1, inside.y + 2, indexer, Token::Fg, inside);
+    } else {
+        let step = running.step.unwrap_or(Step::Discover);
+        let (done, of) = running.files;
+        let mut label = capitalized(step.name());
+        if step == Step::Extract && of > 0 {
+            let share = f64::from(u32::try_from(done).unwrap_or(u32::MAX))
+                / f64::from(u32::try_from(of).unwrap_or(u32::MAX));
+            label = format!("{label} {}%", steps(share, 100));
+        }
+        canvas.text(inside.x + 1, inside.y, &label, Token::Accb, inside);
+        if of > 0 {
+            let files = format!("{done} of {of} files");
+            canvas.text(inside.x + 1, inside.y + 2, &files, Token::Fg, inside);
+        }
+        let next: Vec<&str> = Step::PIPELINE
+            .iter()
+            .filter(|later| {
+                Step::PIPELINE.iter().position(|one| one == *later)
+                    > Step::PIPELINE.iter().position(|one| *one == step)
+            })
+            .filter(|later| !matches!(later, Step::Check | Step::Enrich))
+            .map(|later| later.name())
+            .collect();
+        if !next.is_empty() {
+            canvas.text(inside.x + 1, inside.y + 4, "Then", Token::Dim, inside);
+            canvas.text(
+                inside.x + 1,
+                inside.y + 5,
+                &next.join(", "),
+                Token::Dim,
+                inside,
+            );
+        }
+    }
+    canvas.text(
+        inside.x + 1,
+        inside.y + 9,
+        "Keep browsing.",
+        Token::Dim,
+        inside,
+    );
+}
+
+fn capitalized(word: &str) -> String {
+    let mut letters = word.chars();
+    letters.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(letters).collect()
+    })
+}
+
+/// The one-eyed watcher, in its pose. The art comes with the rest of the design.
+fn mascot(app: &App, canvas: &mut Canvas<'_>, inside: Rect) {
+    let eye = match app.pose() {
+        Pose::Watching => "( ◉ )",
+        Pose::Scanning => "(◉  )",
+        Pose::Found => "( ◉ )!",
+        Pose::NothingHere => "( - )",
+    };
+    let token = if app.pose() == Pose::Found {
+        Token::H2
+    } else {
+        Token::Acc
+    };
+    canvas.text(
+        inside.x + inside.width.saturating_sub(10),
+        inside.y + 2,
+        eye,
+        token,
+        inside,
+    );
+}
+
+/// Eight ranges as one cell each, from `▁` to `▇`.
+fn sparkline(spread: &[usize; 8]) -> String {
+    let glyphs = ['▁', '▂', '▃', '▄', '▅', '▆', '▇'];
+    let highest = spread.iter().copied().max().unwrap_or(1).max(1);
+    spread
+        .iter()
+        .map(|count| {
+            if *count == 0 {
+                ' '
+            } else {
+                let level = (count * 6).div_ceil(highest);
+                glyphs.get(level.min(6)).copied().unwrap_or('▁')
+            }
+        })
+        .collect()
+}
+
+/// What the metrics list knows before the analysis is done: the highest so far of what
+/// one file is enough for, and what the rest is waiting for.
+fn partial_metrics(app: &App, canvas: &mut Canvas<'_>, inside: Rect) {
+    canvas.text(inside.x + 1, inside.y, "metric", Token::Faint, inside);
+    canvas.text(
+        inside.x + 25,
+        inside.y,
+        "highest so far",
+        Token::Faint,
+        inside,
+    );
+    canvas.text_right(
+        inside.x + inside.width - 1,
+        inside.y,
+        "value",
+        Token::Faint,
+        inside,
+    );
+    let running = app.running_analysis();
+    let partial = running.and_then(|running| running.partial.as_ref());
+    for (index, metric) in OVERVIEW_METRICS.iter().enumerate() {
+        let y = inside.y + 1 + u16::try_from(index).unwrap_or_default();
+        if y >= inside.y + inside.height {
+            break;
+        }
+        let line = Rect {
+            y,
+            height: 1,
+            ..inside
+        };
+        canvas.text(inside.x + 1, y, metric_label(*metric), Token::Fg, line);
+        let highest = partial.and_then(|partial| {
+            partial
+                .functions
+                .iter()
+                .filter(|function| app.lens().tests || function.role == CodeRole::Production)
+                .filter_map(|function| {
+                    let value = function
+                        .values
+                        .iter()
+                        .find(|(measured, _)| measured == metric)?
+                        .1;
+                    Some((function, value))
+                })
+                .max_by(|(_, a), (_, b)| a.total_cmp(b))
+        });
+        if let Some((function, value)) = highest {
+            canvas.text(inside.x + 25, y, &function.name, Token::Fg, line);
+            let shown = metric.descriptor().format(value);
+            canvas.text_right(inside.x + inside.width - 1, y, &shown, Token::Fg, line);
+        } else {
+            let waiting = match metric {
+                MetricId::Churn | MetricId::Hotspot => "waiting for git history",
+                MetricId::Duplication if partial.is_none() => "waiting for every file",
+                MetricId::Duplication => "waiting for analyze",
+                _ if running.is_some_and(|running| running.past(Step::Link)) => {
+                    "waiting for analyze"
+                }
+                _ if partial.is_some() => "waiting for link",
+                _ => "waiting for extract",
+            };
+            canvas.text(inside.x + 25, y, waiting, Token::Dim, line);
+        }
+        if *metric == app.lens().metric {
+            canvas.paint(line, Token::Sel);
+        }
+    }
+}
+
+fn inspector_clones(
+    analysis: &ProjectAnalysis,
+    symbol: &Symbol,
+    canvas: &mut Canvas<'_>,
+    body: Rect,
+) {
+    let copies = symbol
+        .location
+        .as_ref()
+        .and_then(|location| analysis.duplication().copies.get(&location.file));
+    let Some(copies) = copies.filter(|copies| !copies.is_empty()) else {
+        canvas.text(body.x + 1, body.y, "No clones.", Token::Dim, body);
+        return;
+    };
+    canvas.text(body.x + 1, body.y, "Copies of its file", Token::B, body);
+    let mut y = body.y + 1;
+    for (file, ranges) in copies {
+        for (start, end) in ranges {
+            let line = format!("{file}  lines {start}-{end}");
+            canvas.text(body.x + 1, y, &line, Token::Fg, body);
+            y += 1;
+        }
+    }
+}
+
+/// The headings of Find's columns, each of which sorts by its metric when clicked.
+fn find_headings(
+    canvas: &mut Canvas<'_>,
+    inside: Rect,
+    heading_y: u16,
+    first_column: u16,
+    columns: &[MetricId],
+    sort: MetricId,
+) {
+    let width: u16 = 13;
+    canvas.text(inside.x + 1, heading_y, "symbol", Token::Faint, inside);
+    canvas.text(
+        first_column.saturating_sub(10),
+        heading_y,
+        "kind",
+        Token::Faint,
+        inside,
+    );
+    for (index, metric) in columns.iter().enumerate() {
+        let right = first_column + width * (u16::try_from(index).unwrap_or_default() + 1);
+        let label = metric_label(*metric);
+        let token = if *metric == sort {
+            Token::Accb
+        } else {
+            Token::Faint
+        };
+        canvas.text_right(right, heading_y, label, token, inside);
+        let start = right.saturating_sub(width);
+        canvas.hit(
+            Rect {
+                x: start,
+                y: heading_y,
+                width,
+                height: 1,
+            },
+            Target::Column(*metric),
+        );
     }
 }

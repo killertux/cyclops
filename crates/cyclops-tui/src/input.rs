@@ -126,6 +126,22 @@ fn mouse(kind: MouseKind, target: &str) -> Gesture {
     }
 }
 
+/// Where a `<...>` that starts the text ends. A step may hold `>` itself, as in
+/// `<step add alert cyclomatic function > 1 warning>`, so it ends at a `>` that comes
+/// last, or right before the next `<`.
+fn closing(text: &str) -> Option<usize> {
+    if !text.starts_with("<step ") {
+        return text.find('>');
+    }
+    text.char_indices()
+        .filter(|(_, character)| *character == '>')
+        .map(|(index, _)| index)
+        .find(|index| {
+            let after = text.get(index + 1..).unwrap_or_default();
+            after.is_empty() || after.starts_with('<')
+        })
+}
+
 /// Reads keys written in Vim's notation, as the specification writes them: each
 /// character is a key, and `<...>` names a key or a gesture.
 ///
@@ -137,9 +153,7 @@ pub fn parse_gestures(text: &str) -> Result<Vec<Gesture>, String> {
     let mut rest = text;
     while let Some(first) = rest.chars().next() {
         if first == '<' {
-            let end = rest
-                .find('>')
-                .ok_or_else(|| format!("unclosed < in {text}"))?;
+            let end = closing(rest).ok_or_else(|| format!("unclosed < in {text}"))?;
             let name = rest.get(1..end).unwrap_or_default();
             gestures.push(named(name)?);
             rest = rest.get(end + 1..).unwrap_or_default();
@@ -186,6 +200,18 @@ mod tests {
                     rows: 24,
                 },
                 Gesture::Step("edit a.rs".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_step_may_hold_a_greater_than_sign() {
+        assert_eq!(
+            parse_gestures("<step add alert cyclomatic function > 1 warning><Space>r").unwrap(),
+            vec![
+                Gesture::Step("add alert cyclomatic function > 1 warning".to_owned()),
+                Gesture::Key(Key::Char(' ')),
+                Gesture::Key(Key::Char('r')),
             ]
         );
     }

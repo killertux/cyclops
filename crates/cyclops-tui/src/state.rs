@@ -93,6 +93,9 @@ pub enum Mode {
     Command,
     Filter,
     Search,
+    Confirm,
+    /// Like NORMAL, while an analysis runs.
+    Analyzing,
 }
 
 impl Mode {
@@ -103,6 +106,8 @@ impl Mode {
             Self::Command => "COMMAND",
             Self::Filter => "FILTER",
             Self::Search => "SEARCH",
+            Self::Confirm => "CONFIRM",
+            Self::Analyzing => "ANALYZING",
         }
     }
 }
@@ -215,6 +220,12 @@ pub enum Popup {
     Help {
         all: bool,
     },
+    /// Asks before precise analysis runs anything.
+    ConfirmPrecise,
+    /// Picks the column Find sorts by.
+    SortPicker {
+        typed: String,
+    },
 }
 
 impl Popup {
@@ -224,13 +235,15 @@ impl Popup {
             Self::SpaceMenu => "space menu",
             Self::MetricPicker { .. } => "metric picker",
             Self::Help { .. } => "help",
+            Self::ConfirmPrecise => "confirm precise",
+            Self::SortPicker { .. } => "sort picker",
         }
     }
 }
 
 /// What the interface asks the world to do. Whoever runs it does the work, and tells it
 /// the result.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     /// Analyze again. `tests` overrides the setting for this session.
     Analyze {
@@ -239,6 +252,15 @@ pub enum Effect {
     },
     /// Save default settings for the team.
     Init,
+    /// Find out whether precise analysis can run, before asking to run it.
+    CheckPrecise,
+    /// Open a file of the project in the editor, at a line.
+    Open {
+        path: String,
+        line: u32,
+    },
+    /// Put text on the clipboard.
+    Copy(String),
     Quit,
 }
 
@@ -292,6 +314,10 @@ pub struct Startup {
     pub background: Option<ThemeChoice>,
     /// `NO_COLOR` is set.
     pub no_color: bool,
+    /// The project has settings of its own, in `.cyclops/config.toml`.
+    pub initialized: bool,
+    /// `$VISUAL` or `$EDITOR` names an editor.
+    pub editor: bool,
 }
 
 /// Something on screen the mouse can point at.
@@ -301,6 +327,8 @@ pub enum Target {
     Symbol(SymbolId),
     /// An entry of the Space menu, by its key.
     Menu(char),
+    /// A column heading of Find, by its metric.
+    Column(MetricId),
 }
 
 /// A place on the trail.
@@ -328,6 +356,27 @@ pub const OVERVIEW_METRICS: [MetricId; 14] = [
     MetricId::Churn,
     MetricId::Hotspot,
 ];
+
+/// What the mascot is doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pose {
+    Watching,
+    Scanning,
+    Found,
+    NothingHere,
+}
+
+impl Pose {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Watching => "watching",
+            Self::Scanning => "scanning",
+            Self::Found => "found",
+            Self::NothingHere => "nothing here",
+        }
+    }
+}
 
 /// How the interface names a metric.
 #[must_use]
