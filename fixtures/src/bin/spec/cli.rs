@@ -65,8 +65,7 @@ pub fn run(scenario: &Scenario, arguments: &str) -> Result<Output, String> {
         .args(words(arguments))
         .current_dir(scenario.root())
         .env_clear()
-        .envs(scenario.variables())
-        .env("PATH", env::var("PATH").unwrap_or_default());
+        .envs(scenario.variables());
     command.output().map_err(|e| e.to_string())
 }
 

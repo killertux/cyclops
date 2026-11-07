@@ -35,7 +35,7 @@ Commands work on the current folder, or the one given with `-C`.
 [problems](../analysis/parse-failures.md) are reported but do not fail the command, and a
 [bad configuration](../project/configuration.md#invalid-configuration) does.
 
-[//]: # "decisionTable Cli -- snooze until 2099-12-31"
+[//]: # "decisionTable Cli"
 
 | # situation     | workspace | steps          | command                     | exit code? | stderr text                             | stderr includes? |
 | --------------- | --------- | -------------- | --------------------------- | ---------- | --------------------------------------- | ---------------- |

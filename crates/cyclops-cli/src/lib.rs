@@ -14,6 +14,7 @@ use cyclops_application::diagram::{DiagramRequest, Level};
 use cyclops_application::graph::CouplingAnalyzer;
 use cyclops_application::pipeline::{AnalysisService, Sources};
 use cyclops_application::ports::{CacheAccess, CacheError, HistorySource, LanguageAdapter};
+use cyclops_application::precise::Precise;
 use cyclops_application::queries::Order;
 use cyclops_domain::filter::Filter;
 use cyclops_domain::metric::{MetricId, Subject};
@@ -27,6 +28,7 @@ use cyclops_infra::{
 };
 use cyclops_lang_rust::RustAdapter;
 use cyclops_lang_typescript::TypeScriptAdapter;
+use cyclops_semantic::{Tools, providers};
 use std::collections::BTreeMap;
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
@@ -107,10 +109,11 @@ pub fn user_config_path(environment: &Environment) -> Option<PathBuf> {
 ///
 /// Fails if the folder is not a project, its settings are wrong, or it cannot be listed.
 pub fn analyze(root: &Path, environment: &Environment, flags: &Layer) -> Result<ProjectAnalysis> {
-    analyze_with(root, environment, flags, adapters())
+    analyze_with(root, environment, flags, adapters(), false)
 }
 
-/// Analyzes the project in a folder, with these languages.
+/// Analyzes the project in a folder, with these languages. `precise` asks for the
+/// indexers as well.
 ///
 /// # Errors
 ///
@@ -120,20 +123,26 @@ pub fn analyze_with(
     environment: &Environment,
     flags: &Layer,
     adapters: Vec<Box<dyn LanguageAdapter>>,
+    precise: bool,
 ) -> Result<ProjectAnalysis> {
     let files = ProjectFiles::open(root)?;
     let settings = settings(root, environment, flags, true)?;
-    run_analysis(root, &files, &settings, adapters)
+    run_analysis(root, environment, &files, &settings, adapters, precise)
 }
 
 /// Analyzes with settings already worked out, using the project's cache and history.
 fn run_analysis(
     root: &Path,
+    environment: &Environment,
     files: &ProjectFiles,
     settings: &Settings,
     adapters: Vec<Box<dyn LanguageAdapter>>,
+    precise: bool,
 ) -> Result<ProjectAnalysis> {
     let folder = ProjectFolder::of(root);
+    let tools = Tools::new(environment.get("PATH"));
+    let cache_path = folder.cache_path();
+    let indexers = providers(root, cache_path.parent().unwrap_or(root), &tools);
     let store = folder
         .prepare()
         .map_err(|error| CacheError(error.to_string()))
@@ -152,6 +161,10 @@ fn run_analysis(
         files,
         cache,
         history,
+        precise: Precise {
+            providers: &indexers,
+            asked: precise,
+        },
     };
     Ok(service.analyze(sources, settings)?)
 }
@@ -194,7 +207,14 @@ enum Command {
     /// Create .cyclops/ with settings for this project.
     Init,
     /// Analyze the project and print a summary.
-    Analyze(TestFlags),
+    Analyze {
+        /// Also run the compilers' indexers, to make guessed relations exact. It is slow,
+        /// and may run the project's build scripts.
+        #[arg(long)]
+        precise: bool,
+        #[command(flatten)]
+        tests: TestFlags,
+    },
     /// Print every metric.
     Report {
         /// `table` for people, or `json` for tools.
@@ -312,8 +332,8 @@ fn execute(cli: &Cli, environment: &Environment) -> Result<ExitCode> {
         Command::Init => {
             writeln!(out, "{}", init(root)?)?;
         }
-        Command::Analyze(flags) => {
-            let analysis = analyze(root, environment, &flags.layer())?;
+        Command::Analyze { precise, tests } => {
+            let analysis = analyze_with(root, environment, &tests.layer(), adapters(), *precise)?;
             report_problems(&analysis);
             summary(&mut out, &analysis)?;
         }
@@ -430,7 +450,7 @@ fn check(
     };
     let files = ProjectFiles::open(root)?;
     let settings = settings(root, environment, flags, false)?;
-    let analysis = run_analysis(root, &files, &settings, adapters())?;
+    let analysis = run_analysis(root, environment, &files, &settings, adapters(), false)?;
     let threshold = fail_on.unwrap_or(settings.fail_on);
     let mut failed = false;
     for alert in analysis.alerts() {

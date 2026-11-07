@@ -8,7 +8,9 @@ use cyclops_domain::facts::FileFacts;
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::settings::{Layer, SettingKey, SettingKind, Settings};
+use std::cell::Cell;
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -50,6 +52,27 @@ pub struct Scenario {
     variables: HashMap<String, String>,
     tests_flag: Option<bool>,
     upgraded: Vec<String>,
+    /// Whether the analysis at the end of the row asks for the indexers.
+    precise: bool,
+    /// Whether any analysis of the row ran an indexer.
+    indexers_ran: Cell<bool>,
+}
+
+/// The tools the indexers need look for their own files under the home folder, which a
+/// row replaces. They keep finding the real ones.
+fn tool_homes(variables: &mut HashMap<String, String>) {
+    let Ok(home) = env::var("HOME") else {
+        return;
+    };
+    let home = Path::new(&home);
+    for (name, default) in [
+        ("RUSTUP_HOME", home.join(".rustup")),
+        ("CARGO_HOME", home.join(".cargo")),
+        ("npm_config_cache", home.join(".npm")),
+    ] {
+        let value = env::var(name).unwrap_or_else(|_| default.display().to_string());
+        variables.insert(name.to_owned(), value);
+    }
 }
 
 fn failure(step: &str, error: impl std::fmt::Display) -> String {
@@ -113,11 +136,15 @@ impl Scenario {
     pub fn new(scratch: Scratch) -> Self {
         let mut variables = HashMap::new();
         variables.insert("HOME".to_owned(), scratch.home().display().to_string());
+        variables.insert("PATH".to_owned(), env::var("PATH").unwrap_or_default());
+        tool_homes(&mut variables);
         Self {
             scratch,
             variables,
             tests_flag: None,
             upgraded: Vec::new(),
+            precise: false,
+            indexers_ran: Cell::new(false),
         }
     }
 
@@ -137,8 +164,17 @@ impl Scenario {
         flag_layer(self.tests_flag)
     }
 
+    /// Whether any analysis of the row ran an indexer.
+    pub fn indexers_ran(&self) -> bool {
+        self.indexers_ran.get()
+    }
+
     /// Analyzes the project, the way the final analysis of a row does.
     pub fn analyze(&self) -> Result<ProjectAnalysis, String> {
+        self.analyze_asking(self.precise)
+    }
+
+    fn analyze_asking(&self, precise: bool) -> Result<ProjectAnalysis, String> {
         let adapters: Vec<Box<dyn LanguageAdapter>> = adapters()
             .into_iter()
             .map(|adapter| {
@@ -149,8 +185,18 @@ impl Scenario {
                 }
             })
             .collect();
-        analyze_with(self.root(), &self.environment(), &self.flags(), adapters)
-            .map_err(|error| error.to_string())
+        let analysis = analyze_with(
+            self.root(),
+            &self.environment(),
+            &self.flags(),
+            adapters,
+            precise,
+        )
+        .map_err(|error| error.to_string())?;
+        if !analysis.precise().ran.is_empty() {
+            self.indexers_ran.set(true);
+        }
+        Ok(analysis)
     }
 
     pub fn settings(&self) -> Result<Settings, String> {
@@ -296,19 +342,59 @@ impl Scenario {
         }
     }
 
-    /// Takes every step of a row, separated by semicolons.
+    /// Takes every step of a row, separated by semicolons. A `precise analysis` that
+    /// comes last is the analysis at the end of the row, so that the row sees what it
+    /// found and what went wrong.
     pub fn steps(
         &mut self,
         steps: &str,
         cyclops: &dyn Fn(&Self, &str) -> Result<(), String>,
     ) -> Result<(), String> {
-        for step in steps
+        let steps: Vec<&str> = steps
             .split(';')
             .map(str::trim)
             .filter(|step| !step.is_empty())
-        {
-            self.step(step, cyclops)?;
+            .collect();
+        for (index, step) in steps.iter().enumerate() {
+            if *step == "precise analysis" && index + 1 == steps.len() {
+                self.precise = true;
+            } else {
+                self.step(step, cyclops)?;
+            }
         }
+        Ok(())
+    }
+
+    /// Makes a program unavailable, by putting in place of each folder of the search path
+    /// that has it a folder with everything else in that folder.
+    fn remove_tool(&mut self, name: &str) -> Result<(), String> {
+        let path = self.variables.get("PATH").cloned().unwrap_or_default();
+        let mut folders = Vec::new();
+        for (index, folder) in env::split_paths(&path).enumerate() {
+            if !folder.join(name).exists() {
+                folders.push(folder);
+                continue;
+            }
+            let without = self
+                .scratch
+                .home()
+                .join(".tools")
+                .join(format!("without-{name}-{index}"));
+            fs::create_dir_all(&without).map_err(|e| e.to_string())?;
+            for entry in fs::read_dir(&folder).map_err(|e| e.to_string())? {
+                let entry = entry.map_err(|e| e.to_string())?;
+                if entry.file_name() != name {
+                    std::os::unix::fs::symlink(entry.path(), without.join(entry.file_name()))
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+            folders.push(without);
+        }
+        let joined = env::join_paths(folders).map_err(|e| e.to_string())?;
+        let joined = joined
+            .into_string()
+            .map_err(|_| "a path that is not UTF-8")?;
+        self.variables.insert("PATH".to_owned(), joined);
         Ok(())
     }
 
@@ -365,6 +451,9 @@ impl Scenario {
             self.upgraded.push(language.to_owned());
             return Ok(());
         }
+        if let Some(name) = step.strip_prefix("remove tool ") {
+            return self.remove_tool(name).map_err(fail);
+        }
         if let Some(rest) = step.strip_prefix("commit ") {
             return self.commits(rest).map_err(fail);
         }
@@ -376,7 +465,8 @@ impl Scenario {
                 .map_err(fail);
         }
         let done = match step {
-            "analyze" => return self.analyze().map(drop).map_err(fail),
+            "analyze" => return self.analyze_asking(false).map(drop).map_err(fail),
+            "precise analysis" => return self.analyze_asking(true).map(drop).map_err(fail),
             "rewrite history" => {
                 return self
                     .git(&["commit", "-q", "--amend", "-m", "Rewritten"])

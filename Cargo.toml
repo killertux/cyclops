@@ -13,6 +13,7 @@ cyclops-domain = { path = "crates/cyclops-domain" }
 cyclops-infra = { path = "crates/cyclops-infra" }
 cyclops-lang-rust = { path = "crates/cyclops-lang-rust" }
 cyclops-lang-typescript = { path = "crates/cyclops-lang-typescript" }
+cyclops-semantic = { path = "crates/cyclops-semantic" }
 
 anyhow = "1"
 blake3 = "1"
@@ -32,8 +33,11 @@ oxc_syntax = "=0.157.0"
 ra_ap_syntax = "=0.0.360"
 petgraph = "0.8"
 postcard = { version = "1", features = ["use-std"] }
+# Only to decode SCIP: `scip` does not re-export it. Pinned to the version `scip` pins.
+protobuf = "=3.7.2"
 rayon = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }
+scip = "0.10"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 toml = "1"

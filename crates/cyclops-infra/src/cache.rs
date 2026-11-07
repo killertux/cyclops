@@ -2,19 +2,22 @@
 //! it is fixed by starting it over.
 
 use cyclops_application::ports::{
-    CacheEntry, CacheError, CachedFacts, Commit, FactStore, FileChange, FileStamp, KnownHistory,
-    NewHistory,
+    CacheEntry, CacheError, CachedFacts, Commit, ContentHash, FactStore, FileChange, FileStamp,
+    KnownHistory, NewHistory, StoredIndex,
 };
 use cyclops_domain::facts::FileFacts;
+use cyclops_domain::language::LanguageId;
 use cyclops_domain::path::RelativePath;
+use cyclops_domain::symbol::SymbolId;
 use rusqlite::{Connection, params};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 /// Raise it whenever the layout of the database or of the facts changes. A cache of
 /// another version is started over.
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 pub struct SqliteFactStore {
     connection: Connection,
@@ -44,7 +47,11 @@ fn create(path: &Path) -> Result<Connection, CacheError> {
                 subject TEXT NOT NULL,
                 changes BLOB NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS head (id TEXT NOT NULL);",
+            CREATE TABLE IF NOT EXISTS head (id TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS indexes (
+                label TEXT PRIMARY KEY,
+                contents BLOB NOT NULL
+            );",
         )
         .map_err(failed)?;
     connection
@@ -71,6 +78,44 @@ fn open_or_restart(path: &Path) -> Result<Connection, CacheError> {
         Err(error) => return Err(failed(error)),
     }
     create(path)
+}
+
+/// An index the way the cache keeps it.
+#[derive(Serialize, Deserialize)]
+struct KeptIndex {
+    languages: Vec<LanguageId>,
+    files: Vec<(RelativePath, ContentHash)>,
+    covered: Vec<RelativePath>,
+    uses: Vec<(String, String)>,
+}
+
+impl KeptIndex {
+    fn of(index: &StoredIndex) -> Self {
+        Self {
+            languages: index.languages.clone(),
+            files: index.files.clone(),
+            covered: index.covered.clone(),
+            uses: index
+                .uses
+                .iter()
+                .map(|(from, to)| (from.as_str().to_owned(), to.as_str().to_owned()))
+                .collect(),
+        }
+    }
+
+    fn into_index(self, label: String) -> StoredIndex {
+        StoredIndex {
+            label,
+            languages: self.languages,
+            files: self.files,
+            covered: self.covered,
+            uses: self
+                .uses
+                .into_iter()
+                .map(|(from, to)| (SymbolId::new(&from), SymbolId::new(&to)))
+                .collect(),
+        }
+    }
 }
 
 fn to_i64(value: u64) -> i64 {
@@ -231,6 +276,34 @@ impl SqliteFactStore {
 }
 
 impl FactStore for SqliteFactStore {
+    fn load_indexes(&mut self) -> Result<Vec<StoredIndex>, CacheError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT label, contents FROM indexes ORDER BY label")
+            .map_err(failed)?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get::<_, Vec<u8>>(1)?)))
+            .map_err(failed)?;
+        let mut indexes = Vec::new();
+        for row in rows {
+            let (label, contents) = row.map_err(failed)?;
+            let kept: KeptIndex = postcard::from_bytes(&contents).map_err(failed)?;
+            indexes.push(kept.into_index(label));
+        }
+        Ok(indexes)
+    }
+
+    fn save_index(&mut self, index: &StoredIndex) -> Result<(), CacheError> {
+        let contents = postcard::to_stdvec(&KeptIndex::of(index)).map_err(failed)?;
+        self.connection
+            .execute(
+                "INSERT OR REPLACE INTO indexes (label, contents) VALUES (?1, ?2)",
+                params![index.label, contents],
+            )
+            .map_err(failed)?;
+        Ok(())
+    }
+
     fn load_history(&mut self) -> Result<KnownHistory, CacheError> {
         self.read_history().map_err(failed)
     }
@@ -449,5 +522,39 @@ mod tests {
         let known = store.load().expect("loaded");
         fs::remove_dir_all(&folder).expect("removed");
         assert!(known.is_empty());
+    }
+
+    fn stored(label: &str, uses: &[(&str, &str)]) -> StoredIndex {
+        StoredIndex {
+            label: label.to_owned(),
+            languages: vec![LanguageId::Rust],
+            files: vec![(RelativePath::new("src/a.rs"), [3; 32])],
+            covered: vec![RelativePath::new("src/a.rs")],
+            uses: uses
+                .iter()
+                .map(|(from, to)| (SymbolId::new(from), SymbolId::new(to)))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn an_index_comes_back_and_a_new_one_replaces_it() {
+        let folder = scratch("indexes");
+        let path = folder.join("cyclops.db");
+        let mut store = SqliteFactStore::open(&path).expect("opened");
+        assert_eq!(store.load_indexes().expect("loaded"), Vec::new());
+        let first = stored("Rust", &[("a::f", "a::g")]);
+        let other = stored("TypeScript", &[]);
+        store.save_index(&first).expect("saved");
+        store.save_index(&other).expect("saved");
+        assert_eq!(
+            store.load_indexes().expect("loaded"),
+            vec![first, other.clone()]
+        );
+        let again = stored("Rust", &[("a::f", "a::h")]);
+        store.save_index(&again).expect("saved");
+        let known = store.load_indexes().expect("loaded");
+        fs::remove_dir_all(&folder).expect("removed");
+        assert_eq!(known, vec![again, other]);
     }
 }

@@ -106,12 +106,26 @@ output in the **SCIP** format:
 | Language | Indexer | Requires |
 |---|---|---|
 | Rust | `rust-analyzer scip` | rust-analyzer and a Cargo toolchain |
-| TypeScript, JavaScript | `scip-typescript` | Node and the project's dependencies installed |
+| TypeScript, JavaScript | `scip-typescript`, run with `npx` at a pinned version | Node and the project's dependencies installed |
+
+`scip-typescript` is not installed with Node, so Cyclops runs it with
+`npx --yes @sourcegraph/scip-typescript@0.6.1`. The first precise analysis on a machine
+downloads it, and later ones use npm's cache.
 
 SCIP records where each symbol is defined and referenced. Relations backed by it become
 `Confidence::Exact`. `scip-typescript` also records "implements" as a relationship, but
 `rust-analyzer` does not, so for Rust it has to be read from the symbol's name, as in
 `catalog/impl#[Item][Priced]price()`. See the [spike results](#indexer-spike-results).
+
+**How an index meets the model.** SCIP knows names and positions, not Cyclops symbols.
+A definition becomes the innermost symbol of the same name whose lines hold it, and a
+use belongs to the innermost symbol whose lines hold it. Uses of names the project does
+not define, such as the standard library, are dropped, and a name with no symbol of its
+own, such as a TypeScript constructor, falls back to what it belongs to. What is kept is
+only "this symbol uses that one", with the content hash of every file at the time of
+indexing. A guessed relation is then proven when something inside its source uses its
+target or a part of it, and disproven otherwise. Exact relations are never touched, and
+neither are relations from files that changed since the index was made.
 
 SCIP was chosen over the alternatives because it fits the language-agnostic goal:
 
@@ -563,7 +577,7 @@ and `-C PATH` works on another folder.
 |---|---|
 | Rust parsing | `ra_ap_syntax` |
 | TS and JS parsing | `oxc_parser`, `oxc_ast`, `oxc_ast_visit`, `oxc_allocator`, `oxc_span`, `oxc_syntax`, `oxc_semantic`, `oxc_resolver` |
-| Semantic index | `scip` |
+| Semantic index | `scip`, and `protobuf` to decode it, at the version `scip` pins |
 | File walking | `ignore` |
 | Parallelism | `rayon` |
 | Hashing | `blake3` |

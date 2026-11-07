@@ -49,7 +49,7 @@ each dependent counts by the weakest relation on its way to the subject. When se
 ways lead there, the surest one counts. In [`rust-chain`](../../samples/rust-chain), `drive`
 makes a guessed call to `start`, and `race` calls `drive` exactly.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace  | steps              | subject                         | exact? | inferred? | ambiguous? |
 | --------------- | ---------- | ------------------ | ------------------------------- | ------ | --------- | ---------- |

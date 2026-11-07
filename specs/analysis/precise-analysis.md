@@ -21,7 +21,7 @@ project may run its build scripts and proc macros. So it only runs when asked.
 is only accepted from your own file, a flag or the environment.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace | steps                                     | indexers run? | problems?                                        |
 | ------------------ | --------- | ----------------------------------------- | ------------- | ------------------------------------------------ |
@@ -36,7 +36,7 @@ is only accepted from your own file, a flag or the environment.
 An exact answer replaces a guess. See how relations are
 [guessed without it](../model/relations.md#calls).
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace     | steps              | from                       | to                              | confidence? |
 | ------------------ | ------------- | ------------------ | -------------------------- | ------------------------------- | ----------- |
@@ -50,7 +50,7 @@ An exact answer replaces a guess. See how relations are
 Metrics never need it. Complexity, size and duplication come from the syntax layer,
 so they do not change.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps              | subject                    | cyclomatic? |
 | ----------- | --------- | ------------------ | -------------------------- | ----------- |
@@ -63,7 +63,7 @@ An index belongs to the code it was made from. Relations from a file that has ch
 since then go back to what the syntax layer found, until the next precise analysis.
 Cyclops never presents old data as current.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation          | workspace | steps                                                    | from                       | to                            | confidence? | index current? |
 | -------------------- | --------- | -------------------------------------------------------- | -------------------------- | ----------------------------- | ----------- | -------------- |
@@ -77,7 +77,7 @@ Cyclops never presents old data as current.
 A missing tool is never fatal. Cyclops says what is missing, keeps the syntax layer's
 results, and still uses the indexers it can.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation      | workspace | steps                                         | analyzed? | problems?                                                   |
 | ---------------- | --------- | --------------------------------------------- | --------- | ----------------------------------------------------------- |

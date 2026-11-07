@@ -304,6 +304,7 @@ pub struct Core {
     overlay: String,
     outcome: Option<Outcome>,
     settings: Option<Result<Settings, String>>,
+    indexers_ran: bool,
 }
 
 impl Core {
@@ -320,7 +321,9 @@ impl Core {
             scenario.steps(&format!("add alert {rule}"), &no_cyclops)?;
         }
         self.settings = Some(scenario.settings());
-        scenario.analyze()
+        let analysis = scenario.analyze();
+        self.indexers_ran = scenario.indexers_ran();
+        analysis
     }
 
     fn read(&self, reader: impl FnOnce(&ProjectAnalysis) -> String) -> String {
@@ -550,6 +553,21 @@ impl Core {
     #[must_use]
     pub fn analyzed(&self) -> String {
         yes_no(matches!(self.outcome, Some(Ok(_))))
+    }
+
+    /// Whether any analysis of the row ran an indexer.
+    #[must_use]
+    pub fn indexers_run(&self) -> String {
+        match &self.outcome {
+            Some(_) => yes_no(self.indexers_ran),
+            None => not_run(),
+        }
+    }
+
+    /// Whether the indexes still match the code. Without any, they do not.
+    #[must_use]
+    pub fn index_current(&self) -> String {
+        self.read(|analysis| yes_no(analysis.precise().current == Some(true)))
     }
 
     /// Why the analysis or the filter was refused.

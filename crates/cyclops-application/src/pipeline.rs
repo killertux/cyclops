@@ -7,6 +7,7 @@ use crate::ports::{
     Analyzer, CacheAccess, CacheEntry, CachedFacts, Commit, ContentHash, FactStore, FileSource,
     FileStamp, HistoryError, HistorySource, KnownHistory, LanguageAdapter, SourceError, SourceFile,
 };
+use crate::precise::{self, CurrentFile, Precise};
 use crate::rollups::roll_up;
 use cyclops_domain::alert::AlertRule;
 use cyclops_domain::facts::FileFacts;
@@ -16,8 +17,9 @@ use cyclops_domain::metric::{MetricId, Subject};
 use cyclops_domain::model::{ModelView, ProjectModel};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
+use cyclops_domain::relation::Relation;
 use cyclops_domain::settings::{Settings, SettingsError};
-use cyclops_domain::symbol::{CodeRole, SymbolId};
+use cyclops_domain::symbol::{CodeRole, Symbol, SymbolId};
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -51,6 +53,7 @@ pub struct Sources<'a> {
     pub cache: CacheAccess<'a>,
     /// The history of the files, if the project has one.
     pub history: Option<&'a dyn HistorySource>,
+    pub precise: Precise<'a>,
 }
 
 /// The time now, in seconds since 1970.
@@ -119,6 +122,7 @@ struct Extracted {
     adapter: usize,
     facts: FileFacts,
     origin: Origin,
+    hash: ContentHash,
 }
 
 fn hash(bytes: &[u8]) -> ContentHash {
@@ -196,7 +200,25 @@ impl AnalysisService {
         for file in &mut extracted {
             mark_test_paths(&mut file.facts, &settings.test_paths);
         }
-        let (model, linked) = self.link(&extracted, sources.files);
+        let (symbols, relations, linked) = self.link(&extracted, sources.files);
+        let current: Vec<CurrentFile<'_>> = extracted
+            .iter()
+            .map(|file| CurrentFile {
+                path: &file.facts.path,
+                language: file.facts.language,
+                hash: file.hash,
+            })
+            .collect();
+        let (indexes, precise_status) = precise::run(
+            sources.precise,
+            settings.semantic,
+            &symbols,
+            &current,
+            &mut cache,
+            &mut problems,
+        );
+        let relations = precise::enrich(relations, &symbols, &indexes, &current);
+        let model = ProjectModel::new(symbols, relations);
         let mut files: Vec<AnalyzedFile> = extracted
             .iter()
             .map(|file| AnalyzedFile::from_facts(&file.facts))
@@ -225,6 +247,7 @@ impl AnalysisService {
         measurements.extend(duplication.measure(&input));
         let mut extras = Extras {
             duplication,
+            precise: precise_status,
             ..Extras::default()
         };
         match read_history(sources.history, &mut cache, &mut problems) {
@@ -380,6 +403,7 @@ impl AnalysisService {
                 adapter: candidate.index,
                 facts: cached.facts.clone(),
                 origin: Origin::Cache,
+                hash: cached.hash,
             });
         }
         let bytes = source.read(path).map_err(unreadable)?;
@@ -389,6 +413,7 @@ impl AnalysisService {
                 adapter: candidate.index,
                 facts: cached.facts,
                 origin: Origin::Touched(stamp, digest),
+                hash: digest,
             });
         }
         let text = String::from_utf8(bytes).map_err(|_| Problem::NotUtf8(path.clone()))?;
@@ -397,6 +422,7 @@ impl AnalysisService {
             adapter: candidate.index,
             facts,
             origin: Origin::Parsed(stamp, digest),
+            hash: digest,
         })
     }
 
@@ -433,7 +459,7 @@ impl AnalysisService {
         &self,
         extracted: &[Extracted],
         source: &dyn FileSource,
-    ) -> (ProjectModel, LinkedFiles) {
+    ) -> (Vec<Symbol>, Vec<Relation>, LinkedFiles) {
         let mut symbols = Vec::new();
         let mut relations = Vec::new();
         let mut files = LinkedFiles::default();
@@ -451,6 +477,6 @@ impl AnalysisService {
                 files.file_modules.extend(linked.file_modules);
             }
         }
-        (ProjectModel::new(symbols, relations), files)
+        (symbols, relations, files)
     }
 }

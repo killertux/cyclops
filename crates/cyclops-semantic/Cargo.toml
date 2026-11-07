@@ -1,0 +1,15 @@
+[package]
+name = "cyclops-semantic"
+description = "Precise analysis for Cyclops: runs the compilers' indexers and reads what they find"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+cyclops-application.workspace = true
+cyclops-domain.workspace = true
+protobuf.workspace = true
+scip.workspace = true
+
+[lints]
+workspace = true

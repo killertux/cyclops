@@ -71,6 +71,17 @@ fn analyze_works_on_the_current_folder() {
 }
 
 #[test]
+fn precise_analysis_without_its_tools_still_analyzes() {
+    let output = cyclops(sample("rust-shop").path(), &["analyze", "--precise"]);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(text(&output.stdout).contains("6 files"));
+    assert_eq!(
+        text(&output.stderr),
+        "Precise analysis skipped for Rust: rust-analyzer not found.\n"
+    );
+}
+
+#[test]
 fn analyze_works_on_another_folder() {
     let output = cyclops(sample("rust-shop").path(), &["-C", "src", "analyze"]);
     assert_eq!(output.status.code(), Some(0));

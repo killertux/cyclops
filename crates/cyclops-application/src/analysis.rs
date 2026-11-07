@@ -2,6 +2,7 @@
 
 use crate::duplication::Duplication;
 use crate::history::CommitSummary;
+use crate::precise::PreciseStatus;
 use crate::queries::Alert;
 use cyclops_domain::facts::{FileFacts, LineCounts};
 use cyclops_domain::language::LanguageId;
@@ -93,6 +94,7 @@ pub struct Extras {
     pub file_commits: BTreeMap<RelativePath, Vec<CommitSummary>>,
     /// The alerts the rules fire.
     pub alerts: Vec<Alert>,
+    pub precise: PreciseStatus,
 }
 
 impl ProjectAnalysis {
@@ -145,6 +147,12 @@ impl ProjectAnalysis {
             .file_commits
             .get(file)
             .map_or(&[], Vec::as_slice)
+    }
+
+    /// Which indexers ran, and whether the indexes are current.
+    #[must_use]
+    pub fn precise(&self) -> &PreciseStatus {
+        &self.extras.precise
     }
 
     /// The alerts that fired, in order of severity and then subject.

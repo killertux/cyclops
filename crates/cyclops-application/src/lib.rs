@@ -9,5 +9,6 @@ pub mod graph;
 pub mod history;
 pub mod pipeline;
 pub mod ports;
+pub mod precise;
 pub mod queries;
 pub mod rollups;

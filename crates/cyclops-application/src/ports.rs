@@ -163,6 +163,20 @@ pub trait FactStore {
     ///
     /// Fails if the cache cannot be written.
     fn save_history(&mut self, history: &NewHistory) -> Result<(), CacheError>;
+
+    /// What each indexer found the last time precise analysis ran.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the cache cannot be read.
+    fn load_indexes(&mut self) -> Result<Vec<StoredIndex>, CacheError>;
+
+    /// Keeps what an indexer found, in place of what it found before.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the cache cannot be written.
+    fn save_index(&mut self, index: &StoredIndex) -> Result<(), CacheError>;
 }
 
 /// What an analysis can do about the cache.
@@ -228,4 +242,85 @@ pub struct KnownHistory {
     pub head: Option<String>,
     /// Every commit it has read, newest first.
     pub commits: Vec<Commit>,
+}
+
+/// What an indexer found in a project: where each name in the code is defined, and
+/// where it is used.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SemanticIndex {
+    pub documents: Vec<IndexedDocument>,
+}
+
+/// What an indexer found in one file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexedDocument {
+    pub path: RelativePath,
+    pub definitions: Vec<IndexedDefinition>,
+    pub references: Vec<IndexedReference>,
+}
+
+/// Where a name is defined. Lines count from 1.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexedDefinition {
+    pub line: u32,
+    /// The name as the code writes it, such as `total`.
+    pub name: String,
+    /// What the indexer calls it, the same in every file.
+    pub key: String,
+}
+
+/// Where a name is used. Lines count from 1.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexedReference {
+    pub line: u32,
+    pub key: String,
+    /// The key of what it belongs to, such as the class of a constructor, for when the
+    /// name itself is not a symbol of the project.
+    pub owner: Option<String>,
+}
+
+#[derive(Debug, Error)]
+pub enum IndexError {
+    /// A tool the indexer needs is not installed, such as `Node`.
+    #[error("{0} not found")]
+    Missing(String),
+    #[error("{0}")]
+    Failed(String),
+}
+
+/// Runs a compiler's indexer over the whole project, to find out exactly what each name
+/// refers to.
+pub trait SemanticProvider: Send + Sync {
+    /// The name precise analysis gives its languages, such as `TypeScript`.
+    fn label(&self) -> &'static str;
+
+    fn languages(&self) -> &[LanguageId];
+
+    /// Whether the tools it needs are there.
+    ///
+    /// # Errors
+    ///
+    /// Says which tool is missing.
+    fn availability(&self) -> Result<(), IndexError>;
+
+    /// Indexes the project. It is slow, and may run the project's build scripts.
+    ///
+    /// # Errors
+    ///
+    /// Fails if a tool is missing, or the indexer fails.
+    fn index(&self) -> Result<SemanticIndex, IndexError>;
+}
+
+/// What precise analysis found for some languages, kept for later analyses.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StoredIndex {
+    /// The label of the indexer that made it.
+    pub label: String,
+    pub languages: Vec<LanguageId>,
+    /// Every file of its languages, as it was when indexed.
+    pub files: Vec<(RelativePath, ContentHash)>,
+    /// The files the indexer read.
+    pub covered: Vec<RelativePath>,
+    /// Which symbol uses which: the innermost symbol around each use, and what it uses.
+    pub uses: Vec<(SymbolId, SymbolId)>,
 }

@@ -403,6 +403,7 @@ dependencies = [
  "cyclops-infra",
  "cyclops-lang-rust",
  "cyclops-lang-typescript",
+ "cyclops-semantic",
 ]
 
 [[package]]
@@ -434,6 +435,7 @@ dependencies = [
  "ignore",
  "postcard",
  "rusqlite",
+ "serde",
  "thiserror 2.0.21",
  "toml",
 ]
@@ -460,6 +462,16 @@ dependencies = [
  "oxc_parser",
  "oxc_span",
  "oxc_syntax",
+]
+
+[[package]]
+name = "cyclops-semantic"
+version = "0.1.0"
+dependencies = [
+ "cyclops-application",
+ "cyclops-domain",
+ "protobuf",
+ "scip",
 ]
 
 [[package]]
@@ -2286,6 +2298,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "protobuf"
+version = "3.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d65a1d4ddae7d8b5de68153b48f6aa3bba8cb002b243dbdbc55a5afbc98f99f4"
+dependencies = [
+ "once_cell",
+ "protobuf-support",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "protobuf-support"
+version = "3.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e36c2f31e0a47f9280fb347ef5e461ffcd2c52dd520d8e216b52f93b0b0d7d6"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2567,6 +2599,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "scip"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7f651fbd0f98742a47b58623a7bcfd8fad14455912689e4867a1f43ee7e02c6"
+dependencies = [
+ "protobuf",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2765,7 +2806,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys",
