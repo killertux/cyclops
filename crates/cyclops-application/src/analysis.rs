@@ -31,6 +31,12 @@ impl AnalyzedFile {
         }
     }
 
+    /// Marks all of the file as test code.
+    pub(crate) const fn make_test_code(&mut self) {
+        self.role = CodeRole::Test;
+        self.test_lines = self.lines;
+    }
+
     /// Its lines that count, with or without test code.
     #[must_use]
     pub const fn counted_lines(&self, tests: TestCode) -> LineCounts {

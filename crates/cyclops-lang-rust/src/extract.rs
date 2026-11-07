@@ -1,33 +1,38 @@
 //! Extracts the facts of one Rust file.
 
 use crate::body::{self, Function};
-use crate::lines::LineMap;
-use cyclops_domain::facts::{BodyFacts, FileFacts, Import, LineCounts, SymbolFact};
+use crate::lines;
+use cyclops_domain::facts::{BodyFacts, FileFacts, Import, LineCounts, SymbolFact, is_too_deep};
 use cyclops_domain::language::LanguageId;
+use cyclops_domain::lines::LineMap;
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::symbol::{CodeRole, Span, SymbolKind, Visibility};
 use ra_ap_syntax::ast::{self, AstNode, HasAttrs, HasModuleItem, HasName, HasVisibility};
-use ra_ap_syntax::{Edition, NodeOrToken, SourceFile, SyntaxKind, SyntaxNode, TextSize};
+use ra_ap_syntax::{Edition, NodeOrToken, SourceFile, SyntaxKind, SyntaxNode, TextSize, WalkEvent};
 use std::collections::VecDeque;
+use std::mem::ManuallyDrop;
 
-/// The parser recurses, so code nested deeply enough would overflow the stack and take
-/// the whole analysis down. No person writes code near this deep, and the parser
-/// handles about twice as much on the stack of a worker thread.
-const MAX_BRACKET_DEPTH: usize = 256;
+/// The parser frees its trees on a thread of its own with a small stack, and freeing
+/// recurses, so a deep enough tree would overflow it and take the whole analysis down.
+/// Bracket depth does not catch this, because `a + b + c` is a deep tree too. Such code
+/// does not compile, so this only happens to the odd generated or broken file, and a
+/// tree this deep is simply never freed.
+const MAX_DROPPABLE_DEPTH: usize = 1_000;
 
-fn is_too_deep(text: &str) -> bool {
+/// How deep a tree goes, worked out without recursing.
+fn depth_of(root: &SyntaxNode) -> usize {
     let mut depth = 0_usize;
-    for byte in text.bytes() {
-        match byte {
-            b'(' | b'[' | b'{' => depth += 1,
-            b')' | b']' | b'}' => depth = depth.saturating_sub(1),
-            _ => {}
-        }
-        if depth > MAX_BRACKET_DEPTH {
-            return true;
+    let mut deepest = 0;
+    for event in root.preorder() {
+        match event {
+            WalkEvent::Enter(_) => {
+                depth += 1;
+                deepest = deepest.max(depth);
+            }
+            WalkEvent::Leave(_) => depth = depth.saturating_sub(1),
         }
     }
-    false
+    deepest
 }
 
 /// All that can be said about a file that was not parsed.
@@ -46,6 +51,7 @@ fn unparsed(path: &RelativePath, text: &str) -> FileFacts {
         symbols: Vec::new(),
         imports: Vec::new(),
         syntax_error: true,
+        test_modules: Vec::new(),
     }
 }
 
@@ -56,7 +62,9 @@ pub(crate) fn extract(path: &RelativePath, text: &str) -> FileFacts {
     }
     let parse = SourceFile::parse(text, Edition::Edition2024);
     let tree = parse.tree();
-    let lines = LineMap::new(text, tree.syntax());
+    let _kept_alive =
+        (depth_of(tree.syntax()) > MAX_DROPPABLE_DEPTH).then(|| ManuallyDrop::new(parse.clone()));
+    let lines = lines::classify(text, tree.syntax());
     let role = file_role(path);
 
     let mut extractor = Extractor {
@@ -65,6 +73,7 @@ pub(crate) fn extract(path: &RelativePath, text: &str) -> FileFacts {
         symbols: Vec::new(),
         imports: Vec::new(),
         test_lines: LineCounts::default(),
+        test_modules: Vec::new(),
     };
     for item in tree.items() {
         extractor.pending.push_back(Pending::new(item, None, role));
@@ -86,6 +95,7 @@ pub(crate) fn extract(path: &RelativePath, text: &str) -> FileFacts {
         symbols: extractor.symbols,
         imports: extractor.imports,
         syntax_error: !parse.errors().is_empty(),
+        test_modules: extractor.test_modules,
     }
 }
 
@@ -223,6 +233,7 @@ struct Extractor<'a> {
     symbols: Vec<SymbolFact>,
     imports: Vec<Import>,
     test_lines: LineCounts,
+    test_modules: Vec<Vec<String>>,
 }
 
 impl Extractor<'_> {
@@ -272,19 +283,20 @@ impl Extractor<'_> {
 
     fn count_test_lines(&mut self, node: &SyntaxNode) {
         let range = node.text_range();
-        let start = self.lines.line_of(range.start());
-        let end = self.lines.line_of(range.end() - TextSize::new(1));
+        let start = self.lines.line_of(range.start().into());
+        let end = self.lines.line_of((range.end() - TextSize::new(1)).into());
         self.test_lines = self.test_lines.plus(self.lines.counts_between(start, end));
     }
 
     fn add(&mut self, symbol: Described<'_>) -> usize {
         let range = symbol.node.text_range();
-        let start_line = self.lines.line_of(signature_start(symbol.node));
+        let start_line = self.lines.line_of(signature_start(symbol.node).into());
         let end_line = self.lines.line_of(
             range
                 .end()
                 .checked_sub(TextSize::new(1))
-                .unwrap_or(range.end()),
+                .unwrap_or(range.end())
+                .into(),
         );
         self.symbols.push(SymbolFact {
             name: symbol.name,
@@ -326,9 +338,29 @@ impl Extractor<'_> {
         )
     }
 
-    /// A `mod name;` is only a declaration, and its file speaks for itself.
+    /// The names from the top of the file down to a symbol.
+    fn path_to(&self, parent: Option<usize>) -> Vec<String> {
+        let mut names = Vec::new();
+        let mut current = parent.and_then(|index| self.symbols.get(index));
+        while let Some(symbol) = current {
+            names.push(symbol.name.clone());
+            current = symbol.parent.and_then(|index| self.symbols.get(index));
+        }
+        names.reverse();
+        names
+    }
+
+    /// A `mod name;` is only a declaration, and its file speaks for itself. All it adds
+    /// is that the other file may be test code, which that file cannot tell.
     fn module(&mut self, item: &ast::Module, pending: &Pending) {
         let Some(list) = item.item_list() else {
+            if pending.role == CodeRole::Test
+                && let Some(name) = item.name()
+            {
+                let mut path = self.path_to(pending.parent);
+                path.push(name.text().to_string());
+                self.test_modules.push(path);
+            }
             return;
         };
         let Some(index) = self.named(item, SymbolKind::Module, pending) else {
@@ -518,7 +550,7 @@ impl Extractor<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cyclops_domain::facts::DecisionKind;
+    use cyclops_domain::facts::{DecisionKind, MAX_BRACKET_DEPTH};
 
     fn facts(text: &str) -> FileFacts {
         extract(&RelativePath::new("src/lib.rs"), text)
@@ -657,8 +689,17 @@ mod tests {
     }
 
     #[test]
-    fn closing_too_many_brackets_does_not_hide_deep_code() {
-        let text = format!("}}}}}}{}", "(".repeat(MAX_BRACKET_DEPTH + 1));
-        assert!(is_too_deep(&text));
+    fn the_depth_of_a_tree_counts_its_deepest_branch() {
+        let shallow = SourceFile::parse("fn f() {}", Edition::Edition2024).tree();
+        let deep = SourceFile::parse("const A: u8 = 1 + 1 + 1 + 1;", Edition::Edition2024).tree();
+        assert!(depth_of(deep.syntax()) > depth_of(shallow.syntax()));
+    }
+
+    #[test]
+    fn a_module_declared_as_test_code_is_recorded() {
+        let facts =
+            facts("#[cfg(test)]\nmod a;\nmod b;\nmod c {\n    #[cfg(test)]\n    mod d;\n}\n");
+        let path = |parts: &[&str]| parts.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_eq!(facts.test_modules, [path(&["a"]), path(&["c", "d"])]);
     }
 }

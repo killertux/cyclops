@@ -124,7 +124,7 @@ members. A method of a trait or an interface counts as a method of it.
 `visibility?` says who can reach a member: `public`, `restricted` for anything between,
 or `private`.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation | language   | code                            | symbol | visibility? |
 | ----------- | ---------- | ------------------------------- | ------ | ----------- |

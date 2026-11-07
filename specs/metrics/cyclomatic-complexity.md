@@ -37,7 +37,7 @@ Shorthand operators are branches too, because they can skip code: `&&`, `||`, `?
 
 ## TypeScript
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation         | language   | code                                                                                     | cyclomatic? |
 | ------------------- | ---------- | ---------------------------------------------------------------------------------------- | ----------- |
@@ -63,7 +63,7 @@ Shorthand operators are branches too, because they can skip code: `&&`, `||`, `?
 
 JavaScript follows the same rules.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation   | language   | code                                   | cyclomatic? |
 | ------------- | ---------- | -------------------------------------- | ----------- |
@@ -78,7 +78,7 @@ A closure counts towards the function around it, because it is not a
 [symbol](../model/symbols.md#closures). A named function inside another is measured on
 its own.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation     | language   | code                                                       | cyclomatic? |
 | --------------- | ---------- | ---------------------------------------------------------- | ----------- |

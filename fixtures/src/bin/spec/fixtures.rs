@@ -10,12 +10,28 @@ use cyclops_domain::path::RelativePath;
 use cyclops_domain::symbol::SymbolId;
 use rust_slim::fixture;
 
-/// The package every snippet is a part of.
-const SNIPPET_PACKAGE: &str = "snippet";
-const SNIPPET_MANIFEST: &str = "[package]\nname = \"snippet\"\nversion = \"0.1.0\"\n";
-const SNIPPET_RUST_FILE: &str = "src/lib.rs";
-const SNIPPET_TYPESCRIPT_FILE: &str = "src/snippet.ts";
-const SNIPPET_JAVASCRIPT_FILE: &str = "src/snippet.js";
+/// The file a snippet is written to, and the module that makes it.
+struct SnippetFile {
+    manifest: Option<&'static str>,
+    path: &'static str,
+    module: &'static str,
+}
+
+const RUST_SNIPPET: SnippetFile = SnippetFile {
+    manifest: Some("[package]\nname = \"snippet\"\nversion = \"0.1.0\"\n"),
+    path: "src/lib.rs",
+    module: "snippet",
+};
+const TYPESCRIPT_SNIPPET: SnippetFile = SnippetFile {
+    manifest: None,
+    path: "src/snippet.ts",
+    module: "src/snippet",
+};
+const JAVASCRIPT_SNIPPET: SnippetFile = SnippetFile {
+    manifest: None,
+    path: "src/snippet.js",
+    module: "src/snippet",
+};
 
 /// What a row reads from. A failure shows up in every column of its row.
 type Outcome = Result<ProjectAnalysis, String>;
@@ -38,15 +54,19 @@ pub struct Snippet {
 }
 
 impl Snippet {
+    fn file(&self) -> &'static SnippetFile {
+        match self.language.as_str() {
+            "typescript" => &TYPESCRIPT_SNIPPET,
+            "javascript" => &JAVASCRIPT_SNIPPET,
+            _ => &RUST_SNIPPET,
+        }
+    }
+
     fn run(&self) -> Outcome {
         let code = self.code.replace("\\n", "\n");
-        let (manifest, path) = match self.language.as_str() {
-            "rust" => (Some(SNIPPET_MANIFEST), SNIPPET_RUST_FILE),
-            "typescript" => (None, SNIPPET_TYPESCRIPT_FILE),
-            "javascript" => (None, SNIPPET_JAVASCRIPT_FILE),
-            other => return Err(format!("unknown language: {other}")),
-        };
-        let scratch = Scratch::with_file(manifest, path, &code).map_err(|e| e.to_string())?;
+        let file = self.file();
+        let scratch =
+            Scratch::with_file(file.manifest, file.path, &code).map_err(|e| e.to_string())?;
         analyze(scratch.root(), AnalysisOptions::default()).map_err(|e| e.to_string())
     }
 
@@ -56,7 +76,7 @@ impl Snippet {
         } else {
             &self.symbol
         };
-        SymbolId::new(&format!("{SNIPPET_PACKAGE}::{symbol}"))
+        SymbolId::new(&format!("{}::{symbol}", self.file().module))
     }
 
     fn read(&self, reader: impl FnOnce(&ProjectAnalysis) -> String) -> String {
@@ -70,7 +90,7 @@ impl Snippet {
     /// The whole file when there is no `symbol`, and otherwise that symbol.
     fn file_or_symbol(&self) -> Subject {
         if self.symbol.is_empty() {
-            Subject::File(RelativePath::new(SNIPPET_RUST_FILE))
+            Subject::File(RelativePath::new(self.file().path))
         } else {
             Subject::Symbol(self.id(""))
         }
@@ -125,14 +145,14 @@ impl Snippet {
         })
     }
 
-    /// The package is the fresh project itself, so a snippet's own symbols have no parent.
+    /// The module is the whole snippet, so what sits directly in it has no parent.
     #[must_use]
     pub fn parent(&self) -> String {
         self.read(|analysis| {
             let parent = read::symbol(analysis, &self.id("f")).and_then(|s| s.parent.as_ref());
             parent
                 .map(SymbolId::as_str)
-                .and_then(|parent| parent.strip_prefix(SNIPPET_PACKAGE))
+                .and_then(|parent| parent.strip_prefix(self.file().module))
                 .and_then(|parent| parent.strip_prefix("::"))
                 .unwrap_or(NONE)
                 .into()
@@ -328,6 +348,22 @@ impl Core {
     #[must_use]
     pub fn found(&self) -> String {
         self.read(|analysis| yes_no(analysis.view().symbol(&self.id()).is_some()))
+    }
+
+    /// Whether a file or a symbol is test code, even when test code is left out.
+    #[must_use]
+    pub fn role(&self) -> String {
+        self.read(|analysis| {
+            let role = match read::subject(&self.subject) {
+                Subject::File(path) => analysis
+                    .files()
+                    .iter()
+                    .find(|file| file.path == path)
+                    .map(|file| file.role),
+                Subject::Symbol(id) => read::symbol(analysis, &id).map(|symbol| symbol.role),
+            };
+            role.map_or_else(|| NOT_APPLICABLE.into(), |role| role.name().into())
+        })
     }
 
     #[must_use]

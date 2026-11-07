@@ -86,3 +86,46 @@ fn test_code_is_only_reported_when_asked_for() {
     assert!(shown.contains("shop::notes::tests::says_hello"));
     assert!(shown.contains("tests/orders::starts_empty"));
 }
+
+/// A long chain reads flat but parses into a very deep tree.
+#[test]
+fn a_very_long_expression_does_not_crash_the_analysis() {
+    let folder = std::env::temp_dir().join(format!("cyclops-cli-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).expect("a folder");
+    let terms = vec!["a"; 100_000].join(" + ");
+    let chain = "if (a) {} else ".repeat(10_000);
+    let rust_chain = "if a {} else ".repeat(10_000);
+    let files = [
+        (
+            "sum.ts",
+            format!("function f(a: number) {{ return {terms}; }}\n"),
+        ),
+        (
+            "chain.ts",
+            format!("function g(a: boolean) {{ {chain} {{}} }}\n"),
+        ),
+        ("sum.rs", format!("fn f(a: u8) -> u8 {{ {terms} }}\n")),
+        (
+            "chain.rs",
+            format!("fn g(a: bool) {{ {rust_chain} {{}} }}\n"),
+        ),
+    ];
+    for (name, text) in &files {
+        std::fs::write(folder.join(name), text).expect("a file");
+    }
+
+    let output = cyclops(&folder, &["analyze"]);
+
+    std::fs::remove_dir_all(&folder).expect("the folder is removed");
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert!(text(&output.stdout).contains("4 files"));
+}
+
+#[test]
+fn a_typescript_project_is_analyzed_too() {
+    let output = cyclops(&sample("ts-shop"), &["report"]);
+    let stdout = text(&output.stdout);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(stdout.contains("src/orders::Order::total  cyclomatic=3 cognitive=3"));
+    assert!(!stdout.contains("startsEmpty"));
+}

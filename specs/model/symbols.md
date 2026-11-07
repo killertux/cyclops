@@ -41,7 +41,7 @@ to their type, whichever `impl` block they are in.
 A function stored in a variable is a function. A closure or an arrow function passed
 along is not a symbol, and counts as part of the function around it.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation       | language   | code                        | symbol | kind?     | parent? |
 | ----------------- | ---------- | --------------------------- | ------ | --------- | ------- |
@@ -70,7 +70,7 @@ along is not a symbol, and counts as part of the function around it.
 
 ## Visibility
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation       | language   | code                           | symbol | visibility? |
 | ----------------- | ---------- | ------------------------------ | ------ | ----------- |
@@ -90,7 +90,7 @@ Every symbol sits inside another, from the package down. A package has no parent
 TypeScript and JavaScript a file is a module, and a folder is the module that holds
 them. An `index` file is the module of its folder.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace       | subject                    | kind?   | parent?             |
 | ------------------ | --------------- | -------------------------- | ------- | ------------------- |

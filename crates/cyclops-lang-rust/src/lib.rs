@@ -7,10 +7,9 @@ mod layout;
 mod lines;
 mod link;
 
-use cyclops_application::ports::{FileSource, LanguageAdapter, SourceFile};
+use cyclops_application::ports::{FileSource, LanguageAdapter, Linked, SourceFile};
 use cyclops_domain::facts::FileFacts;
 use cyclops_domain::path::RelativePath;
-use cyclops_domain::symbol::Symbol;
 use std::path::Path;
 
 #[derive(Debug, Default)]
@@ -27,7 +26,7 @@ impl LanguageAdapter for RustAdapter {
         extract::extract(source.path, source.text)
     }
 
-    fn link(&self, facts: &[&FileFacts], source: &dyn FileSource) -> Vec<Symbol> {
+    fn link(&self, facts: &[&FileFacts], source: &dyn FileSource) -> Linked {
         link::link(facts, source)
     }
 }

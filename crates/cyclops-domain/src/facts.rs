@@ -18,6 +18,9 @@ pub struct FileFacts {
     pub imports: Vec<Import>,
     /// Whether part of the file could not be understood.
     pub syntax_error: bool,
+    /// The modules this file declares as test code, each living in a file of its own,
+    /// as a path of names from this file's module.
+    pub test_modules: Vec<Vec<String>>,
 }
 
 /// Each line of a file is exactly one of these.
@@ -110,6 +113,9 @@ pub enum DecisionKind {
     MatchArm,
     /// A condition on a single arm.
     Guard,
+    /// A condition inside an expression.
+    Ternary,
+    Catch,
     /// A shorthand that can skip code and reads as straight code, such as `?`.
     Shortcut,
     /// One logical operator.
@@ -130,6 +136,8 @@ impl DecisionKind {
             | Self::Loop
             | Self::MatchArm
             | Self::Guard
+            | Self::Ternary
+            | Self::Catch
             | Self::Shortcut
             | Self::LogicalOperator => 1,
             Self::Else
@@ -145,9 +153,52 @@ impl DecisionKind {
     #[must_use]
     pub const fn points(self, nesting: u32) -> u32 {
         match self {
-            Self::If | Self::Loop | Self::BareLoop | Self::Match => 1 + nesting,
+            Self::If | Self::Loop | Self::BareLoop | Self::Match | Self::Ternary | Self::Catch => {
+                1 + nesting
+            }
             Self::ElseIf | Self::Else | Self::LogicalRun | Self::Recursion | Self::LabeledJump => 1,
             Self::MatchArm | Self::Guard | Self::Shortcut | Self::LogicalOperator => 0,
         }
+    }
+}
+
+/// Parsers recurse, so code nested deeply enough would overflow the stack and take the
+/// whole analysis down. No person writes code near this deep.
+pub const MAX_BRACKET_DEPTH: usize = 256;
+
+/// Whether code is too deep to hand to a parser. It does not skip strings or comments,
+/// which only matters to text with hundreds of unmatched brackets in a row.
+#[must_use]
+pub fn is_too_deep(text: &str) -> bool {
+    let mut depth = 0_usize;
+    for byte in text.bytes() {
+        match byte {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        if depth > MAX_BRACKET_DEPTH {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deep_code_is_spotted_even_after_too_many_closing_brackets() {
+        let open = "(".repeat(MAX_BRACKET_DEPTH + 1);
+        assert!(is_too_deep(&open));
+        assert!(is_too_deep(&format!("}}}}}}{open}")));
+    }
+
+    #[test]
+    fn reasonable_code_is_not_too_deep() {
+        let open = "(".repeat(MAX_BRACKET_DEPTH);
+        assert!(!is_too_deep(&open));
+        assert!(!is_too_deep(&"()".repeat(10_000)));
     }
 }

@@ -3,8 +3,10 @@
 
 pub mod facts;
 pub mod language;
+pub mod lines;
 pub mod metric;
 pub mod model;
 pub mod path;
 pub mod problem;
 pub mod symbol;
+pub mod symbol_set;

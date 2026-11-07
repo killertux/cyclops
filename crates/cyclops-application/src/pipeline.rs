@@ -6,7 +6,9 @@ use cyclops_domain::facts::FileFacts;
 use cyclops_domain::model::{ModelView, ProjectModel, TestCode};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
+use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
+use std::collections::HashSet;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -18,7 +20,14 @@ pub struct AnalysisOptions {
 pub enum AnalysisError {
     #[error(transparent)]
     Source(#[from] SourceError),
+    #[error("the analysis cannot start its workers: {0}")]
+    Workers(#[from] rayon::ThreadPoolBuildError),
 }
+
+/// Walking a syntax tree recurses, and a long chain such as `a + b + c` is a deep tree
+/// however flat it reads. This only reserves address space, so it costs nothing unless
+/// it is used.
+const WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
 
 /// Runs analyses. It holds the adapters and analyzers the binary chose.
 pub struct AnalysisService {
@@ -61,10 +70,15 @@ impl AnalysisService {
         let discovered = source.discover()?;
         let sources = self.source_files(discovered.files);
         let found_any = !sources.is_empty();
-        let outcomes: Vec<Result<Extracted, Problem>> = sources
-            .par_iter()
-            .map(|file| Self::extract(file, source))
-            .collect();
+        let workers = ThreadPoolBuilder::new()
+            .stack_size(WORKER_STACK_BYTES)
+            .build()?;
+        let outcomes: Vec<Result<Extracted, Problem>> = workers.install(|| {
+            sources
+                .par_iter()
+                .map(|file| Self::extract(file, source))
+                .collect()
+        });
 
         let mut problems: Vec<Problem> = discovered
             .unreadable
@@ -87,11 +101,17 @@ impl AnalysisService {
         }
         Problem::sort(&mut problems);
 
-        let model = self.link(&extracted, source);
-        let files: Vec<AnalyzedFile> = extracted
+        let (model, test_files) = self.link(&extracted, source);
+        let mut files: Vec<AnalyzedFile> = extracted
             .iter()
             .map(|file| AnalyzedFile::from_facts(&file.facts))
             .collect();
+        for file in files
+            .iter_mut()
+            .filter(|file| test_files.contains(&file.path))
+        {
+            file.make_test_code();
+        }
         let input = AnalysisInput {
             model: ModelView::new(&model, options.tests),
             files: &files,
@@ -145,24 +165,25 @@ impl AnalysisService {
         })
     }
 
-    fn link(&self, extracted: &[Extracted], source: &dyn FileSource) -> ProjectModel {
-        let symbols = self
-            .adapters
-            .iter()
-            .enumerate()
-            .flat_map(|(index, adapter)| {
-                let facts: Vec<&FileFacts> = extracted
-                    .iter()
-                    .filter(|file| file.adapter == index)
-                    .map(|file| &file.facts)
-                    .collect();
-                if facts.is_empty() {
-                    Vec::new()
-                } else {
-                    adapter.link(&facts, source)
-                }
-            })
-            .collect();
-        ProjectModel::new(symbols)
+    fn link(
+        &self,
+        extracted: &[Extracted],
+        source: &dyn FileSource,
+    ) -> (ProjectModel, HashSet<RelativePath>) {
+        let mut symbols = Vec::new();
+        let mut test_files = HashSet::new();
+        for (index, adapter) in self.adapters.iter().enumerate() {
+            let facts: Vec<&FileFacts> = extracted
+                .iter()
+                .filter(|file| file.adapter == index)
+                .map(|file| &file.facts)
+                .collect();
+            if !facts.is_empty() {
+                let linked = adapter.link(&facts, source);
+                symbols.extend(linked.symbols);
+                test_files.extend(linked.test_files);
+            }
+        }
+        (ProjectModel::new(symbols), test_files)
     }
 }

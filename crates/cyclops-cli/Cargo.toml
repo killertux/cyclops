@@ -16,6 +16,7 @@ cyclops-application.workspace = true
 cyclops-domain.workspace = true
 cyclops-infra.workspace = true
 cyclops-lang-rust.workspace = true
+cyclops-lang-typescript.workspace = true
 
 [lints]
 workspace = true

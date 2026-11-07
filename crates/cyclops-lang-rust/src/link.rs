@@ -2,10 +2,11 @@
 //! and its parent, and moves the members of an `impl` to their type.
 
 use crate::layout::{Layout, Package, Place};
-use cyclops_application::ports::FileSource;
+use cyclops_application::ports::{FileSource, Linked};
 use cyclops_domain::facts::{FileFacts, Import, SymbolFact};
-use cyclops_domain::symbol::{CodeRole, Location, Span, Symbol, SymbolId, SymbolIds, SymbolKind};
-use std::collections::{HashMap, HashSet};
+use cyclops_domain::symbol::{CodeRole, SymbolId, SymbolKind};
+use cyclops_domain::symbol_set::SymbolSet;
+use std::collections::HashSet;
 
 /// A file with its place in the project.
 struct Placed<'a> {
@@ -20,14 +21,11 @@ struct Placed<'a> {
 
 #[derive(Default)]
 struct Linker {
-    ids: SymbolIds,
-    symbols: Vec<Symbol>,
-    /// Where each package and module is in `symbols`.
-    containers: HashMap<SymbolId, usize>,
+    symbols: SymbolSet,
     types: HashSet<SymbolId>,
 }
 
-pub(crate) fn link(facts: &[&FileFacts], source: &dyn FileSource) -> Vec<Symbol> {
+pub(crate) fn link(facts: &[&FileFacts], source: &dyn FileSource) -> Linked {
     let mut sorted = facts.to_vec();
     sorted.sort_by(|a, b| a.path.cmp(&b.path));
     let mut layout = Layout::new(sorted.iter().map(|file| &file.path), source);
@@ -47,74 +45,76 @@ pub(crate) fn link(facts: &[&FileFacts], source: &dyn FileSource) -> Vec<Symbol>
     for file in &mut files {
         linker.members(file);
     }
-    linker.symbols
+    let test_modules = declared_test_modules(&files);
+    let test_files = files
+        .iter()
+        .filter(|file| is_inside_any(&file.module, &test_modules))
+        .map(|file| file.facts.path.clone())
+        .collect();
+    let mut symbols = linker.symbols.into_symbols();
+    for symbol in &mut symbols {
+        if is_inside_any(&symbol.id, &test_modules) {
+            symbol.role = CodeRole::Test;
+        }
+    }
+    Linked {
+        symbols,
+        test_files,
+    }
 }
 
-fn whole_file(file: &FileFacts) -> Location {
-    let lines = file.lines;
-    Location {
-        file: file.path.clone(),
-        span: Span {
-            start_line: 1,
-            end_line: lines.code + lines.comment + lines.blank,
-        },
+/// The modules some file declares to be test code, such as `#[cfg(test)] mod tests;`.
+fn declared_test_modules(files: &[Placed<'_>]) -> HashSet<SymbolId> {
+    files
+        .iter()
+        .flat_map(|file| {
+            let module = &file.module;
+            let declared = file.facts.test_modules.iter();
+            declared.map(|path| Linker::join(module, path))
+        })
+        .collect()
+}
+
+/// Whether a symbol is one of some modules, or anywhere inside one.
+fn is_inside_any(id: &SymbolId, modules: &HashSet<SymbolId>) -> bool {
+    let mut current = Some(id.clone());
+    while let Some(candidate) = current {
+        if modules.contains(&candidate) {
+            return true;
+        }
+        current = Linker::parent_id(&candidate);
     }
+    false
 }
 
 impl Linker {
-    /// Makes sure a package or a module exists.
-    fn container(
-        &mut self,
-        id: &SymbolId,
-        parent: Option<&SymbolId>,
-        name: &str,
-        kind: SymbolKind,
-        role: CodeRole,
-    ) -> usize {
-        if let Some(index) = self.containers.get(id) {
-            if let Some(symbol) = self.symbols.get_mut(*index)
-                && role == CodeRole::Production
-            {
-                symbol.role = role;
-            }
-            return *index;
-        }
-        let unique = self.ids.unique(id.clone());
-        let symbol = Symbol::container(unique, parent.cloned(), name, kind, role);
-        self.symbols.push(symbol);
-        let index = self.symbols.len() - 1;
-        self.containers.insert(id.clone(), index);
-        index
-    }
-
     fn place<'a>(&mut self, file: &'a FileFacts, package: &Package, place: Place) -> Placed<'a> {
         let role = file.role;
         let root = SymbolId::new(&package.name);
-        self.container(&root, None, &package.name, SymbolKind::Package, role);
+        self.symbols
+            .container(&root, None, &package.name, SymbolKind::Package, role);
 
         let (crate_root, module, written) = match place {
             Place::Root => (root.clone(), root, false),
             Place::OwnCrate(path) => {
                 let module = SymbolId::new(&path);
-                self.container(&module, Some(&root), &path, SymbolKind::Module, role);
+                self.symbols
+                    .container(&module, Some(&root), &path, SymbolKind::Module, role);
                 (module.clone(), module, true)
             }
             Place::Module(names) => {
                 let mut parent = root.clone();
                 for name in names {
                     let id = parent.child(&name);
-                    self.container(&id, Some(&parent), &name, SymbolKind::Module, role);
+                    self.symbols
+                        .container(&id, Some(&parent), &name, SymbolKind::Module, role);
                     parent = id;
                 }
                 (root, parent, true)
             }
         };
-        if written
-            && let Some(index) = self.containers.get(&module)
-            && let Some(symbol) = self.symbols.get_mut(*index)
-        {
-            symbol.location = Some(whole_file(file));
-            symbol.code_lines = file.lines.code;
+        if written {
+            self.symbols.written_in(&module, file);
         }
         Placed {
             facts: file,
@@ -132,15 +132,13 @@ impl Linker {
         id: SymbolId,
         parent: SymbolId,
     ) {
-        let id = self.ids.unique(id);
+        let id = self.symbols.add(fact, id, parent, &file.facts.path);
         if fact.kind.is_type() {
             self.types.insert(id.clone());
         }
         if let Some(slot) = file.ids.get_mut(index) {
-            *slot = Some(id.clone());
+            *slot = Some(id);
         }
-        let symbol = Symbol::from_fact(fact, id, Some(parent), &file.facts.path);
-        self.symbols.push(symbol);
     }
 
     /// The id of the symbol around a fact, if it has one yet.
@@ -275,6 +273,7 @@ mod tests {
     use crate::extract::extract;
     use cyclops_application::ports::{Discovered, SourceError};
     use cyclops_domain::path::RelativePath;
+    use cyclops_domain::symbol::Symbol;
 
     struct NoManifest;
 
@@ -298,7 +297,7 @@ mod tests {
             .map(|(path, text)| extract(&RelativePath::new(path), text))
             .collect();
         let refs: Vec<&FileFacts> = facts.iter().collect();
-        link(&refs, &NoManifest)
+        link(&refs, &NoManifest).symbols
     }
 
     fn ids(symbols: &[Symbol]) -> Vec<&str> {
@@ -413,6 +412,38 @@ mod tests {
             .expect("the module exists");
         let location = module.location.as_ref().expect("it has a file");
         assert_eq!(location.file.as_str(), "src/a/mod.rs");
+    }
+
+    #[test]
+    fn a_module_declared_as_test_code_makes_its_file_test_code() {
+        let facts: Vec<FileFacts> = [
+            ("src/lib.rs", "#[cfg(test)]\nmod checks;\nfn f() {}\n"),
+            ("src/checks.rs", "fn g() {}\n"),
+            ("src/checks/deep.rs", "fn h() {}\n"),
+            ("src/other.rs", "fn i() {}\n"),
+        ]
+        .iter()
+        .map(|(path, text)| extract(&RelativePath::new(path), text))
+        .collect();
+        let refs: Vec<&FileFacts> = facts.iter().collect();
+
+        let linked = link(&refs, &NoManifest);
+
+        let role = |id: &str| {
+            linked
+                .symbols
+                .iter()
+                .find(|symbol| symbol.id.as_str() == id)
+                .map(|symbol| symbol.role)
+        };
+        assert_eq!(role("p::f"), Some(CodeRole::Production));
+        assert_eq!(role("p::other::i"), Some(CodeRole::Production));
+        assert_eq!(role("p::checks"), Some(CodeRole::Test));
+        assert_eq!(role("p::checks::g"), Some(CodeRole::Test));
+        assert_eq!(role("p::checks::deep::h"), Some(CodeRole::Test));
+        let mut files: Vec<&str> = linked.test_files.iter().map(RelativePath::as_str).collect();
+        files.sort_unstable();
+        assert_eq!(files, ["src/checks.rs", "src/checks/deep.rs"]);
     }
 
     #[test]

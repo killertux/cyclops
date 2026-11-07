@@ -1,0 +1,19 @@
+[package]
+name = "cyclops-lang-typescript"
+description = "The Cyclops language adapter for TypeScript and JavaScript"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+cyclops-application.workspace = true
+cyclops-domain.workspace = true
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_ast_visit.workspace = true
+oxc_parser.workspace = true
+oxc_span.workspace = true
+oxc_syntax.workspace = true
+
+[lints]
+workspace = true

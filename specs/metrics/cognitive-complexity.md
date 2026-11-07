@@ -46,7 +46,7 @@ as straight code.
 
 ## TypeScript and JavaScript
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation       | language   | code                                                                      | cognitive? |
 | ----------------- | ---------- | ------------------------------------------------------------------------- | ---------- |

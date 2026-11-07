@@ -88,6 +88,16 @@ This layer runs in-process, needs nothing installed, and is cached per file.
 This layer provides all complexity, size and duplication data, plus structure and
 best-effort relations.
 
+The two parsers fail differently, and the adapters hide that. `ra_ap_syntax` recovers
+from a syntax error and keeps going. `oxc_parser` gives up with an empty program, so the
+adapter cuts the file back to the last top level statement it can parse, and keeps what
+comes before the error. Code after an error in a TypeScript file is therefore lost, and
+its lines still count.
+
+Parsers and tree walks recurse, so very deep code could overflow the stack and stop the
+whole run. Analysis workers get a large stack, and a file nested more than 256 brackets
+deep is reported as a syntax error without being parsed.
+
 ### Semantic layer: optional
 
 This layer runs external indexers that use real compiler analysis, and reads their
@@ -552,7 +562,7 @@ and `-C PATH` works on another folder.
 | Purpose | Crate |
 |---|---|
 | Rust parsing | `ra_ap_syntax` |
-| TS and JS parsing | `oxc_parser`, `oxc_semantic`, `oxc_resolver` |
+| TS and JS parsing | `oxc_parser`, `oxc_ast`, `oxc_ast_visit`, `oxc_allocator`, `oxc_span`, `oxc_syntax`, `oxc_semantic`, `oxc_resolver` |
 | Semantic index | `scip` |
 | File walking | `ignore` |
 | Parallelism | `rayon` |

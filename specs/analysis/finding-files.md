@@ -35,7 +35,7 @@ else is skipped without complaint. The `files?` column lists what was analyzed.
 
 The extension of a file decides its language.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | workspace | subject        | language?  |
 | --------- | -------------- | ---------- |

@@ -10,6 +10,7 @@ use cyclops_domain::metric::{MetricId, Subject};
 use cyclops_domain::model::TestCode;
 use cyclops_infra::ProjectFiles;
 use cyclops_lang_rust::RustAdapter;
+use cyclops_lang_typescript::TypeScriptAdapter;
 use std::collections::BTreeMap;
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
@@ -19,7 +20,7 @@ use std::process::ExitCode;
 #[must_use]
 pub fn analysis_service() -> AnalysisService {
     AnalysisService::new(
-        vec![Box::new(RustAdapter)],
+        vec![Box::new(RustAdapter), Box::new(TypeScriptAdapter)],
         vec![Box::new(ComplexityAnalyzer), Box::new(SizeAnalyzer)],
     )
 }

@@ -12,10 +12,18 @@ cyclops-cli = { path = "crates/cyclops-cli" }
 cyclops-domain = { path = "crates/cyclops-domain" }
 cyclops-infra = { path = "crates/cyclops-infra" }
 cyclops-lang-rust = { path = "crates/cyclops-lang-rust" }
+cyclops-lang-typescript = { path = "crates/cyclops-lang-typescript" }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 ignore = "0.4"
+# The oxc_* crates break their APIs often, so they are pinned on purpose, all to one version.
+oxc_allocator = "=0.157.0"
+oxc_ast = "=0.157.0"
+oxc_ast_visit = "=0.157.0"
+oxc_parser = "=0.157.0"
+oxc_span = "=0.157.0"
+oxc_syntax = "=0.157.0"
 # The ra_ap_* crates break their APIs often, so this is pinned on purpose. It also pins
 # unicode-ident, so Cargo.lock keeps unicode-properties on the same Unicode version.
 ra_ap_syntax = "=0.0.360"

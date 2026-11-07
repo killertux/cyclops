@@ -23,7 +23,7 @@ test code too. `role?` can be read whether or not test code is left out.
 | TS source           | ts-shop   |                                        | src/orders.ts      | production |
 | `.test.` file       | ts-shop   | `add src/a.test.ts`                    | src/a.test.ts      | test       |
 | `.spec.` file       | ts-shop   | `add src/a.spec.tsx`                   | src/a.spec.tsx     | test       |
-| `__tests__/` folder | ts-shop   | `add src/__tests__/a.ts`               | src/__tests__/a.ts | test       |
+| `__tests__/` folder | ts-shop   | `add src/__tests__/a.ts`               | `src/__tests__/a.ts` | test       |
 | `tests/` folder     | ts-shop   | `add tests/a.ts`                       | tests/a.ts         | test       |
 | `test/` folder      | ts-shop   | `add test/a.ts`                        | test/a.ts          | test       |
 | JS `.test.` file    | js-shop   | `add src/a.test.js`                    | src/a.test.js      | test       |

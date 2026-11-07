@@ -11,7 +11,7 @@ Each line of a file is code, a comment, or blank. A line with both code and a co
 is code. With no `symbol`, these columns read the whole file.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation        | language   | code                                        | lines? | comment lines? | blank lines? |
 | ------------------ | ---------- | ------------------------------------------- | ------ | -------------- | ------------ |
@@ -28,7 +28,7 @@ is code. With no `symbol`, these columns read the whole file.
 
 The length of a function is its lines of code, from its signature to its end.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation       | language   | code                                   | symbol | lines? |
 | ----------------- | ---------- | -------------------------------------- | ------ | ------ |
@@ -43,7 +43,7 @@ The length of a function is its lines of code, from its signature to its end.
 
 `self` and `this` are not counted.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation   | language   | code                                         | symbol | parameters? |
 | ------------- | ---------- | -------------------------------------------- | ------ | ----------- |
@@ -61,7 +61,7 @@ The length of a function is its lines of code, from its signature to its end.
 `max nesting?` is the depth of the deepest control structure. A closure adds no depth
 of its own.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation       | language   | code                                                   | max nesting? |
 | ----------------- | ---------- | ------------------------------------------------------ | ------------ |
@@ -77,7 +77,7 @@ of its own.
 
 `members?` counts the fields and methods of a type, wherever its methods are written.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation     | language   | code                                                            | symbol | members? |
 | --------------- | ---------- | --------------------------------------------------------------- | ------ | -------- |

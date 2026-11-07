@@ -1,8 +1,8 @@
 //! Walks the body of a function and describes what makes it complex. It keeps its own
 //! stack of work rather than recursing, so that very deep code cannot overflow.
 
-use crate::lines::LineMap;
 use cyclops_domain::facts::{BodyFacts, DecisionKind, DecisionPoint};
+use cyclops_domain::lines::LineMap;
 use ra_ap_syntax::ast::{self, AstNode, BinaryOp, ElseBranch, HasName, LogicOp};
 use ra_ap_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, TextSize};
 
@@ -139,7 +139,7 @@ impl Walker<'_> {
     fn point(&mut self, kind: DecisionKind, offset: TextSize, nesting: u32) {
         self.decisions.push(DecisionPoint {
             kind,
-            line: self.lines.line_of(offset),
+            line: self.lines.line_of(offset.into()),
             nesting,
         });
     }

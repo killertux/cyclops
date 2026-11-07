@@ -14,6 +14,14 @@ pub struct SourceFile<'a> {
     pub text: &'a str,
 }
 
+/// What linking found out about a whole project.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Linked {
+    pub symbols: Vec<Symbol>,
+    /// Files that are test code, which only the rest of the project could tell.
+    pub test_files: Vec<RelativePath>,
+}
+
 /// Knows one language. An adapter describes code and never measures it.
 pub trait LanguageAdapter: Send + Sync {
     /// Whether this adapter understands a file.
@@ -24,7 +32,7 @@ pub trait LanguageAdapter: Send + Sync {
     fn extract(&self, source: &SourceFile<'_>) -> FileFacts;
 
     /// Places the facts of every file of this language in the project.
-    fn link(&self, facts: &[&FileFacts], source: &dyn FileSource) -> Vec<Symbol>;
+    fn link(&self, facts: &[&FileFacts], source: &dyn FileSource) -> Linked;
 }
 
 /// Turns the linked project into measurements.

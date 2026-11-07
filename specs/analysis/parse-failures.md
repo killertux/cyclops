@@ -6,7 +6,7 @@ One bad file never stops an analysis. A file that cannot be fully understood is
 listed in `problems?`, and everything else is analyzed as usual.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace | steps                    | analyzed? | problems?                                          |
 | --------------- | --------- | ------------------------ | --------- | -------------------------------------------------- |
@@ -19,7 +19,7 @@ listed in `problems?`, and everything else is analyzed as usual.
 
 Code around a syntax error still counts, as far as it can be understood.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace | subject            | found? |
 | ------------------- | --------- | ------------------ | ------ |
