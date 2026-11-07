@@ -56,6 +56,8 @@ pub struct Scenario {
     precise: bool,
     /// Whether any analysis of the row ran an indexer.
     indexers_ran: Cell<bool>,
+    /// What the terminal says its background is, if anything.
+    background: Option<String>,
 }
 
 /// The tools the indexers need look for their own files under the home folder, which a
@@ -145,6 +147,7 @@ impl Scenario {
             upgraded: Vec::new(),
             precise: false,
             indexers_ran: Cell::new(false),
+            background: None,
         }
     }
 
@@ -162,6 +165,44 @@ impl Scenario {
 
     pub fn flags(&self) -> Layer {
         flag_layer(self.tests_flag)
+    }
+
+    /// What the terminal says its background is, if a step said.
+    pub fn background(&self) -> Option<&str> {
+        self.background.as_deref()
+    }
+
+    /// Runs the precise analysis a row ended its steps with, for fixtures whose own
+    /// analysis is not the one at the end of the row.
+    pub fn finish(&mut self) -> Result<(), String> {
+        if std::mem::take(&mut self.precise) {
+            self.analyze_asking(true).map(drop)?;
+        }
+        Ok(())
+    }
+
+    /// Analyzes the way the interface asks to: `tests` overrides the test code setting.
+    pub fn analyze_for(
+        &self,
+        tests: Option<bool>,
+        precise: bool,
+    ) -> Result<ProjectAnalysis, String> {
+        let flags = match tests {
+            Some(_) => flag_layer(tests),
+            None => self.flags(),
+        };
+        let analysis = analyze_with(
+            self.root(),
+            &self.environment(),
+            &flags,
+            adapters(),
+            precise,
+        )
+        .map_err(|error| error.to_string())?;
+        if !analysis.precise().ran.is_empty() {
+            self.indexers_ran.set(true);
+        }
+        Ok(analysis)
     }
 
     /// Whether any analysis of the row ran an indexer.
@@ -449,6 +490,10 @@ impl Scenario {
             .and_then(|rest| rest.strip_suffix(" adapter"))
         {
             self.upgraded.push(language.to_owned());
+            return Ok(());
+        }
+        if let Some(value) = step.strip_prefix("terminal background ") {
+            self.background = Some(value.to_owned());
             return Ok(());
         }
         if let Some(name) = step.strip_prefix("remove tool ") {

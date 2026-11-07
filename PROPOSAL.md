@@ -547,6 +547,17 @@ on a grid of cells, laying out a diagram on one, and mapping a mouse position ba
 symbol. Analysis runs on a worker thread and streams progress and results through a
 channel, so that the interface never blocks.
 
+The update never does work itself. It returns effects, such as "analyze" or "save the
+settings", and whoever runs the interface performs them and reports back: the terminal
+runner on worker threads, and the `Tui` fixture straight away, with a clock that only
+moves when a row waits. Each frame records where it drew everything the mouse can point
+at, so a click is mapped back to a symbol, a tab or a menu entry, and the fixture can
+click a target by name. Questions that are analysis, such as the order of the tree,
+finding a symbol by name or the worst function inside a module, are queries of the core.
+`crossterm` is used through `ratatui`'s re-export, so the two never disagree on a
+version, and `notify` lives in `cyclops-infra`, behind the `Backend` the binary gives
+the interface.
+
 ## 12. CLI
 
 Built with `clap`. Data goes to stdout and errors go to stderr.

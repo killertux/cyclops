@@ -13,7 +13,7 @@ In a list or a tree, `j` and `k` move the selection, `gg` and `G` go to the ends
 [Explore](explore.md#the-tree).
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation      | workspace | size  | keys             | selected?    | focus?       |
 | ---------------- | --------- | ----- | ---------------- | ------------ | ------------ |
@@ -27,7 +27,7 @@ In a list or a tree, `j` and `k` move the selection, `gg` and `G` go to the ends
 
 ## The same focus everywhere
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                        | view?   | focus?       | text                | includes? |
 | -------------- | --------- | --------------------------- | ------- | ------------ | ------------------- | --------- |
@@ -37,7 +37,7 @@ In a list or a tree, `j` and `k` move the selection, `gg` and `G` go to the ends
 
 The breadcrumb shows where the focus sits. `-` moves the focus to its parent.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys              | focus?              | breadcrumb?         |
 | ----------- | --------- | ----------------- | ------------------- | ------------------- |
@@ -57,7 +57,7 @@ On a class box `Enter` [expands the box](diagram.md#class-boxes), and the focus 
 Whatever acts on a symbol acts on the selection: `gd`, `gr`, `gc`, `gf`, `A`, `m`, `yy` and
 the right-click menu. The inspector shows the selection too.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys                                             | focus?       | selected?     | inspecting?   |
 | ------------ | --------- | ------------------------------------------------ | ------------ | ------------- | ------------- |
@@ -65,7 +65,7 @@ the right-click menu. The inspector shows the selection too.
 | In a diagram | rust-shop | `<Space>ej<Space>dK<click symbol shop::catalog>` | shop::orders | shop::catalog | shop::catalog |
 | In a map     | rust-shop | `<Space>mK/orders<CR>`                           | shop         | shop::orders  | shop::orders  |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                                                        | view?   | focus?                     | section? |
 | ----------- | --------- | ----------------------------------------------------------- | ------- | -------------------------- | -------- |
@@ -78,7 +78,7 @@ the right-click menu. The inspector shows the selection too.
 `Tab` moves to the next pane and `Ctrl-w` with a direction moves to the one that way.
 `pane?` is the pane that has the keyboard.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys                    | pane?     |
 | ------------ | --------- | ----------------------- | --------- |
@@ -94,7 +94,7 @@ The trail records each jump, like Vim's jump list. `Enter`, `gd`, `gr`, `gc`, a 
 `Ctrl-p` add to it, and `j` and `k` do not. `Ctrl-o` goes back and `Ctrl-n` goes forward,
 and each restores the view as well as the focus. A new jump drops what was ahead.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation         | workspace | keys                                             | view?    | focus?                     | trail? |
 | ------------------- | --------- | ------------------------------------------------ | -------- | -------------------------- | ------ |
@@ -112,7 +112,7 @@ and each restores the view as well as the focus. A new jump drops what was ahead
 `m` and a letter saves the selection, and `'` and that letter jumps back to it. Marks last
 for the session. An unknown mark says so.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys                    | focus?       | text            | includes? |
 | ------------ | --------- | ----------------------- | ------------ | --------------- | --------- |
@@ -128,7 +128,7 @@ comes first. It stays in the view if that view can show the symbol, and goes to
 Explore if it cannot. `/` searches the names the current view shows, starting after
 the selection, and `n` and `N` step through the matches.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                     | view?    | focus?                          |
 | -------------- | --------- | ------------------------ | -------- | ------------------------------- |
@@ -137,7 +137,7 @@ the selection, and `n` and `N` step through the matches.
 | No match       | rust-shop | `<C-p>nothing<CR>`       | Overview | shop                            |
 | Cancelling     | rust-shop | `<C-p>notes<Esc>`        | Overview | shop                            |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys                   | selected?     | text                       | includes? |
 | ------------ | --------- | ---------------------- | ------------- | -------------------------- | --------- |

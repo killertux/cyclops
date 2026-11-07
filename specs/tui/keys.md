@@ -68,7 +68,7 @@ stay outside it. Each entry can also be clicked.
 | `q` | Session | Quit                 |
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation        | workspace | keys                          | popup?     | popup keys?                           | view?    | mode?  |
 | ------------------ | --------- | ----------------------------- | ---------- | ------------------------------------- | -------- | ------ |
@@ -82,7 +82,7 @@ stay outside it. Each entry can also be clicked.
 
 The menu shows the current test code setting, so it says what the key will change.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                    | keys      | text           | includes? |
 | ----------- | --------- | ------------------------ | --------- | -------------- | --------- |
@@ -94,7 +94,7 @@ The menu shows the current test code setting, so it says what the key will chang
 `g`, `z`, `]` and `[` wait for a second key. If it does not come within half a second,
 a popup lists what can follow. Typing quickly never shows it.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | keys           | popup?    | popup keys?         |
 | ------------- | --------- | -------------- | --------- | ------------------- |
@@ -108,7 +108,7 @@ a popup lists what can follow. Typing quickly never shows it.
 A number before a motion repeats it. Views sit behind the Space menu so that numbers
 stay free for this.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys         | selected?     |
 | ------------ | --------- | ------------ | ------------- |
@@ -131,7 +131,7 @@ and changes nothing.
 | `:set bg=VALUE`       | Set the [theme](themes.md)           |
 | `:help`               | All keys                             |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace | keys            | mode?   | text                      | includes? | created?             |
 | --------------- | --------- | --------------- | ------- | ------------------------- | --------- | -------------------- |
@@ -143,7 +143,7 @@ and changes nothing.
 
 `?` opens the keys for the current view, and `Space ?` opens them all.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys        | popup? | text         | includes? |
 | ----------- | --------- | ----------- | ------ | ------------ | --------- |

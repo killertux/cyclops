@@ -9,6 +9,8 @@ publish = false
 cyclops-application.workspace = true
 cyclops-cli.workspace = true
 cyclops-domain.workspace = true
+cyclops-infra.workspace = true
+cyclops-tui.workspace = true
 rusqlite.workspace = true
 rust_slim = { version = "0.3.1", features = ["macros"] }
 toml_edit.workspace = true

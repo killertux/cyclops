@@ -355,6 +355,32 @@ impl ProjectAnalysis {
         Some(counts)
     }
 
+    /// The worst subjects for a metric where it is measured, worst first, as the
+    /// Overview ranks them. A filter keeps only the symbols it matches.
+    #[must_use]
+    pub fn ranking(
+        &self,
+        metric: MetricId,
+        filter: Option<&Filter>,
+        limit: usize,
+    ) -> Vec<(Subject, f64)> {
+        let matched: Option<HashSet<SymbolId>> = filter.map(|filter| {
+            self.search(filter, None, None)
+                .iter()
+                .map(|symbol| symbol.id.clone())
+                .collect()
+        });
+        self.ranked(peers_of_scope(metric.descriptor().measured_on()), metric)
+            .into_iter()
+            .filter(|(subject, _)| match (subject, &matched) {
+                (_, None) => true,
+                (Subject::Symbol(id), Some(matched)) => matched.contains(id),
+                (Subject::File(_), Some(_)) => false,
+            })
+            .take(limit)
+            .collect()
+    }
+
     /// The subjects ranked first for a metric, where the metric is measured.
     #[must_use]
     pub fn worst(&self, metric: MetricId) -> Option<Worst> {

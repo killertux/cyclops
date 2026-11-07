@@ -4,6 +4,7 @@ use crate::cli::{files_in, includes, run};
 use crate::read::{self, NONE, NOT_APPLICABLE, list, yes_no};
 use crate::scenario::{Scenario, no_cyclops};
 use crate::scratch::Scratch;
+use crate::tui::Session;
 use cyclops_application::analysis::ProjectAnalysis;
 use cyclops_application::diagram::{DiagramRequest, DiagramView, Edge, Level};
 use cyclops_application::graph::ModuleGraph;
@@ -1214,7 +1215,14 @@ impl Core {
 
     #[must_use]
     pub fn unavailable(&self) -> String {
-        self.read(|analysis| list(analysis.unavailable()))
+        self.read(|analysis| {
+            let unavailable: Vec<String> = analysis
+                .unavailable()
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            list(&unavailable)
+        })
     }
 
     #[must_use]
@@ -1508,6 +1516,366 @@ impl Cli {
                 Ok(Some(1)) => yes_no(false),
                 _ => NONE.into(),
             }
+        })
+    }
+}
+
+/// Drives the terminal interface, without a terminal. See `specs/tui/`.
+#[derive(Default)]
+pub struct Tui {
+    workspace: String,
+    steps: String,
+    size: String,
+    keys: String,
+    subject: String,
+    text: String,
+    other_text: String,
+    config_text: String,
+    outcome: Option<Result<Session, String>>,
+    screen: String,
+}
+
+impl Tui {
+    fn run(&self) -> Result<Session, String> {
+        let mut session = Session::open(&self.workspace, &self.steps, &self.size)?;
+        session.press(&self.keys)?;
+        Ok(session)
+    }
+
+    fn read(&self, reader: impl FnOnce(&Session) -> String) -> String {
+        match &self.outcome {
+            Some(Ok(session)) => reader(session),
+            Some(Err(error)) => failed(error),
+            None => failed("the interface was not opened"),
+        }
+    }
+
+    fn id_or_none(id: Option<&SymbolId>) -> String {
+        id.map_or_else(|| NONE.into(), ToString::to_string)
+    }
+}
+
+#[fixture]
+impl Tui {
+    #[slim(constructor)]
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn set_workspace(&mut self, workspace: String) {
+        self.workspace = workspace;
+    }
+
+    pub fn set_steps(&mut self, steps: String) {
+        self.steps = steps;
+    }
+
+    pub fn set_size(&mut self, size: String) {
+        self.size = size;
+    }
+
+    pub fn set_keys(&mut self, keys: String) {
+        self.keys = keys;
+    }
+
+    pub fn set_subject(&mut self, subject: String) {
+        self.subject = subject;
+    }
+
+    pub fn set_text(&mut self, text: String) {
+        self.text = text;
+    }
+
+    pub fn set_other_text(&mut self, text: String) {
+        self.other_text = text;
+    }
+
+    pub fn set_config_text(&mut self, text: String) {
+        self.config_text = text;
+    }
+
+    pub fn execute(&mut self) {
+        if self.workspace.is_empty() {
+            return;
+        }
+        let mut outcome = self.run();
+        if let Ok(session) = &mut outcome {
+            self.screen = session.screen();
+        }
+        self.outcome = Some(outcome);
+    }
+
+    #[must_use]
+    pub fn includes(&self) -> String {
+        self.read(|_| includes(&self.screen, &self.text))
+    }
+
+    #[must_use]
+    pub fn other_includes(&self) -> String {
+        self.read(|_| includes(&self.screen, &self.other_text))
+    }
+
+    #[must_use]
+    pub fn config_includes(&self) -> String {
+        self.read(|session| {
+            let config =
+                std::fs::read_to_string(session.scenario.root().join(".cyclops/config.toml"))
+                    .unwrap_or_default();
+            includes(&config, &self.config_text)
+        })
+    }
+
+    #[must_use]
+    pub fn view(&self) -> String {
+        self.read(|session| session.app.view().name().to_owned())
+    }
+
+    #[must_use]
+    pub fn mode(&self) -> String {
+        self.read(|session| session.app.mode().name().to_owned())
+    }
+
+    #[must_use]
+    pub fn focus(&self) -> String {
+        self.read(|session| Self::id_or_none(session.app.focus()))
+    }
+
+    #[must_use]
+    pub fn selected(&self) -> String {
+        self.read(|session| Self::id_or_none(session.app.selected().as_ref()))
+    }
+
+    #[must_use]
+    pub fn inspecting(&self) -> String {
+        self.read(|session| {
+            let shown = session.app.inspector().and(session.app.selected());
+            Self::id_or_none(shown.as_ref())
+        })
+    }
+
+    #[must_use]
+    pub fn metric(&self) -> String {
+        self.read(|session| session.app.metric_label().to_owned())
+    }
+
+    #[must_use]
+    pub fn filter(&self) -> String {
+        self.read(|session| {
+            session
+                .app
+                .lens()
+                .filter
+                .as_ref()
+                .map_or_else(|| NONE.into(), |filter| filter.text.clone())
+        })
+    }
+
+    #[must_use]
+    pub fn tests(&self) -> String {
+        self.read(|session| {
+            if session.app.lens().tests {
+                "on"
+            } else {
+                "off"
+            }
+            .into()
+        })
+    }
+
+    #[must_use]
+    pub fn popup(&self) -> String {
+        self.read(|session| session.app.popup_name().unwrap_or(NONE).to_owned())
+    }
+
+    #[must_use]
+    pub fn popup_keys(&self) -> String {
+        self.read(|session| {
+            let keys: Vec<String> = session
+                .app
+                .popup_keys()
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            list(&keys)
+        })
+    }
+
+    #[must_use]
+    pub fn rows(&self) -> String {
+        self.read(|session| {
+            let rows: Vec<String> = match session.app.view() {
+                cyclops_tui::state::View::Find => session
+                    .app
+                    .found()
+                    .iter()
+                    .map(|symbol| symbol.id.to_string())
+                    .collect(),
+                _ => session
+                    .app
+                    .tree()
+                    .iter()
+                    .map(|row| row.symbol.id.to_string())
+                    .collect(),
+            };
+            list(&rows)
+        })
+    }
+
+    #[must_use]
+    pub fn count(&self) -> String {
+        self.read(|session| session.app.found().len().to_string())
+    }
+
+    #[must_use]
+    pub fn nodes(&self) -> String {
+        self.read(|session| {
+            let mut nodes: Vec<String> = session
+                .app
+                .drawing()
+                .map(|drawing| {
+                    drawing
+                        .view
+                        .nodes
+                        .iter()
+                        .map(|node| node.id.to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            nodes.sort();
+            list(&nodes)
+        })
+    }
+
+    #[must_use]
+    pub fn level(&self) -> String {
+        self.read(|session| {
+            session.app.drawing().map_or_else(
+                || NONE.into(),
+                |drawing| {
+                    match drawing.level {
+                        Level::Package => "package",
+                        Level::Module => "module",
+                        Level::Type => "type",
+                        Level::Member => "member",
+                    }
+                    .into()
+                },
+            )
+        })
+    }
+
+    #[must_use]
+    pub fn depth(&self) -> String {
+        self.read(|session| {
+            session
+                .app
+                .drawing()
+                .map_or_else(|| NONE.into(), |drawing| drawing.depth.to_string())
+        })
+    }
+
+    #[must_use]
+    pub fn tiles(&self) -> String {
+        self.read(|session| {
+            let tiles: Vec<String> = session
+                .app
+                .tiles()
+                .iter()
+                .map(|symbol| symbol.id.to_string())
+                .collect();
+            list(&tiles)
+        })
+    }
+
+    #[must_use]
+    pub fn panes(&self) -> String {
+        self.read(|session| {
+            let panes: Vec<String> = session
+                .app
+                .panes()
+                .iter()
+                .map(|pane| pane.name().to_owned())
+                .collect();
+            list(&panes)
+        })
+    }
+
+    #[must_use]
+    pub fn pane(&self) -> String {
+        self.read(|session| {
+            session
+                .app
+                .pane()
+                .map_or(NONE, |pane| pane.name())
+                .to_owned()
+        })
+    }
+
+    #[must_use]
+    pub fn section(&self) -> String {
+        self.read(|session| {
+            session
+                .app
+                .inspector()
+                .map_or("closed", |section| section.name())
+                .to_owned()
+        })
+    }
+
+    #[must_use]
+    pub fn trail(&self) -> String {
+        self.read(|session| {
+            let (position, length) = session.app.trail();
+            format!("{position}/{length}")
+        })
+    }
+
+    #[must_use]
+    pub fn running(&self) -> String {
+        self.read(|session| yes_no(session.app.running()))
+    }
+
+    #[must_use]
+    pub fn marks(&self) -> String {
+        self.read(|session| {
+            let marks: Vec<String> = session
+                .app
+                .marks_of(&SymbolId::new(&self.subject))
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            list(&marks)
+        })
+    }
+
+    #[must_use]
+    pub fn breadcrumb(&self) -> String {
+        self.read(|session| list(&session.app.breadcrumb()))
+    }
+
+    #[must_use]
+    pub fn theme(&self) -> String {
+        self.read(|session| session.app.theme().name().to_owned())
+    }
+
+    #[must_use]
+    pub fn indexers_run(&self) -> String {
+        self.read(|session| yes_no(session.scenario.indexers_ran()))
+    }
+
+    #[must_use]
+    pub fn created(&self) -> String {
+        self.read(|session| {
+            let created: Vec<String> = crate::cli::files_in(session.scenario.root())
+                .difference(&session.before)
+                .cloned()
+                .collect();
+            list(&created)
         })
     }
 }

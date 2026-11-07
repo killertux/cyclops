@@ -33,7 +33,7 @@ and `<resume>` lets it finish.
 
 Results from a cache need no waiting, and an analysis with nothing to do says so.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | steps     | mode?  | text                   | includes? |
 | ------------ | --------- | --------- | ------ | ---------------------- | --------- |

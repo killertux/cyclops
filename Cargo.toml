@@ -14,6 +14,7 @@ cyclops-infra = { path = "crates/cyclops-infra" }
 cyclops-lang-rust = { path = "crates/cyclops-lang-rust" }
 cyclops-lang-typescript = { path = "crates/cyclops-lang-typescript" }
 cyclops-semantic = { path = "crates/cyclops-semantic" }
+cyclops-tui = { path = "crates/cyclops-tui" }
 
 anyhow = "1"
 blake3 = "1"
@@ -21,6 +22,8 @@ blake3 = "1"
 gix = { version = "0.90", default-features = false, features = ["blob-diff", "revision", "sha1"] }
 clap = { version = "4", features = ["derive"] }
 ignore = "0.4"
+# Only to say `stale` when files change.
+notify = "8"
 # The oxc_* crates break their APIs often, so they are pinned on purpose, all to one version.
 oxc_allocator = "=0.157.0"
 oxc_ast = "=0.157.0"
@@ -35,10 +38,12 @@ petgraph = "0.8"
 postcard = { version = "1", features = ["use-std"] }
 # Only to decode SCIP: `scip` does not re-export it. Pinned to the version `scip` pins.
 protobuf = "=3.7.2"
+ratatui = "0.30"
 rayon = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }
 scip = "0.10"
 serde = { version = "1", features = ["derive"] }
+terminal-colorsaurus = "1"
 thiserror = "2"
 toml = "1"
 toml_edit = "0.25"

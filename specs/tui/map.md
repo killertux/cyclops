@@ -14,7 +14,7 @@ the current metric. A tile prints its value, so color is never the only signal.
 Zooming moves the focus. `hjkl` move to the nearest tile in that direction.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                       | focus?       | tiles?                                                  |
 | ----------- | --------- | -------------------------- | ------------ | ------------------------------------------------------- |
@@ -26,7 +26,7 @@ Zooming moves the focus. `hjkl` move to the nearest tile in that direction.
 The focus decides what the map shows, so a focus deep in the tree starts deep in the map.
 A focus with nothing inside it shows its parent, with its own tile selected.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                            | tiles?                                                                              |
 | -------------- | --------- | ------------------------------- | ----------------------------------------------------------------------------------- |
@@ -71,7 +71,7 @@ inside them, and the value on a tile stays whole.
 | A cycle     | rust-cycles |                                             | `<Space>m` | cycles::a    | @      |
 | Nothing     | rust-shop   |                                             | `<Space>m` | shop::notes  | none   |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | keys                                            | tiles?                      |
 | ------------- | --------- | ----------------------------------------------- | --------------------------- |

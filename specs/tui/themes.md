@@ -17,7 +17,7 @@ choice, so it can only be set in [your own file](../project/configuration.md#you
 `terminal background VALUE` makes the terminal report that background.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation       | workspace | steps                                               | theme? |
 | ----------------- | --------- | --------------------------------------------------- | ------ |
@@ -29,7 +29,7 @@ choice, so it can only be set in [your own file](../project/configuration.md#you
 
 `:set bg=VALUE` changes the theme for this session, and saves nothing.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                                               | keys                | theme? | config text | config includes? |
 | ----------- | --------- | --------------------------------------------------- | ------------------- | ------ | ----------- | ---------------- |
@@ -37,7 +37,7 @@ choice, so it can only be set in [your own file](../project/configuration.md#you
 | Dark        | rust-shop | `set user ui.theme light`                           | `:set bg=dark<CR>`  | dark   | ui.theme    | no               |
 | Automatic   | rust-shop | `terminal background light; set user ui.theme dark` | `:set bg=auto<CR>`  | light  | ui.theme    | no               |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys               | theme? | text                | includes? |
 | ----------- | --------- | ------------------ | ------ | ------------------- | --------- |
@@ -49,7 +49,7 @@ When `NO_COLOR` is set, the interface uses no color at all, and `ui.theme` is ig
 Nothing depends on color alone: alerts, cycles, confidence and selection all stay
 visible, through marks, line styles, bold and reverse video.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | steps                                                       | keys       | theme?   | text | includes? |
 | ------------- | --------- | ----------------------------------------------------------- | ---------- | -------- | ---- | --------- |

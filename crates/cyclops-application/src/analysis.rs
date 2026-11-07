@@ -81,13 +81,27 @@ pub struct ProjectAnalysis {
     extras: Extras,
 }
 
+/// Metrics that could not be worked out, and why. It reads as `churn, hotspot: no git
+/// history`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unavailable {
+    pub metrics: Vec<MetricId>,
+    pub reason: String,
+}
+
+impl std::fmt::Display for Unavailable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names: Vec<&str> = self.metrics.iter().map(|metric| metric.name()).collect();
+        write!(f, "{}: {}", names.join(", "), self.reason)
+    }
+}
+
 /// What an analysis found besides measurements.
 #[derive(Debug, Clone, Default)]
 pub struct Extras {
     pub duplication: Duplication,
-    /// The metrics that could not be worked out, and why, such as `churn, hotspot: no
-    /// git history`.
-    pub unavailable: Vec<String>,
+    /// The metrics that could not be worked out, and why.
+    pub unavailable: Vec<Unavailable>,
     /// How many commits this analysis read, rather than taking from the cache.
     pub commits_read: usize,
     /// The commits that changed each file within the hotspot window, newest first.
@@ -130,8 +144,18 @@ impl ProjectAnalysis {
 
     /// The metrics that could not be worked out, and why.
     #[must_use]
-    pub fn unavailable(&self) -> &[String] {
+    pub fn unavailable(&self) -> &[Unavailable] {
         &self.extras.unavailable
+    }
+
+    /// Why a metric could not be worked out, if it could not.
+    #[must_use]
+    pub fn why_unavailable(&self, metric: MetricId) -> Option<&str> {
+        self.extras
+            .unavailable
+            .iter()
+            .find(|unavailable| unavailable.metrics.contains(&metric))
+            .map(|unavailable| unavailable.reason.as_str())
     }
 
     /// How many commits this analysis read, rather than taking from the cache.
@@ -163,6 +187,12 @@ impl ProjectAnalysis {
 
     pub(crate) fn set_alerts(&mut self, alerts: Vec<Alert>) {
         self.extras.alerts = alerts;
+    }
+
+    /// Whether test code counts in this analysis.
+    #[must_use]
+    pub const fn tests(&self) -> TestCode {
+        self.tests
     }
 
     /// How many files this analysis parsed, rather than taking from the cache.

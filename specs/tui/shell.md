@@ -14,7 +14,7 @@ The interface opens on Overview, with the focus on the project. The metric start
 `hotspot` when the project has git history, and on `cyclomatic` when it does not.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation        | workspace | steps                    | view?    | mode?  | focus? | metric?    | filter? | tests? | text                                    | includes? |
 | ------------------ | --------- | ------------------------ | -------- | ------ | ------ | ---------- | ------- | ------ | --------------------------------------- | --------- |
@@ -29,7 +29,7 @@ The interface opens on Overview, with the focus on the project. The metric start
 `Space` and a letter goes to a view. `gt` and `gT` go to the next and the previous one,
 and wrap around. A count goes to that view by its place, as in Vim.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys               | view?    |
 | -------------- | --------- | ------------------ | -------- |
@@ -52,7 +52,7 @@ The status line always shows the mode. `Esc` returns to NORMAL from any other mo
 loses what was being typed. In a [rule being edited](alerts.md#a-new-rule), it leaves the
 field, and `:q` leaves the rule.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys        | mode?   |
 | -------------- | --------- | ----------- | ------- |
@@ -67,7 +67,7 @@ The status line shows the mode, the lens, the layer, the alert count, the proble
 count and whether the results are fresh. `layer` is `syntax` until a precise analysis
 has finished, and `precise` after it.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | steps                                       | keys                                  | text             | includes? |
 | ------------- | --------- | ------------------------------------------- | ------------------------------------- | ---------------- | --------- |
@@ -87,12 +87,12 @@ The last line lists the most useful keys for the view, and always ends with the 
 for the Space menu and for help. While a prompt is open, Space types a space, so the
 hint line drops the menu.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys       | text       | includes? | other text | other includes? |
 | ----------- | --------- | ---------- | ---------- | --------- | ---------- | --------------- |
-| Always      | rust-shop |            | Space menu | yes       | none       | no              |
-| In a view   | rust-shop | `<Space>d` | depth      | yes       | none       | no              |
+| Always      | rust-shop |            | Space menu | yes       |            |                 |
+| In a view   | rust-shop | `<Space>d` | depth      | yes       |            |                 |
 | In a prompt | rust-shop | `f`        | apply      | yes       | Space menu | no              |
 
 ## Sizes
@@ -103,7 +103,7 @@ other pane instead of beside it. `panes?` lists what is showing. Below 80 column
 
 ![The interface in 80 by 24](design/screens/small-terminal.dark.png)
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | size   | keys              | panes?               | text                                              | includes? | running? |
 | ------------ | --------- | ------ | ----------------- | -------------------- | ------------------------------------------------- | --------- | -------- |
@@ -116,7 +116,7 @@ other pane instead of beside it. `panes?` lists what is showing. Below 80 column
 
 Resizing keeps the view, the lens and the selection.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys                      | view?   | focus?       |
 | ------------ | --------- | ------------------------- | ------- | ------------ |
@@ -127,7 +127,7 @@ Resizing keeps the view, the lens and the selection.
 `Space q` and `:q` quit. `q` closes a pane or a popup, and does nothing when there is
 nothing to close, so that it cannot quit by accident.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation      | workspace | keys         | running? | section? |
 | ---------------- | --------- | ------------ | -------- | -------- |

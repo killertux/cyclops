@@ -1,0 +1,15 @@
+[package]
+name = "cyclops-tui"
+description = "The Cyclops terminal interface"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+cyclops-application.workspace = true
+cyclops-domain.workspace = true
+ratatui.workspace = true
+terminal-colorsaurus.workspace = true
+
+[lints]
+workspace = true

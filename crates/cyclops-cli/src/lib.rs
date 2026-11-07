@@ -19,20 +19,23 @@ use cyclops_application::queries::Order;
 use cyclops_domain::filter::Filter;
 use cyclops_domain::metric::{MetricId, Subject};
 use cyclops_domain::settings::{
-    Layer, Origin, RawValue, Settings, SettingsError, Severity, initial_config,
+    Layer, Origin, RawValue, Settings, SettingsError, Severity, Theme, initial_config,
 };
 use cyclops_domain::symbol::SymbolId;
 use cyclops_infra::{
-    Export, ExportFormat, GitHistory, ProjectFiles, ProjectFolder, SqliteFactStore, UserConfig,
-    read_layer,
+    Export, ExportFormat, GitHistory, ProjectFiles, ProjectFolder, ProjectWatcher, SqliteFactStore,
+    UserConfig, read_layer,
 };
 use cyclops_lang_rust::RustAdapter;
 use cyclops_lang_typescript::TypeScriptAdapter;
 use cyclops_semantic::{Tools, providers};
+use cyclops_tui::state::ThemeChoice;
+use cyclops_tui::{Backend, Core};
 use std::collections::BTreeMap;
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
 
 /// How messages name a project's own settings file.
 const PROJECT_FILE: &str = ".cyclops/config.toml";
@@ -192,14 +195,14 @@ pub fn init(root: &Path) -> Result<String> {
     version,
     about = "Understand a codebase and judge its health"
 )]
-#[command(arg_required_else_help = true)]
 struct Cli {
     /// Work on this folder instead of the current one.
     #[arg(short = 'C', global = true, value_name = "PATH")]
     project: Option<PathBuf>,
 
+    /// Without a command, the terminal interface opens.
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -327,8 +330,11 @@ fn is_closed_pipe(error: &anyhow::Error) -> bool {
 
 fn execute(cli: &Cli, environment: &Environment) -> Result<ExitCode> {
     let root = cli.project.as_deref().unwrap_or_else(|| Path::new("."));
+    let Some(command) = &cli.command else {
+        return interactive(root, environment);
+    };
     let mut out = io::stdout().lock();
-    match &cli.command {
+    match command {
         Command::Init => {
             writeln!(out, "{}", init(root)?)?;
         }
@@ -418,6 +424,63 @@ fn execute(cli: &Cli, environment: &Environment) -> Result<ExitCode> {
             write!(out, "{written}")?;
         }
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The interface's view of the core, for one project.
+struct Interactive {
+    root: PathBuf,
+    environment: Environment,
+}
+
+impl Core for Interactive {
+    fn analyze(&self, tests: Option<bool>, precise: bool) -> Result<ProjectAnalysis, String> {
+        analyze_with(
+            &self.root,
+            &self.environment,
+            &flag_layer(tests),
+            adapters(),
+            precise,
+        )
+        .map_err(|error| error.to_string())
+    }
+
+    fn init(&self) -> Result<String, String> {
+        init(&self.root).map_err(|error| error.to_string())
+    }
+}
+
+impl Backend for Interactive {
+    fn watch(&self, changed: Box<dyn Fn() -> bool + Send>) -> Result<Box<dyn Send>, String> {
+        ProjectWatcher::start(&self.root, changed).map(|watcher| Box::new(watcher) as Box<dyn Send>)
+    }
+}
+
+/// How the interface starts for a project and an environment: the theme from your own
+/// settings, and whether `NO_COLOR` is set.
+#[must_use]
+pub fn interface_theme(root: &Path, environment: &Environment) -> (ThemeChoice, bool) {
+    let theme =
+        match settings(root, environment, &flag_layer(None), true).map(|settings| settings.theme) {
+            Ok(Theme::Dark) => ThemeChoice::Dark,
+            Ok(Theme::Light) => ThemeChoice::Light,
+            Ok(Theme::Auto) | Err(_) => ThemeChoice::Auto,
+        };
+    let no_color = environment
+        .get("NO_COLOR")
+        .is_some_and(|value| !value.is_empty());
+    (theme, no_color)
+}
+
+/// Opens the terminal interface.
+fn interactive(root: &Path, environment: &Environment) -> Result<ExitCode> {
+    ProjectFiles::open(root)?;
+    let (theme, no_color) = interface_theme(root, environment);
+    let backend: Arc<dyn Backend> = Arc::new(Interactive {
+        root: root.to_path_buf(),
+        environment: environment.clone(),
+    });
+    cyclops_tui::run(&backend, theme, no_color)?;
     Ok(ExitCode::SUCCESS)
 }
 

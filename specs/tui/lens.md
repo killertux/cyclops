@@ -15,7 +15,7 @@ as you type. `]m` and `[m` step through the metrics in the order of the
 ![The metric picker](design/screens/metric-picker.dark.png)
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation           | workspace | steps      | keys                | metric?      | popup?        |
 | --------------------- | --------- | ---------- | ------------------- | ------------ | ------------- |
@@ -32,7 +32,7 @@ as you type. `]m` and `[m` step through the metrics in the order of the
 The metric stays when the view changes, and a view that cannot show it says so. A
 symbol with no value shows `n/a`, and is never shown as 0.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                     | view?   | metric?   | text              | includes? |
 | -------------- | --------- | ------------------------ | ------- | --------- | ----------------- | --------- |
@@ -46,7 +46,7 @@ symbol with no value shows `n/a`, and is never shown as 0.
 it, `Esc` leaves it as it was, and `F` clears it. A filter that cannot be understood is
 refused and says why. It stays in the prompt so that it can be fixed.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace | keys                                                  | filter?       | mode?  | text                                     | includes? |
 | --------------- | --------- | ----------------------------------------------------- | ------------- | ------ | ---------------------------------------- | --------- |
@@ -61,7 +61,7 @@ The filter narrows every list, tree, map and diagram the same way: a symbol stay
 it [matches or when something inside it does](../explore/filters.md#in-a-hierarchy). So one
 question can be followed across views, and values stay whole.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                            | view?   | rows?                                      |
 | ----------- | --------- | ------------------------------- | ------- | ------------------------------------------ |
@@ -69,7 +69,7 @@ question can be followed across views, and values stay whole.
 | In a tree   | rust-shop | `fkind = interface<CR><Space>e` | Explore | shop, shop::catalog, shop::catalog::Priced |
 | No matches  | rust-shop | `fcyclomatic > 99<CR><Space>f`  | Find    | none                                       |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | keys                                            | view?   | nodes?                      |
 | ------------- | --------- | ----------------------------------------------- | ------- | --------------------------- |
@@ -82,7 +82,7 @@ question can be followed across views, and values stay whole.
 never changes the configuration. It never parses anything again. A focus that becomes
 hidden moves to the nearest thing that is still visible.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | steps                    | keys                          | tests? | focus?      | text      | includes? |
 | -------------- | --------- | ------------------------ | ----------------------------- | ------ | ----------- | --------- | --------- |
@@ -91,7 +91,7 @@ hidden moves to the nearest thing that is still visible.
 | Starting on    | rust-shop | `set tests.include true` | `<Space>t`                    | off    | shop        | tests off | yes       |
 | A hidden focus | rust-shop | `set tests.include true` | `<C-p>says_hello<CR><Space>t` | off    | shop::notes | tests off | yes       |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys       | config text   | config includes? |
 | ----------- | --------- | ---------- | ------------- | ---------------- |

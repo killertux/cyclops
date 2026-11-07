@@ -7,6 +7,7 @@ mod export;
 mod file_source;
 mod folder;
 mod git;
+mod watch;
 
 pub use cache::SqliteFactStore;
 pub use config::{UserConfig, read_layer};
@@ -14,3 +15,4 @@ pub use export::{Export, ExportFormat};
 pub use file_source::{ProjectFiles, ProjectNotFound};
 pub use folder::ProjectFolder;
 pub use git::GitHistory;
+pub use watch::ProjectWatcher;

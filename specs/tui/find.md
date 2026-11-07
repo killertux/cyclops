@@ -15,7 +15,7 @@ first. Ties stay alphabetical, and symbols with no value go last, as on the
 [filters](../explore/filters.md#sorting-and-limiting) page. `rows?` lists them in order.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace | keys                                            | rows?                                                            |
 | --------------- | --------- | ----------------------------------------------- | ---------------------------------------------------------------- |
@@ -25,7 +25,7 @@ first. Ties stay alphabetical, and symbols with no value go last, as on the
 
 Without a filter, Find lists every symbol that has a value for the metric.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                       | count? |
 | ----------- | --------- | -------------------------- | ------ |
@@ -89,7 +89,7 @@ views.
 
 `Enter` opens a result in Explore. The filter stays on, so the result stays in context.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                             | view?   | focus?                     | filter?       |
 | ----------- | --------- | -------------------------------- | ------- | -------------------------- | ------------- |

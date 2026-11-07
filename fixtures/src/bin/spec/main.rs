@@ -9,8 +9,9 @@ mod json;
 mod read;
 mod scenario;
 mod scratch;
+mod tui;
 
-use fixtures::{Cli, Core, Snippet};
+use fixtures::{Cli, Core, Snippet, Tui};
 use rust_slim::PortSlimServer;
 use std::env::args;
 use std::error::Error;
@@ -20,6 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     server.add_fixture::<Snippet>();
     server.add_fixture::<Core>();
     server.add_fixture::<Cli>();
+    server.add_fixture::<Tui>();
     server.run()?;
     Ok(())
 }

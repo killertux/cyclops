@@ -1,6 +1,6 @@
 //! The analysis pipeline: discover, check the cache, extract, link, analyze.
 
-use crate::analysis::{AnalysisInput, AnalyzedFile, Extras, ProjectAnalysis};
+use crate::analysis::{AnalysisInput, AnalyzedFile, Extras, ProjectAnalysis, Unavailable};
 use crate::duplication::Duplication;
 use crate::history::{self, churn, start_of};
 use crate::ports::{
@@ -267,7 +267,10 @@ impl AnalysisService {
                     .collect();
                 measurements.extend(history::measure(&input, &churn, &complexity));
             }
-            Err(error) => extras.unavailable.push(format!("churn, hotspot: {error}")),
+            Err(error) => extras.unavailable.push(Unavailable {
+                metrics: vec![MetricId::Churn, MetricId::Hotspot],
+                reason: error.to_string(),
+            }),
         }
         Problem::sort(&mut problems);
 

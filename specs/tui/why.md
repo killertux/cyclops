@@ -29,14 +29,14 @@ lines that have points, and `line?` is the current line.
 metric, and says which one. With `hotspot` or `churn`, that is the worst function of its
 worst file.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys          | focus?                     | text            | includes? |
 | ----------- | --------- | ------------- | -------------------------- | --------------- | --------- |
 | A module    | rust-shop | `<Space>ejgd` | shop::orders::Order::total | worst in orders | yes       |
 | The project | rust-shop | `gd`          | shop::orders::Order::total | worst in shop   | yes       |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                                    | keys | focus?                     | text          | includes? |
 | ----------- | --------- | ---------------------------------------- | ---- | -------------------------- | ------------- | --------- |

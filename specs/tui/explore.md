@@ -15,7 +15,7 @@ rows with no value go last. So the worst part of the project is always at the to
 each branch. `rows?` lists the rows in order.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                       | rows?                                                                                                                                                                   |
 | -------------- | --------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -32,7 +32,7 @@ each branch. `rows?` lists the rows in order.
 `h` on a closed row moves to its parent. `zR` opens everything, and a row has no arrow
 when there is nothing inside it.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace | keys          | selected? | text    | includes? |
 | --------------- | --------- | ------------- | --------- | ------- | --------- |
@@ -64,7 +64,7 @@ is visible from the top of the tree.
 move through its sections, which wrap around. `section?` is the open section, and
 `closed` means there is no inspector.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys            | section?  | text      | includes? |
 | ------------ | --------- | --------------- | --------- | --------- | --------- |
@@ -80,7 +80,7 @@ move through its sections, which wrap around. `section?` is the open section, an
 
 It stays open and follows the selection.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys                 | section? | inspecting?  |
 | ------------ | --------- | -------------------- | -------- | ------------ |
@@ -93,7 +93,7 @@ Metrics shows each metric that applies, with its [rank and spread](../explore/ra
 among its peers. That comparison is what answers how this part stands against the
 rest. A metric with no value shows `n/a`. There is no total.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                     | text    | includes? |
 | -------------- | --------- | ------------------------ | ------- | --------- |

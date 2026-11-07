@@ -39,7 +39,7 @@ Moving through the list changes the metric of the lens. The rest of the
 
 A metric that cannot be worked out stays in the list and says why.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps | text           | includes? |
 | ----------- | --------- | ----- | -------------- | --------- |
@@ -59,7 +59,7 @@ Explore. `ranking?` lists it in order.
 | Modules     | rust-shop | `Minstability<CR>`     | shop::orders, shop::billing, shop::catalog                                                                                                                              |
 | Filtered    | rust-shop | `fpath ~ "src/o*"<CR>` | shop::orders::Order::total, shop::orders::Order::add                                                                                                                    |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys         | view?   | focus?                        |
 | ----------- | --------- | ------------ | ------- | ----------------------------- |

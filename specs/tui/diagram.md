@@ -30,7 +30,7 @@ neighbors, and `-` goes back up to the depth you had. `nodes?` lists what is sho
 
 `<` and `>` change the depth, and it never goes below 0.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                        | depth? | nodes?       |
 | ----------- | --------- | --------------------------- | ------ | ------------ |
@@ -41,7 +41,7 @@ neighbors, and `-` goes back up to the depth you had. `nodes?` lists what is sho
 `hjkl` move between nodes. The focus does not move until you ask: `c` centers the
 diagram on the selected node.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                                             | focus?        | selected?     |
 | ----------- | --------- | ------------------------------------------------ | ------------- | ------------- |
@@ -150,7 +150,7 @@ which centers the diagram on the member's type. The interface has no separate me
 | Leaving it   | rust-shop | `<C-p>Order<CR><Space>d<CR>jl`   | type   | shop::billing::Invoice        | Invoice     | yes       |
 | A stereotype | rust-shop | `<C-p>Priced<CR><Space>d`        | type   | shop::catalog::Priced         | «interface» | yes       |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                             | view?   | focus?                     | section? |
 | ----------- | --------- | -------------------------------- | ------- | -------------------------- | -------- |

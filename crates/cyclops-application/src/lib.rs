@@ -3,6 +3,7 @@
 
 pub mod analysis;
 pub mod analyzers;
+pub mod browse;
 pub mod diagram;
 pub mod duplication;
 pub mod graph;
