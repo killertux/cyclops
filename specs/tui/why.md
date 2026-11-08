@@ -14,7 +14,7 @@ The gutter shows the cognitive points each line added. `n` and `N` step through 
 lines that have points, and `line?` is the current line.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | keys                         | view?   | section? | gutter?      | line? |
 | ------------- | --------- | ---------------------------- | ------- | -------- | ------------ | ----- |
@@ -48,7 +48,7 @@ Beside the source, Why splits the score into its decision points and what nestin
 added, then shows the history behind a hotspot. Without git it says so, and the rest
 still works.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                                    | keys                                    | text                 | includes? |
 | ----------- | --------- | ---------------------------------------- | --------------------------------------- | -------------------- | --------- |
@@ -83,7 +83,7 @@ The others share one layout:
 | `cycle_size`                                                      | The path around the cycle  |
 | `duplication`                                                     | Where the copies are       |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace       | keys                               | focus?              | section? | text                                | includes? |
 | -------------- | --------------- | ---------------------------------- | ------------------- | -------- | ----------------------------------- | --------- |
@@ -99,7 +99,7 @@ The others share one layout:
 
 `gf` opens the editor at the current line, and `Ctrl-o` goes back to where you were.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps             | keys                           | opened?          | section? |
 | ----------- | --------- | ----------------- | ------------------------------ | ---------------- | -------- |

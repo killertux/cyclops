@@ -14,7 +14,7 @@ The left side lists the rules, and the right side lists the hits of the selected
 worst first. `v` groups the hits by location instead. `Enter` opens a hit.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                                                                                | keys        | rules?                                           | rows?                                                     |
 | ----------- | --------- | ------------------------------------------------------------------------------------ | ----------- | ------------------------------------------------ | --------------------------------------------------------- |
@@ -26,7 +26,7 @@ worst first. `v` groups the hits by location instead. `Enter` opens a hit.
 Errors come before warnings, and a disabled rule stays in the list with no hits.
 Rules from your [own file](../project/configuration.md#your-own-settings) are labelled.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                                                | keys       | text       | includes? |
 | ----------- | --------- | ---------------------------------------------------- | ---------- | ---------- | --------- |
@@ -37,7 +37,7 @@ Rules from your [own file](../project/configuration.md#your-own-settings) are la
 
 `]a` and `[a` move the focus through every alert, from any view, worst first.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | steps                                       | keys                | view?    | focus?                        |
 | ------------ | --------- | ------------------------------------------- | ------------------- | -------- | ----------------------------- |
@@ -53,7 +53,7 @@ The view shows what [`cyclops check`](../cli/commands.md#checking-alerts) would 
 is what CI would do. `cyclops check` ignores your own file, so your rules show their hits
 here but never change the exit code. The view says how many it left out.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                                                                  | keys       | text                        | includes? |
 | ----------- | --------- | ---------------------------------------------------------------------- | ---------- | --------------------------- | --------- |
@@ -79,7 +79,7 @@ many symbols it would fire on. Both update as you type, so a threshold can be tr
 before it is saved. The rule is checked as you type, with the messages from
 [invalid rules](../explore/alerts.md#invalid-rules).
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace | keys                                       | mode? | rule?                                | hits? | text                        | includes? |
 | --------------- | --------- | ------------------------------------------ | ----- | ------------------------------------ | ----- | --------------------------- | --------- |
@@ -88,7 +88,7 @@ before it is saved. The rule is checked as you type, with the messages from
 | Trying a value  | rust-shop | `<C-p>Order::total<CR>Ai<C-u>> 1<CR>`      | EDIT  | cyclomatic function > 1 warning      | 2     | Next closest                | yes       |
 | A bad value     | rust-shop | `<C-p>Order::total<CR>Ai<C-u>around 1<CR>` | EDIT  | cyclomatic function around 1 warning | 0     | Invalid threshold: around 1 | yes       |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace | keys                                   | mode? | field?   | rule?                            |
 | --------------- | --------- | -------------------------------------- | ----- | -------- | -------------------------------- |
@@ -102,20 +102,20 @@ Saving writes to `.cyclops/config.toml` and keeps every line already in it, comm
 included. The change to the file is shown before it is saved. Hits update straight
 after, with no parsing. A rule that could not work is refused, and nothing is written.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | steps                          | keys                                             | mode?  | config text           | config includes? | other config text | other config includes? |
 | ------------- | --------- | ------------------------------ | ------------------------------------------------ | ------ | --------------------- | ---------------- | ----------------- | ---------------------- |
 | Saving        | rust-shop |                                | `<C-p>Order::total<CR>A:w<CR>`                   | NORMAL | metric = "cyclomatic" | yes              |                   |                        |
-| Leaving       | rust-shop |                                | `<C-p>Order::total<CR>A:q<CR>`                   | NORMAL | none                  | yes              | [[alerts]]        | no                     |
-| Refused       | rust-shop |                                | `<C-p>Order::total<CR>Ai<C-u>around 1<CR>:w<CR>` | EDIT   | none                  | yes              | [[alerts]]        | no                     |
+| Leaving       | rust-shop |                                | `<C-p>Order::total<CR>A:q<CR>`                   | NORMAL |                       |                  | [[alerts]]        | no                     |
+| Refused       | rust-shop |                                | `<C-p>Order::total<CR>Ai<C-u>around 1<CR>:w<CR>` | EDIT   |                       |                  | [[alerts]]        | no                     |
 | Comments stay | rust-shop | `add config comment keep this` | `<C-p>Order::total<CR>A:w<CR>`                   | NORMAL | # keep this           | yes              |                   |                        |
 | Hits appear   | rust-shop |                                | `<C-p>Order::total<CR>A:w<CR><Space>a`           | NORMAL | [[alerts]]            | yes              |                   |                        |
 
 `:w user` saves the rule to [your own file](../project/configuration.md#your-own-settings)
 instead. `user config text` and `user config includes?` read that file.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                                | mode?  | user config text      | user config includes? | config text | config includes? |
 | ----------- | --------- | ----------------------------------- | ------ | --------------------- | --------------------- | ----------- | ---------------- |
@@ -125,7 +125,7 @@ instead. `user config text` and `user config includes?` read that file.
 
 `e` edits the selected rule, and `x` disables it, or enables it again.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                                                | keys                           | config text     | config includes? |
 | ----------- | --------- | ---------------------------------------------------- | ------------------------------ | --------------- | ---------------- |
@@ -135,7 +135,7 @@ instead. `user config text` and `user config includes?` read that file.
 
 A rule stays in the file it came from.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                                            | keys                           | user config text | user config includes? | config text | config includes? |
 | ----------- | --------- | ------------------------------------------------ | ------------------------------ | ---------------- | --------------------- | ----------- | ---------------- |

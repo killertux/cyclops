@@ -1531,6 +1531,9 @@ pub struct Tui {
     text: String,
     other_text: String,
     config_text: String,
+    other_config_text: String,
+    user_config_text: String,
+    language: String,
     outcome: Option<Result<Session, String>>,
     screen: String,
 }
@@ -1548,6 +1551,11 @@ impl Tui {
             Some(Err(error)) => failed(error),
             None => failed("the interface was not opened"),
         }
+    }
+
+    fn config(session: &Session) -> String {
+        std::fs::read_to_string(session.scenario.root().join(".cyclops/config.toml"))
+            .unwrap_or_default()
     }
 
     fn id_or_none(id: Option<&SymbolId>) -> String {
@@ -1599,6 +1607,116 @@ impl Tui {
         self.config_text = text;
     }
 
+    pub fn set_other_config_text(&mut self, text: String) {
+        self.other_config_text = text;
+    }
+
+    pub fn set_user_config_text(&mut self, text: String) {
+        self.user_config_text = text;
+    }
+
+    pub fn set_language(&mut self, language: String) {
+        self.language = language;
+    }
+
+    #[must_use]
+    pub fn other_config_includes(&self) -> String {
+        self.read(|session| includes(&Self::config(session), &self.other_config_text))
+    }
+
+    #[must_use]
+    pub fn user_config_includes(&self) -> String {
+        self.read(|session| {
+            let text = session
+                .scenario
+                .user_config_file()
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .unwrap_or_default();
+            includes(&text, &self.user_config_text)
+        })
+    }
+
+    /// The alert rules Alerts lists, in order.
+    #[must_use]
+    pub fn rules(&self) -> String {
+        self.read(|session| {
+            let rules: Vec<String> = session
+                .app
+                .listed_rules()
+                .iter()
+                .map(|(_, rule)| rule.title())
+                .collect();
+            list(&rules)
+        })
+    }
+
+    /// How many symbols the rule being written would fire on.
+    #[must_use]
+    pub fn hits(&self) -> String {
+        self.read(|session| session.app.editor_hits().to_string())
+    }
+
+    /// The rule being written, as `METRIC SCOPE WHEN SEVERITY`.
+    #[must_use]
+    pub fn rule(&self) -> String {
+        self.read(|session| {
+            session
+                .app
+                .editor()
+                .map_or_else(|| NONE.into(), cyclops_tui::editor::RuleEditor::summary)
+        })
+    }
+
+    /// The field of the rule being written.
+    #[must_use]
+    pub fn field(&self) -> String {
+        self.read(|session| {
+            session
+                .app
+                .editor()
+                .map_or(NONE, cyclops_tui::editor::RuleEditor::field_name)
+                .to_owned()
+        })
+    }
+
+    /// The lines of Why's source with points, and those points.
+    #[must_use]
+    pub fn gutter(&self) -> String {
+        self.read(|session| {
+            let points: Vec<String> = session
+                .app
+                .gutter()
+                .iter()
+                .map(|(line, points)| format!("{line} +{points}"))
+                .collect();
+            list(&points)
+        })
+    }
+
+    /// The current line of Why's source.
+    #[must_use]
+    pub fn line(&self) -> String {
+        self.read(|session| session.app.why_line().to_string())
+    }
+
+    /// Whether the indexer of the `language` can run.
+    #[must_use]
+    pub fn ready(&self) -> String {
+        self.read(|session| {
+            session
+                .app
+                .indexers()
+                .iter()
+                .find(|report| {
+                    report
+                        .languages
+                        .iter()
+                        .any(|language| language.name() == self.language)
+                })
+                .map_or_else(|| NONE.into(), |report| yes_no(report.ready.is_ok()))
+        })
+    }
+
     pub fn execute(&mut self) {
         if self.workspace.is_empty() {
             return;
@@ -1622,12 +1740,7 @@ impl Tui {
 
     #[must_use]
     pub fn config_includes(&self) -> String {
-        self.read(|session| {
-            let config =
-                std::fs::read_to_string(session.scenario.root().join(".cyclops/config.toml"))
-                    .unwrap_or_default();
-            includes(&config, &self.config_text)
-        })
+        self.read(|session| includes(&Self::config(session), &self.config_text))
     }
 
     #[must_use]
@@ -1709,6 +1822,18 @@ impl Tui {
     pub fn rows(&self) -> String {
         self.read(|session| {
             let rows: Vec<String> = match session.app.view() {
+                cyclops_tui::state::View::Alerts => session.app.alert_rows(),
+                cyclops_tui::state::View::Status => session
+                    .app
+                    .analysis()
+                    .map(|analysis| {
+                        analysis
+                            .problems()
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
                 cyclops_tui::state::View::Find => session
                     .app
                     .found()

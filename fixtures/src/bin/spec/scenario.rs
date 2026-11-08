@@ -77,6 +77,8 @@ pub struct Scenario {
     background: Option<String>,
     /// The step an analysis waits before, for the interface to be seen mid-way.
     pause: Option<String>,
+    /// How far the indexer says it has got, when a step makes it say.
+    indexer_percent: Option<u8>,
 }
 
 /// The tools the indexers need look for their own files under the home folder, which a
@@ -168,6 +170,7 @@ impl Scenario {
             indexers_ran: Cell::new(false),
             background: None,
             pause: None,
+            indexer_percent: None,
         }
     }
 
@@ -185,6 +188,11 @@ impl Scenario {
 
     pub fn flags(&self) -> Layer {
         flag_layer(self.tests_flag)
+    }
+
+    /// How far the indexer says it has got, if a step said.
+    pub const fn indexer_percent(&self) -> Option<u8> {
+        self.indexer_percent
     }
 
     /// The step an analysis should wait before, if a step said.
@@ -261,6 +269,11 @@ impl Scenario {
 
     pub fn settings(&self) -> Result<Settings, String> {
         settings(self.root(), &self.environment(), &self.flags(), true).map_err(|e| e.to_string())
+    }
+
+    /// Your own settings file, for this row.
+    pub fn user_config_file(&self) -> Option<PathBuf> {
+        user_config_path(&self.environment())
     }
 
     fn user_config(&self) -> Result<PathBuf, String> {
@@ -425,6 +438,33 @@ impl Scenario {
         Ok(())
     }
 
+    /// Steps about the machine the interface runs on rather than the project: its tools,
+    /// its terminal, and how an analysis goes. Nothing if the step is not one of them.
+    fn machine_step(&mut self, step: &str) -> Option<Result<(), String>> {
+        if let Some(percent) = step
+            .strip_prefix("indexer reports ")
+            .and_then(|rest| rest.strip_suffix('%'))
+        {
+            return Some(match percent.parse() {
+                Ok(percent) => {
+                    self.indexer_percent = Some(percent);
+                    Ok(())
+                }
+                Err(_) => Err(format!("not a percentage: {percent}")),
+            });
+        }
+        if let Some(name) = step.strip_prefix("pause before ") {
+            self.pause = Some(name.to_owned());
+            return Some(Ok(()));
+        }
+        if let Some(value) = step.strip_prefix("terminal background ") {
+            self.background = Some(value.to_owned());
+            return Some(Ok(()));
+        }
+        step.strip_prefix("remove tool ")
+            .map(|name| self.remove_tool(name))
+    }
+
     /// Makes a program unavailable, by putting in place of each folder of the search path
     /// that has it a folder with everything else in that folder.
     fn remove_tool(&mut self, name: &str) -> Result<(), String> {
@@ -511,16 +551,8 @@ impl Scenario {
             self.upgraded.push(language.to_owned());
             return Ok(());
         }
-        if let Some(name) = step.strip_prefix("pause before ") {
-            self.pause = Some(name.to_owned());
-            return Ok(());
-        }
-        if let Some(value) = step.strip_prefix("terminal background ") {
-            self.background = Some(value.to_owned());
-            return Ok(());
-        }
-        if let Some(name) = step.strip_prefix("remove tool ") {
-            return self.remove_tool(name).map_err(fail);
+        if let Some(done) = self.machine_step(step) {
+            return done.map_err(fail);
         }
         if let Some(rest) = step.strip_prefix("commit ") {
             return self.commits(rest).map_err(fail);

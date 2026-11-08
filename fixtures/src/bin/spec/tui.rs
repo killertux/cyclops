@@ -6,13 +6,16 @@ use crate::scenario::{Scenario, no_cyclops};
 use crate::scratch::Scratch;
 use cyclops_application::analysis::ProjectAnalysis;
 use cyclops_application::ports::{FileSource, Partial, Progress, Step};
-use cyclops_cli::{init, interface_startup, precise_ready};
+use cyclops_cli::{
+    indexer_reports, init, interface_startup, precise_ready, save_rule, toggle_rule,
+};
 use cyclops_domain::path::RelativePath;
+use cyclops_domain::settings::RawValue;
 use cyclops_infra::ProjectFiles;
 use cyclops_tui::app::{Heard, space_menu};
 use cyclops_tui::canvas::screen_text;
 use cyclops_tui::input::{Gesture, Input, MouseKind, parse_gestures, parse_size};
-use cyclops_tui::state::{Effect, Startup, Target, ThemeChoice, View};
+use cyclops_tui::state::{Effect, IndexerReport, Startup, Target, ThemeChoice, View};
 use cyclops_tui::{App, Core, perform, render};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
@@ -52,6 +55,39 @@ impl Core for Offered<'_> {
     fn copy(&self, _text: &str) -> Result<(), String> {
         Ok(())
     }
+
+    fn save_rule(
+        &self,
+        fields: &[(String, RawValue)],
+        yours: bool,
+        position: Option<usize>,
+    ) -> Result<String, String> {
+        save_rule(
+            self.0.root(),
+            &self.0.environment(),
+            fields,
+            yours,
+            position,
+        )
+    }
+
+    fn toggle_rule(&self, yours: bool, position: usize, enabled: bool) -> Result<(), String> {
+        toggle_rule(
+            self.0.root(),
+            &self.0.environment(),
+            yours,
+            position,
+            enabled,
+        )
+    }
+
+    fn read(&self, path: &str) -> Result<String, String> {
+        std::fs::read_to_string(self.0.root().join(path)).map_err(|error| error.to_string())
+    }
+
+    fn indexers(&self) -> Vec<IndexerReport> {
+        indexer_reports(self.0.root(), &self.0.environment())
+    }
 }
 
 /// What an analysis thread says.
@@ -72,6 +108,8 @@ enum Control {
 struct Watched {
     events: Sender<Event>,
     pause: Option<Step>,
+    /// What the indexer says about its progress, when a row makes it say something.
+    percent: Option<u8>,
     control: Mutex<Receiver<Control>>,
     /// The session stopped listening, so the analysis should stop.
     closed: AtomicBool,
@@ -99,6 +137,7 @@ impl Progress for Watched {
         if self.pause == Some(step) && !self.hold() {
             return false;
         }
+
         self.tell(Event::Heard(Heard::Step(step)));
         !self.closed.load(Ordering::Relaxed)
     }
@@ -113,6 +152,9 @@ impl Progress for Watched {
 
     fn indexing(&self, indexer: &str) {
         self.tell(Event::Heard(Heard::Indexer(indexer.to_owned())));
+        if let Some(percent) = self.percent {
+            self.tell(Event::Heard(Heard::Percent(percent)));
+        }
     }
 }
 
@@ -201,6 +243,7 @@ impl Session {
         let watched = Watched {
             events,
             pause: self.pause,
+            percent: self.scenario.indexer_percent(),
             control: Mutex::new(controlled),
             closed: AtomicBool::new(false),
         };

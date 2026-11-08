@@ -27,12 +27,12 @@ use cyclops_domain::settings::{
 use cyclops_domain::symbol::SymbolId;
 use cyclops_infra::{
     Export, ExportFormat, GitHistory, ProjectFiles, ProjectFolder, ProjectWatcher, SqliteFactStore,
-    UserConfig, read_layer,
+    UserConfig, read_layer, save_alert, set_alert_enabled,
 };
 use cyclops_lang_rust::RustAdapter;
 use cyclops_lang_typescript::TypeScriptAdapter;
 use cyclops_semantic::{Tools, providers};
-use cyclops_tui::state::{Startup, ThemeChoice};
+use cyclops_tui::state::{IndexerReport, Startup, ThemeChoice};
 use cyclops_tui::{Backend, Core};
 use std::collections::BTreeMap;
 use std::io::{self, ErrorKind, Write};
@@ -499,6 +499,99 @@ impl Core for Interactive {
             .and_then(|mut clipboard| clipboard.set_text(text))
             .map_err(|error| format!("The clipboard cannot be used: {error}"))
     }
+
+    fn save_rule(
+        &self,
+        fields: &[(String, RawValue)],
+        yours: bool,
+        position: Option<usize>,
+    ) -> Result<String, String> {
+        save_rule(&self.root, &self.environment, fields, yours, position)
+    }
+
+    fn toggle_rule(&self, yours: bool, position: usize, enabled: bool) -> Result<(), String> {
+        toggle_rule(&self.root, &self.environment, yours, position, enabled)
+    }
+
+    fn read(&self, path: &str) -> Result<String, String> {
+        std::fs::read_to_string(self.root.join(path))
+            .map_err(|error| format!("{path} cannot be read: {error}"))
+    }
+
+    fn indexers(&self) -> Vec<IndexerReport> {
+        indexer_reports(&self.root, &self.environment)
+    }
+}
+
+/// The settings file a rule goes to: your own, or the project's, and how to name it.
+fn rule_file(
+    root: &Path,
+    environment: &Environment,
+    yours: bool,
+) -> Result<(PathBuf, String), String> {
+    if yours {
+        let user = UserConfig::locate(environment.home(), environment.xdg_config_home())
+            .ok_or("There is no home folder for your own settings.")?;
+        Ok((user.path, user.label))
+    } else {
+        Ok((
+            ProjectFolder::of(root).config_path(),
+            PROJECT_FILE.to_owned(),
+        ))
+    }
+}
+
+/// Saves an alert rule into your own settings file or the project's, keeping everything
+/// else in it. Says where it went.
+///
+/// # Errors
+///
+/// Says why the file could not be changed.
+pub fn save_rule(
+    root: &Path,
+    environment: &Environment,
+    fields: &[(String, RawValue)],
+    yours: bool,
+    position: Option<usize>,
+) -> Result<String, String> {
+    let (path, label) = rule_file(root, environment, yours)?;
+    save_alert(&path, position, fields)?;
+    Ok(format!("Saved to {label}."))
+}
+
+/// Turns a rule of your own settings file or the project's on or off.
+///
+/// # Errors
+///
+/// Says why the file could not be changed.
+pub fn toggle_rule(
+    root: &Path,
+    environment: &Environment,
+    yours: bool,
+    position: usize,
+    enabled: bool,
+) -> Result<(), String> {
+    let (path, _) = rule_file(root, environment, yours)?;
+    set_alert_enabled(&path, position, enabled)
+}
+
+/// Every indexer, and whether it can run here.
+#[must_use]
+pub fn indexer_reports(root: &Path, environment: &Environment) -> Vec<IndexerReport> {
+    let tools = Tools::new(environment.get("PATH"));
+    let cache = ProjectFolder::of(root).cache_path();
+    providers(root, cache.parent().unwrap_or(root), &tools)
+        .iter()
+        .map(|provider| IndexerReport {
+            label: provider.label().to_owned(),
+            languages: provider.languages().to_vec(),
+            indexer: provider.indexer().to_owned(),
+            ready: provider.availability().map_err(|error| match error {
+                IndexError::Missing(tool) => format!("{tool} is not installed."),
+                IndexError::Failed(reason) => reason,
+            }),
+        })
+        .collect()
 }
 
 impl Backend for Interactive {

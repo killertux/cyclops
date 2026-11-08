@@ -64,6 +64,13 @@ impl Run<'_> {
         Ok(())
     }
 
+    /// Says what an earlier step did, once a later one knows.
+    fn amend(&mut self, step: Step, result: String) {
+        if let Some(report) = self.steps.iter_mut().find(|report| report.step == step) {
+            report.result = result;
+        }
+    }
+
     /// Says what the step that started last did.
     fn end(&mut self, result: String) {
         if let Some(report) = self.steps.last_mut() {
@@ -378,6 +385,7 @@ impl AnalysisService {
         analysis.set_alerts(alerts);
         analysis.set_steps(run.steps);
         analysis.set_rules(rules);
+        analysis.set_fail_on(settings.fail_on);
         Ok(analysis)
     }
 
@@ -467,14 +475,7 @@ impl AnalysisService {
         let candidates = self.candidates(discovered.files.clone(), settings, &mut known);
         let found_any = !candidates.is_empty();
         problems.extend(discovered.unreadable.into_iter().map(Problem::Unreadable));
-        let unchanged = candidates
-            .iter()
-            .filter(|candidate| candidate.cached.is_some())
-            .count();
-        run.end(format!(
-            "{unchanged} from cache, {} changed",
-            candidates.len() - unchanged
-        ));
+        run.end(String::new());
         run.begin(Step::Extract)?;
         let total = candidates.len();
         let done = AtomicUsize::new(0);
@@ -518,6 +519,10 @@ impl AnalysisService {
             problems.push(Problem::CacheUnavailable(error.to_string()));
         }
         run.end(format!("{parsed} parsed"));
+        run.amend(
+            Step::Check,
+            format!("{} from cache, {parsed} changed", extracted.len() - parsed),
+        );
         let facts: Vec<&FileFacts> = extracted.iter().map(|file| &file.facts).collect();
         run.progress.partial(partial_of(&facts));
         Ok((extracted, parsed))

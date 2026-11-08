@@ -12,6 +12,7 @@ use cyclops_domain::metric::{Measurement, MetricId, Subject};
 use cyclops_domain::model::{ModelView, ProjectModel, TestCode};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
+use cyclops_domain::settings::Severity;
 use cyclops_domain::symbol::{CodeRole, Symbol, SymbolId};
 use std::collections::BTreeMap;
 
@@ -115,6 +116,8 @@ pub struct Extras {
     pub steps: Vec<StepReport>,
     /// The alert rules, enabled or not.
     pub rules: Vec<AlertRule>,
+    /// The severity at which `cyclops check` fails.
+    pub fail_on: Severity,
 }
 
 impl ProjectAnalysis {
@@ -193,6 +196,16 @@ impl ProjectAnalysis {
 
     pub(crate) fn set_rules(&mut self, rules: Vec<AlertRule>) {
         self.extras.rules = rules;
+    }
+
+    /// The severity at which `cyclops check` fails.
+    #[must_use]
+    pub const fn fail_on(&self) -> Severity {
+        self.extras.fail_on
+    }
+
+    pub(crate) const fn set_fail_on(&mut self, fail_on: Severity) {
+        self.extras.fail_on = fail_on;
     }
 
     /// The alert rules, enabled or not, in the order of the settings.

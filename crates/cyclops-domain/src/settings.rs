@@ -105,9 +105,11 @@ pub enum SemanticMode {
     Always,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// How serious an alert is. `cyclops check` fails on errors unless told otherwise.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
     Warning,
+    #[default]
     Error,
 }
 
@@ -151,6 +153,8 @@ impl fmt::Display for Period {
 pub struct AlertSource {
     pub fields: Vec<(String, RawValue)>,
     pub origin: Origin,
+    /// Its place among the rules of its file, from 0.
+    pub position: usize,
 }
 
 const ALERT_FIELDS: [&str; 7] = [
@@ -390,7 +394,7 @@ impl Settings {
                 }
                 settings.set(key, value, layer.origin)?;
             }
-            for fields in &layer.alerts {
+            for (position, fields) in layer.alerts.iter().enumerate() {
                 if let Some((field, _)) = fields
                     .iter()
                     .find(|(field, _)| !ALERT_FIELDS.contains(&field.as_str()))
@@ -400,6 +404,7 @@ impl Settings {
                 settings.alerts.push(AlertSource {
                     fields: fields.clone(),
                     origin: layer.origin,
+                    position,
                 });
             }
         }

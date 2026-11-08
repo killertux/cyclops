@@ -1,21 +1,24 @@
 //! The interface as a model and an update: what it holds, and how each input changes
 //! it. Nothing here touches a terminal, so it can be driven by a test as well as a person.
 
+use crate::editor::RuleEditor;
 use crate::input::{Input, Key, MouseKind};
 use crate::state::{
-    Effect, Mode, OVERVIEW_METRICS, Pane, Place, Popup, Pose, Prompt, PromptKind, Section, Startup,
-    Target, Theme, ThemeChoice, View, metric_label,
+    Effect, IndexerReport, Mode, OVERVIEW_METRICS, Pane, Place, Popup, Pose, Prompt, PromptKind,
+    Section, Startup, Target, Theme, ThemeChoice, View, metric_label,
 };
 use cyclops_application::analysis::ProjectAnalysis;
 use cyclops_application::diagram::{DiagramRequest, DiagramView, Level};
 use cyclops_application::ports::{Partial, Step};
-use cyclops_application::queries::Order;
+use cyclops_application::queries::{Alert, Order};
+use cyclops_domain::alert::AlertRule;
 use cyclops_domain::filter::Filter;
 use cyclops_domain::filter::completions;
-use cyclops_domain::metric::{MetricId, Subject};
+use cyclops_domain::metric::{MetricId, Scope, Subject};
 use cyclops_domain::model::TestCode;
 use cyclops_domain::problem::Problem;
 use cyclops_domain::relation::{Confidence, RelationKind};
+use cyclops_domain::settings::Origin;
 use cyclops_domain::settings::Severity;
 use cyclops_domain::symbol::{Symbol, SymbolId, SymbolKind};
 use ratatui::layout::Rect;
@@ -103,6 +106,8 @@ pub enum Heard {
     Partial(Partial),
     /// The indexer that is about to run.
     Indexer(String),
+    /// How far the indexer has got.
+    Percent(u8),
 }
 
 /// An analysis that is running.
@@ -115,6 +120,8 @@ pub struct Running {
     pub partial: Option<Partial>,
     /// The indexer running, in a precise analysis.
     pub indexer: Option<String>,
+    /// How far the indexer has got, if it says.
+    pub percent: Option<u8>,
     /// When it started, in milliseconds since the interface opened.
     pub since: u64,
     pub precise: bool,
@@ -139,6 +146,26 @@ struct Colors {
     session: Option<ThemeChoice>,
     background: Option<ThemeChoice>,
     no_color: bool,
+}
+
+/// What the Alerts view remembers.
+#[derive(Debug, Clone, Copy, Default)]
+struct AlertsState {
+    /// The selected rule, among the rules in the order the view lists them.
+    rule: usize,
+    /// The selected hit.
+    hit: usize,
+    /// Whether hits are grouped by where they are.
+    by_location: bool,
+}
+
+/// What the source of Why shows.
+#[derive(Debug, Clone, Default)]
+struct WhyState {
+    /// The current line.
+    line: u32,
+    /// The file being shown, and its text.
+    source: Option<(String, String)>,
 }
 
 /// What the interface knows about the project and the person's setup.
@@ -214,6 +241,15 @@ pub struct App {
     found_alerts: Option<u64>,
     /// How many analyses have finished.
     analyses: usize,
+    /// The alert rule being written or changed.
+    editor: Option<RuleEditor>,
+    alerts: AlertsState,
+    /// Where `]a` and `[a` are among every alert.
+    alert_at: Option<usize>,
+    /// Where `]p` and `[p` are among the problems.
+    problem_at: Option<usize>,
+    why: WhyState,
+    indexers: Vec<IndexerReport>,
     hits: Vec<(Rect, Target)>,
     effects: Vec<Effect>,
 }
@@ -282,6 +318,12 @@ impl App {
             opened: None,
             found_alerts: None,
             analyses: 0,
+            editor: None,
+            alerts: AlertsState::default(),
+            alert_at: None,
+            problem_at: None,
+            why: WhyState::default(),
+            indexers: Vec::new(),
             hits: Vec::new(),
             effects: vec![Effect::Analyze {
                 tests: None,
@@ -425,6 +467,7 @@ impl App {
             },
             (None, Some(Popup::MetricPicker { .. } | Popup::SortPicker { .. })) => Mode::Search,
             (None, Some(Popup::ConfirmPrecise)) => Mode::Confirm,
+            (None, None) if self.editor.is_some() => Mode::Edit,
             (None, _) if self.progress.is_some() => Mode::Analyzing,
             (None, _) => Mode::Normal,
         }
@@ -1009,6 +1052,7 @@ impl App {
             Heard::Files(done, of) => running.files = (done, of),
             Heard::Partial(partial) => running.partial = Some(partial),
             Heard::Indexer(indexer) => running.indexer = Some(indexer),
+            Heard::Percent(percent) => running.percent = Some(percent),
         }
     }
 
@@ -1018,6 +1062,232 @@ impl App {
             Ok(()) => self.popup = Some(Popup::ConfirmPrecise),
             Err(reason) => self.message = Some(reason),
         }
+    }
+
+    /// A rule was saved, or could not be.
+    pub fn rule_saved(&mut self, result: Result<String, String>) {
+        match result {
+            Ok(saved) => {
+                self.editor = None;
+                self.message = Some(saved);
+                self.analyze(false);
+            }
+            Err(reason) => {
+                if let Some(editor) = &mut self.editor {
+                    editor.error = Some(reason.clone());
+                }
+                self.message = Some(reason);
+            }
+        }
+    }
+
+    /// A rule was turned on or off, or could not be.
+    pub fn rule_toggled(&mut self, result: Result<(), String>) {
+        match result {
+            Ok(()) => self.analyze(false),
+            Err(reason) => self.message = Some(reason),
+        }
+    }
+
+    /// A file of the project was read, for Why.
+    pub fn loaded(&mut self, path: &str, text: Result<String, String>) {
+        match text {
+            Ok(text) => self.why.source = Some((path.to_owned(), text)),
+            Err(reason) => self.message = Some(reason),
+        }
+    }
+
+    /// Which indexers can run.
+    pub fn indexers_checked(&mut self, indexers: Vec<IndexerReport>) {
+        self.indexers = indexers;
+    }
+
+    /// Every indexer, and whether it can run, as last checked.
+    #[must_use]
+    pub fn indexers(&self) -> &[IndexerReport] {
+        &self.indexers
+    }
+
+    /// The rule being written or changed.
+    #[must_use]
+    pub const fn editor(&self) -> Option<&RuleEditor> {
+        self.editor.as_ref()
+    }
+
+    /// How many symbols the rule being written would fire on.
+    #[must_use]
+    pub fn editor_hits(&self) -> usize {
+        let (Some(editor), Some(analysis)) = (&self.editor, &self.analysis) else {
+            return 0;
+        };
+        let Ok(rule) = editor.rule() else {
+            return 0;
+        };
+        let mut subjects: Vec<Subject> = analysis
+            .fire(std::slice::from_ref(&rule))
+            .into_iter()
+            .map(|alert| alert.subject)
+            .collect();
+        subjects.sort();
+        subjects.dedup();
+        subjects.len()
+    }
+
+    /// The rules in the order the Alerts view lists them, errors first, with their place
+    /// among the analysis's rules.
+    #[must_use]
+    pub fn listed_rules(&self) -> Vec<(usize, &AlertRule)> {
+        let Some(analysis) = &self.analysis else {
+            return Vec::new();
+        };
+        let mut rules: Vec<(usize, &AlertRule)> = analysis.rules().iter().enumerate().collect();
+        rules.sort_by(|(a, x), (b, y)| y.severity.cmp(&x.severity).then_with(|| a.cmp(b)));
+        rules
+    }
+
+    /// The hits of the selected rule, worst first, or where they are when grouped so.
+    #[must_use]
+    pub fn alert_rows(&self) -> Vec<String> {
+        let Some(analysis) = &self.analysis else {
+            return Vec::new();
+        };
+        let Some((index, _)) = self.listed_rules().get(self.alerts.rule).copied() else {
+            return Vec::new();
+        };
+        let mut hits: Vec<&Alert> = analysis
+            .alerts()
+            .iter()
+            .filter(|alert| alert.rule_index == index)
+            .collect();
+        hits.sort_by(|a, b| {
+            b.value
+                .total_cmp(&a.value)
+                .then_with(|| a.subject.cmp(&b.subject))
+        });
+        if !self.alerts.by_location {
+            return hits.iter().map(|alert| alert.subject.to_string()).collect();
+        }
+        let view = analysis.view();
+        let mut places: Vec<String> = hits
+            .iter()
+            .filter_map(|alert| match &alert.subject {
+                Subject::Symbol(id) => view.module_of(id).map(|module| module.id.to_string()),
+                Subject::File(path) => Some(path.to_string()),
+            })
+            .collect();
+        places.sort();
+        places.dedup();
+        places
+    }
+
+    /// Every alert on a symbol, worst first, as `]a` steps through them.
+    fn stepped_alerts(&self) -> Vec<SymbolId> {
+        let Some(analysis) = &self.analysis else {
+            return Vec::new();
+        };
+        let mut alerts: Vec<&Alert> = analysis.alerts().iter().collect();
+        alerts.sort_by(|a, b| {
+            b.severity
+                .cmp(&a.severity)
+                .then_with(|| b.value.total_cmp(&a.value))
+                .then_with(|| a.subject.cmp(&b.subject))
+        });
+        let mut ids: Vec<SymbolId> = Vec::new();
+        for alert in alerts {
+            if let Subject::Symbol(id) = &alert.subject
+                && !ids.contains(id)
+            {
+                ids.push(id.clone());
+            }
+        }
+        ids
+    }
+
+    /// What `cyclops check` would do now: how many errors and warnings count, the exit
+    /// code, and how many of your own rules it leaves out.
+    #[must_use]
+    pub fn ci_verdict(&self) -> Option<(usize, usize, u8, usize)> {
+        let analysis = self.analysis.as_ref()?;
+        let rules = analysis.rules();
+        let counted: Vec<&Alert> = analysis
+            .alerts()
+            .iter()
+            .filter(|alert| {
+                rules
+                    .get(alert.rule_index)
+                    .is_some_and(|rule| rule.origin != Origin::UserFile)
+            })
+            .collect();
+        let errors = counted
+            .iter()
+            .filter(|alert| alert.severity == Severity::Error)
+            .count();
+        let fails = counted
+            .iter()
+            .any(|alert| alert.severity >= analysis.fail_on());
+        let yours = rules
+            .iter()
+            .filter(|rule| rule.origin == Origin::UserFile)
+            .count();
+        Some((errors, counted.len() - errors, u8::from(fails), yours))
+    }
+
+    /// The selected rule of Alerts, among the rules as listed.
+    #[must_use]
+    pub const fn selected_rule(&self) -> usize {
+        self.alerts.rule
+    }
+
+    /// The selected hit of Alerts.
+    #[must_use]
+    pub const fn selected_hit(&self) -> usize {
+        self.alerts.hit
+    }
+
+    /// Whether Alerts groups hits by where they are.
+    #[must_use]
+    pub const fn by_location(&self) -> bool {
+        self.alerts.by_location
+    }
+
+    /// The selected problem, in Status.
+    #[must_use]
+    pub const fn problem_at(&self) -> Option<usize> {
+        self.problem_at
+    }
+
+    /// The lines of Why's source with cognitive points, and the points.
+    #[must_use]
+    pub fn gutter(&self) -> Vec<(u32, u32)> {
+        let (Some(analysis), Some(focus)) = (&self.analysis, &self.focus) else {
+            return Vec::new();
+        };
+        analysis
+            .explain(focus)
+            .map(|explanation| explanation.points)
+            .unwrap_or_default()
+    }
+
+    /// The current line of Why's source.
+    #[must_use]
+    pub const fn why_line(&self) -> u32 {
+        self.why.line
+    }
+
+    /// The file Why shows, and its text, when it shows one.
+    #[must_use]
+    pub fn why_source(&self) -> Option<(&str, &str)> {
+        if self.inspector != Some(Section::Why) {
+            return None;
+        }
+        let (path, text) = self.why.source.as_ref()?;
+        let focus_file = self.place_of_symbol()?.0;
+        (focus_file == *path).then_some((path.as_str(), text.as_str()))
+    }
+
+    fn place_of_symbol(&self) -> Option<(String, u32)> {
+        let focus = self.focus.clone()?;
+        self.place_of(&focus)
     }
 
     /// Says something on the hint line.
@@ -1124,6 +1394,9 @@ impl App {
             self.pane = 0;
             self.view = view;
         }
+        if view == View::Status {
+            self.effects.push(Effect::CheckIndexers);
+        }
     }
 
     /// Handles one input.
@@ -1205,6 +1478,14 @@ impl App {
             self.popup_key(key);
             return;
         }
+        if let Some(editor) = &mut self.editor {
+            if key == Key::Char(':') && editor.typing.is_none() {
+                self.open_prompt(PromptKind::Command, String::new());
+            } else {
+                editor.key(key);
+            }
+            return;
+        }
         if let Some((prefix, _)) = self.pending.take() {
             self.second_key(prefix, key);
             self.count = None;
@@ -1240,7 +1521,52 @@ impl App {
         });
     }
 
+    /// Keys that only mean something in one view. Says whether the key was one.
+    fn view_key(&mut self, key: Key) -> bool {
+        match (self.view, key) {
+            (View::Alerts, Key::Char('e')) => {
+                let rule = self
+                    .listed_rules()
+                    .get(self.alerts.rule)
+                    .map(|(_, rule)| RuleEditor::of(rule));
+                self.editor = rule;
+            }
+            (View::Alerts, Key::Char('x')) => self.toggle_rule(),
+            (View::Alerts, Key::Char('v')) => {
+                self.alerts.by_location = !self.alerts.by_location;
+                self.alerts.hit = 0;
+            }
+            (View::Find, Key::Char('s')) => {
+                self.popup = Some(Popup::SortPicker {
+                    typed: String::new(),
+                });
+            }
+            (View::Diagram, Key::Char('c')) => {
+                if let Some(selected) = self.selected() {
+                    self.jump(Place {
+                        view: View::Diagram,
+                        focus: Some(selected),
+                        section: self.inspector,
+                    });
+                }
+            }
+            (View::Diagram, Key::Char('<')) => {
+                let depth = self.diagram.depth.unwrap_or(1);
+                self.diagram.depth = Some(depth.saturating_sub(1));
+            }
+            (View::Diagram, Key::Char('>')) => {
+                let depth = self.diagram.depth.unwrap_or(1);
+                self.diagram.depth = Some(depth.saturating_add(1));
+            }
+            _ => return false,
+        }
+        true
+    }
+
     fn normal_key(&mut self, key: Key) {
+        if self.view_key(key) {
+            return;
+        }
         match key {
             Key::Char(' ') => self.popup = Some(Popup::SpaceMenu),
             Key::Char(prefix @ ('g' | 'z' | ']' | '[' | 'm' | '\'' | 'y'))
@@ -1265,11 +1591,7 @@ impl App {
                 self.open_prompt(PromptKind::Filter, text);
             }
             Key::Char('F') => self.lens.filter = None,
-            Key::Char('s') if self.view == View::Find => {
-                self.popup = Some(Popup::SortPicker {
-                    typed: String::new(),
-                });
-            }
+            Key::Char('A') => self.new_rule(),
             Key::Char('j') | Key::Down if self.pane() == Some(Pane::Inspector) => {
                 let count = self.inspector_rows();
                 self.inspector_row = moved(self.inspector_row, 1, count);
@@ -1314,23 +1636,6 @@ impl App {
             Key::Char('l') | Key::Right => self.sideways(true),
             Key::Enter => self.enter(),
             Key::Char('-') => self.up_a_level(),
-            Key::Char('c') if self.view == View::Diagram => {
-                if let Some(selected) = self.selected() {
-                    self.jump(Place {
-                        view: View::Diagram,
-                        focus: Some(selected),
-                        section: self.inspector,
-                    });
-                }
-            }
-            Key::Char('<') if self.view == View::Diagram => {
-                let depth = self.diagram.depth.unwrap_or(1);
-                self.diagram.depth = Some(depth.saturating_sub(1));
-            }
-            Key::Char('>') if self.view == View::Diagram => {
-                let depth = self.diagram.depth.unwrap_or(1);
-                self.diagram.depth = Some(depth.saturating_add(1));
-            }
             _ => {}
         }
     }
@@ -1384,6 +1689,10 @@ impl App {
                 self.expanded.clear();
             }
             (Key::Char(']'), Key::Char('m')) => self.next_metric(true),
+            (Key::Char(']'), Key::Char('a')) => self.step_alert(true),
+            (Key::Char('['), Key::Char('a')) => self.step_alert(false),
+            (Key::Char(']'), Key::Char('p')) => self.step_problem(true),
+            (Key::Char('['), Key::Char('p')) => self.step_problem(false),
             (Key::Char('['), Key::Char('m')) => self.next_metric(false),
             (Key::Char('m'), Key::Char(letter)) if letter.is_ascii_lowercase() => {
                 if let Some(selected) = self.selected() {
@@ -1460,6 +1769,11 @@ impl App {
         let Some(selected) = self.selected() else {
             return;
         };
+        let metric = self.lens.metric;
+        if !shows_source(metric) {
+            self.explain(&selected, metric);
+            return;
+        }
         let target = self
             .analysis
             .as_ref()
@@ -1472,10 +1786,192 @@ impl App {
         let message = (target != selected).then(|| format!("worst in {}", self.name_of(&selected)));
         self.jump(Place {
             view: View::Explore,
-            focus: Some(target),
+            focus: Some(target.clone()),
             section: Some(Section::Why),
         });
         self.message = message;
+        if let Some((path, line)) = self.place_of(&target) {
+            self.why.line = line;
+            if self
+                .why
+                .source
+                .as_ref()
+                .is_none_or(|(loaded, _)| *loaded != path)
+            {
+                self.effects.push(Effect::Load(path));
+            }
+        }
+    }
+
+    /// Opens the Why section on a symbol, for a metric with no lines to point at.
+    fn explain(&mut self, id: &SymbolId, metric: MetricId) {
+        let Some(symbol) = self.symbol(id) else {
+            return;
+        };
+        let kind = symbol.kind;
+        let has_value = self.analysis.as_ref().is_some_and(|analysis| {
+            analysis
+                .value(&Subject::Symbol(id.clone()), metric)
+                .is_some()
+        });
+        let applies =
+            scope_of_kind(kind).is_some_and(|scope| metric.descriptor().applies_to(scope));
+        if !has_value && !applies {
+            self.message = Some(format!(
+                "{} does not apply to {}.",
+                metric.name(),
+                kind.name()
+            ));
+            return;
+        }
+        self.jump(Place {
+            view: View::Explore,
+            focus: Some(id.clone()),
+            section: Some(Section::Why),
+        });
+    }
+
+    /// Steps through the lines of Why's source that have points.
+    fn step_points(&mut self, forward: bool) {
+        let lines: Vec<u32> = self.gutter().iter().map(|(line, _)| *line).collect();
+        let here = self.why.line;
+        let next = if forward {
+            lines
+                .iter()
+                .find(|line| **line > here)
+                .or_else(|| lines.first())
+        } else {
+            lines
+                .iter()
+                .rev()
+                .find(|line| **line < here)
+                .or_else(|| lines.last())
+        };
+        if let Some(line) = next {
+            self.why.line = *line;
+        }
+    }
+
+    /// Starts a rule from the selection: its metric, its scope, and a threshold it meets.
+    fn new_rule(&mut self) {
+        let (Some(analysis), Some(selected)) = (&self.analysis, self.selected()) else {
+            return;
+        };
+        let Some(scope) = self
+            .symbol(&selected)
+            .and_then(|symbol| scope_of_kind(symbol.kind))
+        else {
+            self.message = Some("A rule starts from a function, a type or a module.".to_owned());
+            return;
+        };
+        let metric = self.lens.metric;
+        let value = analysis.value(&Subject::Symbol(selected.clone()), metric);
+        self.editor = Some(RuleEditor::starting_from(
+            selected.as_str(),
+            metric,
+            scope,
+            value,
+        ));
+    }
+
+    /// Saves the rule being written, to your own file or the project's.
+    fn save_rule(&mut self, yours: bool) {
+        let Some(editor) = &mut self.editor else {
+            self.message = Some("There is no rule to save.".to_owned());
+            return;
+        };
+        if let Err(reason) = editor.rule() {
+            editor.error = Some(reason.clone());
+            self.message = Some(format!("Not saved: {reason}"));
+            return;
+        }
+        let (into_yours, position) = match editor.existing {
+            Some((was_yours, position)) if was_yours == yours || !yours => {
+                (was_yours, Some(position))
+            }
+            _ => (yours, None),
+        };
+        self.effects.push(Effect::SaveRule {
+            fields: editor.fields(),
+            yours: into_yours,
+            position,
+        });
+    }
+
+    /// Turns the selected rule of Alerts off, or on again.
+    fn toggle_rule(&mut self) {
+        let Some((_, rule)) = self.listed_rules().get(self.alerts.rule).copied() else {
+            return;
+        };
+        let effect = Effect::ToggleRule {
+            yours: rule.origin == Origin::UserFile,
+            position: rule.position,
+            enabled: !rule.enabled,
+        };
+        self.effects.push(effect);
+    }
+
+    /// Steps the focus through every alert, worst first.
+    fn step_alert(&mut self, forward: bool) {
+        let alerts = self.stepped_alerts();
+        let count = alerts.len();
+        if count == 0 {
+            self.message = Some("No alerts.".to_owned());
+            return;
+        }
+        let next = match (self.alert_at, forward) {
+            (None, true) => 0,
+            (None, false) => count - 1,
+            (Some(at), true) => (at + 1) % count,
+            (Some(at), false) => (at + count - 1) % count,
+        };
+        self.alert_at = Some(next);
+        if let Some(id) = alerts.get(next).cloned() {
+            self.jump(Place {
+                view: View::Explore,
+                focus: Some(id),
+                section: self.inspector,
+            });
+        }
+    }
+
+    /// Steps through the problems, in Status.
+    fn step_problem(&mut self, forward: bool) {
+        let count = self
+            .analysis
+            .as_ref()
+            .map_or(0, |analysis| analysis.problems().len());
+        self.switch_view(View::Status);
+        if count == 0 {
+            self.message = Some("No problems.".to_owned());
+            return;
+        }
+        self.problem_at = Some(match (self.problem_at, forward) {
+            (None, true) => 0,
+            (None, false) => count - 1,
+            (Some(at), true) => (at + 1) % count,
+            (Some(at), false) => (at + count - 1) % count,
+        });
+    }
+
+    /// Opens the selected problem's file in the editor.
+    fn open_problem(&mut self) {
+        let path = self.problem_at.and_then(|at| {
+            self.analysis
+                .as_ref()
+                .and_then(|analysis| analysis.problems().get(at))
+                .and_then(|problem| problem.path())
+                .map(ToString::to_string)
+        });
+        let Some(path) = path else {
+            return;
+        };
+        if !self.project.editor {
+            self.message = Some("Set $EDITOR to open files.".to_owned());
+            return;
+        }
+        self.opened = Some(format!("{path}:1"));
+        self.effects.push(Effect::Open { path, line: 1 });
     }
 
     /// Moves the selection by some rows, or nodes.
@@ -1521,7 +2017,26 @@ impl App {
             }
             View::Diagram => self.diagram_step(0, by.signum()),
             View::Map => self.map_step(by.signum()),
-            View::Alerts | View::Status => {}
+            View::Alerts => {
+                if self.pane() == Some(Pane::Hits) {
+                    let count = self.alert_rows().len();
+                    self.alerts.hit = moved(self.alerts.hit, by, count);
+                } else {
+                    let count = self.listed_rules().len();
+                    self.alerts.rule = moved(self.alerts.rule, by, count);
+                    self.alerts.hit = 0;
+                }
+            }
+            View::Status => {
+                let count = self
+                    .analysis
+                    .as_ref()
+                    .map_or(0, |analysis| analysis.problems().len());
+                if count > 0 {
+                    let at = self.problem_at.unwrap_or(0);
+                    self.problem_at = Some(moved(at, by, count));
+                }
+            }
         }
     }
 
@@ -1686,7 +2201,15 @@ impl App {
                     });
                 }
             }
-            View::Alerts | View::Status => {}
+            View::Alerts => {
+                if self.pane() == Some(Pane::Hits) && !self.alerts.by_location {
+                    let hit = self.alert_rows().get(self.alerts.hit).cloned();
+                    if let Some(hit) = hit {
+                        self.jump_to_symbol(SymbolId::new(&hit), self.inspector);
+                    }
+                }
+            }
+            View::Status => self.open_problem(),
         }
     }
 
@@ -1757,6 +2280,10 @@ impl App {
     }
 
     fn search_again(&mut self, forward: bool) {
+        if self.why_source().is_some() {
+            self.step_points(forward);
+            return;
+        }
         if let Some(pattern) = self.search.clone() {
             self.search_from(&pattern, forward);
         }
@@ -1975,9 +2502,12 @@ impl App {
             self.message = Some("Set $EDITOR to open files.".to_owned());
             return;
         }
-        let Some((path, line)) = self.selected().and_then(|id| self.place_of(&id)) else {
+        let Some((path, mut line)) = self.selected().and_then(|id| self.place_of(&id)) else {
             return;
         };
+        if self.why_source().is_some() {
+            line = self.why.line;
+        }
         self.opened = Some(format!("{path}:{line}"));
         self.effects.push(Effect::Open { path, line });
     }
@@ -2073,8 +2603,10 @@ impl App {
 
     fn command(&mut self, text: &str) {
         match text {
+            "q" | "q!" | "quit" if self.editor.is_some() => self.editor = None,
             "q" | "q!" | "quit" => self.quit(),
-            "w" | "w user" => self.message = Some("There is no rule to save.".to_owned()),
+            "w" => self.save_rule(false),
+            "w user" => self.save_rule(true),
             "init" => self.effects.push(Effect::Init),
             "help" => self.popup = Some(Popup::Help { all: true }),
             "" => {}
@@ -2109,6 +2641,35 @@ impl App {
     #[must_use]
     pub const fn metric_label(&self) -> &'static str {
         metric_label(self.lens.metric)
+    }
+}
+
+/// Whether `gd` shows the source of a function for a metric. The others are explained
+/// without lines to point at.
+const fn shows_source(metric: MetricId) -> bool {
+    matches!(
+        metric,
+        MetricId::Cyclomatic
+            | MetricId::Cognitive
+            | MetricId::MaxNesting
+            | MetricId::Lines
+            | MetricId::Parameters
+            | MetricId::Churn
+            | MetricId::Hotspot
+    )
+}
+
+/// The scope an alert rule or a metric gives a symbol of this kind.
+const fn scope_of_kind(kind: SymbolKind) -> Option<Scope> {
+    match kind {
+        SymbolKind::Function | SymbolKind::Method => Some(Scope::Function),
+        SymbolKind::Module => Some(Scope::Module),
+        SymbolKind::Struct
+        | SymbolKind::Class
+        | SymbolKind::Enum
+        | SymbolKind::Interface
+        | SymbolKind::Alias => Some(Scope::Type),
+        SymbolKind::Package | SymbolKind::Field | SymbolKind::Constant => None,
     }
 }
 
@@ -2614,6 +3175,50 @@ mod tests {
                 .as_ref()
                 .map(|filter| filter.text.as_str()),
             Some("kind = struct")
+        );
+    }
+
+    #[test]
+    fn status_asks_which_indexers_are_ready_each_time_it_opens() {
+        let mut app = app();
+        press(&mut app, "<Space>s");
+        assert_eq!(app.take_effects(), vec![Effect::CheckIndexers]);
+        app.indexers_checked(vec![IndexerReport {
+            label: "Rust".to_owned(),
+            languages: vec![cyclops_domain::language::LanguageId::Rust],
+            indexer: "rust-analyzer".to_owned(),
+            ready: Err("rust-analyzer is not installed.".to_owned()),
+        }]);
+        assert_eq!(app.indexers().len(), 1);
+        press(&mut app, "<Space>o<Space>s");
+        assert_eq!(app.take_effects(), vec![Effect::CheckIndexers]);
+    }
+
+    #[test]
+    fn stepping_with_nothing_to_step_through_says_so() {
+        let mut app = app();
+        press(&mut app, "]a");
+        assert_eq!(app.message(), Some("No alerts."));
+        assert_eq!(app.view(), View::Overview);
+        press(&mut app, "]p");
+        assert_eq!(app.message(), Some("No problems."));
+        assert_eq!(app.view(), View::Status);
+        press(&mut app, ":w<CR>");
+        assert_eq!(app.message(), Some("There is no rule to save."));
+    }
+
+    #[test]
+    fn a_saved_rule_closes_the_editor_and_analyzes_again() {
+        let mut app = app();
+        app.rule_saved(Err("cannot write".to_owned()));
+        assert_eq!(app.message(), Some("cannot write"));
+        app.rule_saved(Ok("Saved to .cyclops/config.toml.".to_owned()));
+        assert_eq!(app.editor(), None);
+        assert!(app.analyzing());
+        assert!(
+            app.take_effects()
+                .iter()
+                .any(|effect| matches!(effect, Effect::Analyze { .. }))
         );
     }
 

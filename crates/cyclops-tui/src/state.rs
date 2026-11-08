@@ -1,7 +1,9 @@
 //! The words of the interface: views, modes, panes, popups, and what it asks the world
 //! to do.
 
+use cyclops_domain::language::LanguageId;
 use cyclops_domain::metric::MetricId;
+use cyclops_domain::settings::RawValue;
 use cyclops_domain::symbol::{SymbolId, SymbolKind};
 
 /// One of the screens. One is showing at a time.
@@ -94,6 +96,8 @@ pub enum Mode {
     Filter,
     Search,
     Confirm,
+    /// Editing an alert rule.
+    Edit,
     /// Like NORMAL, while an analysis runs.
     Analyzing,
 }
@@ -107,6 +111,7 @@ impl Mode {
             Self::Filter => "FILTER",
             Self::Search => "SEARCH",
             Self::Confirm => "CONFIRM",
+            Self::Edit => "EDIT",
             Self::Analyzing => "ANALYZING",
         }
     }
@@ -243,7 +248,7 @@ impl Popup {
 
 /// What the interface asks the world to do. Whoever runs it does the work, and tells it
 /// the result.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Effect {
     /// Analyze again. `tests` overrides the setting for this session.
     Analyze {
@@ -261,6 +266,23 @@ pub enum Effect {
     },
     /// Put text on the clipboard.
     Copy(String),
+    /// Save an alert rule, to your own file or the project's, in place of the rule at
+    /// `position` of that file or as a new one.
+    SaveRule {
+        fields: Vec<(String, RawValue)>,
+        yours: bool,
+        position: Option<usize>,
+    },
+    /// Turn a rule of a settings file on or off.
+    ToggleRule {
+        yours: bool,
+        position: usize,
+        enabled: bool,
+    },
+    /// Read a file of the project, to show its source.
+    Load(String),
+    /// Find out which indexers are ready.
+    CheckIndexers,
     Quit,
 }
 
@@ -356,6 +378,18 @@ pub const OVERVIEW_METRICS: [MetricId; 14] = [
     MetricId::Churn,
     MetricId::Hotspot,
 ];
+
+/// An indexer, and whether it can run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexerReport {
+    /// The languages it covers, as precise analysis names them, such as `TypeScript`.
+    pub label: String,
+    pub languages: Vec<LanguageId>,
+    /// The program, such as `rust-analyzer`.
+    pub indexer: String,
+    /// Why it cannot run, if it cannot.
+    pub ready: Result<(), String>,
+}
 
 /// What the mascot is doing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

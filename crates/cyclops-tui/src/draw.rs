@@ -3,6 +3,7 @@
 
 use crate::app::{App, MIN_COLUMNS, MIN_ROWS, Running, SIDE_BY_SIDE, hints, picked, space_menu};
 use crate::canvas::{Canvas, fit, width};
+use crate::editor::{FIELDS, RuleEditor};
 use crate::state::Pose;
 use crate::state::{
     OVERVIEW_METRICS, Pane, Popup, PromptKind, Section, Target, View, metric_label,
@@ -13,11 +14,13 @@ use cyclops_application::diagram::Level;
 use cyclops_application::ports::Step;
 use cyclops_domain::metric::{Heat, MetricId, Scope, Subject};
 use cyclops_domain::relation::Confidence;
+use cyclops_domain::settings::RawValue;
 use cyclops_domain::settings::Severity;
 use cyclops_domain::symbol::CodeRole;
 use cyclops_domain::symbol::{Symbol, SymbolKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
+use std::collections::HashMap;
 
 /// Draws the interface into a buffer, and remembers where the mouse can point.
 pub fn draw(app: &mut App, buffer: &mut Buffer) {
@@ -52,14 +55,19 @@ fn shell(app: &App, canvas: &mut Canvas<'_>) {
         width: area.width,
         height: area.height.saturating_sub(4),
     };
-    match app.view() {
-        View::Overview => overview(app, canvas, body),
-        View::Explore => with_inspector(app, canvas, body, 58, structure),
-        View::Diagram => with_inspector(app, canvas, body, 36, diagram),
-        View::Map => with_inspector(app, canvas, body, 36, map),
-        View::Find => with_inspector(app, canvas, body, 40, find),
-        View::Alerts => alerts(app, canvas, body),
-        View::Status => status(app, canvas, body),
+    if let Some(editor) = app.editor() {
+        rule_editor(app, editor, canvas, body);
+    } else {
+        match app.view() {
+            View::Overview => overview(app, canvas, body),
+            View::Explore if app.why_source().is_some() => why_view(app, canvas, body),
+            View::Explore => with_inspector(app, canvas, body, 58, structure),
+            View::Diagram => with_inspector(app, canvas, body, 36, diagram),
+            View::Map => with_inspector(app, canvas, body, 36, map),
+            View::Find => with_inspector(app, canvas, body, 40, find),
+            View::Alerts => alerts(app, canvas, body),
+            View::Status => status(app, canvas, body),
+        }
     }
     status_line(app, canvas, area);
     hint_line(app, canvas, area);
@@ -223,12 +231,25 @@ fn status_line(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
     } else if app.failure().is_some() {
         parts.push((plural(1, "problem"), Token::Chip));
     }
-    let freshness = if app.analyzing() {
-        ("analyzing".to_owned(), Token::Chipa)
-    } else if app.stale() {
-        ("stale".to_owned(), Token::Chipa)
-    } else {
-        ("fresh".to_owned(), Token::Chipd)
+    let freshness = match app.running_analysis() {
+        Some(running) if running.precise => {
+            let elapsed = app.now().saturating_sub(running.since) / 1000;
+            let progress = running
+                .percent
+                .map_or_else(|| format!("{elapsed}s"), |percent| format!("{percent}%"));
+            (format!("indexing {progress}"), Token::Chipa)
+        }
+        Some(running) => {
+            let (done, of) = running.files;
+            let text = if of > 0 {
+                format!("{done} of {of} files")
+            } else {
+                "analyzing".to_owned()
+            };
+            (text, Token::Chipa)
+        }
+        None if app.stale() => ("stale".to_owned(), Token::Chipa),
+        None => ("fresh".to_owned(), Token::Chipd),
     };
     parts.push(freshness);
     let total: u16 = parts.iter().map(|(text, _)| width(text) + 2).sum();
@@ -690,53 +711,16 @@ fn inspector_why(
 ) {
     let metric = app.lens().metric;
     let value = app.shown_value(&symbol.id, metric);
-    canvas.text(
-        body.x + 1,
-        body.y,
-        &format!("Why {} is {value}", metric_label(metric)),
-        Token::B,
-        body,
-    );
+    let title = format!("Why {} is {value}", metric_label(metric));
+    canvas.text(body.x + 1, body.y, &title, Token::B, body);
     if let Some(reason) = analysis.why_unavailable(metric) {
         canvas.text(body.x + 1, body.y + 2, reason, Token::Dim, body);
         return;
     }
-    let Some(explanation) = analysis.explain(&symbol.id) else {
-        canvas.text(
-            body.x + 1,
-            body.y + 2,
-            "Nothing to explain here.",
-            Token::Dim,
-            body,
-        );
-        return;
-    };
-    let mut y = body.y + 2;
-    canvas.text(
-        body.x + 1,
-        y,
-        &format!("Decision points {}", explanation.decisions),
-        Token::Fg,
-        body,
-    );
-    y += 1;
-    canvas.text(
-        body.x + 1,
-        y,
-        &format!("Added by nesting {}", explanation.nesting),
-        Token::Fg,
-        body,
-    );
-    y += 2;
-    for (line, points) in &explanation.points {
-        canvas.text(
-            body.x + 1,
-            y,
-            &format!("line {line}  +{points}"),
-            Token::Dim,
-            body,
-        );
-        y += 1;
+    let lines = why_lines(app, analysis, symbol, metric);
+    for (row, line) in lines.iter().enumerate() {
+        let y = body.y + 2 + u16::try_from(row).unwrap_or(u16::MAX);
+        canvas.text(body.x + 1, y, line, Token::Fg, body);
     }
 }
 
@@ -1505,89 +1489,76 @@ fn alerts(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
         width: body.width - left.width,
         ..body
     };
+    let rules_area = Rect {
+        height: (body.height / 2).max(8).min(body.height),
+        ..left
+    };
+    let ci_area = Rect {
+        y: left.y + rules_area.height,
+        height: left.height - rules_area.height,
+        ..left
+    };
     let active = app.pane();
-    let rules = canvas.pane(left, "Rules", active == Some(Pane::Rules));
-    let hits = canvas.pane(right, "Hits", active == Some(Pane::Hits));
+    let rules = canvas.pane(rules_area, "Rules", active == Some(Pane::Rules));
     let Some(analysis) = app.analysis() else {
         return;
     };
-    let mut by_rule: Vec<(String, usize)> = Vec::new();
-    for alert in analysis.alerts() {
-        let name = alert
-            .rule
-            .clone()
-            .unwrap_or_else(|| alert.metric.name().to_owned());
-        match by_rule.iter_mut().find(|(rule, _)| *rule == name) {
-            Some((_, count)) => *count += 1,
-            None => by_rule.push((name, 1)),
+    alerts_rules(app, analysis, canvas, rules);
+    let rows = app.alert_rows();
+    let title = if app.by_location() {
+        format!("{} places", rows.len())
+    } else {
+        format!("{} hits, worst first", rows.len())
+    };
+    let hits = canvas.pane(right, &title, active == Some(Pane::Hits));
+    for (row, hit) in rows.iter().enumerate() {
+        let y = hits.y + u16::try_from(row).unwrap_or(u16::MAX);
+        let line = Rect {
+            y,
+            height: 1,
+            ..hits
+        };
+        canvas.text(hits.x + 1, y, hit, Token::Fg, line);
+        if active == Some(Pane::Hits) && row == app.selected_hit() {
+            canvas.paint(line, Token::Sel);
         }
     }
-    for (index, (rule, count)) in by_rule.iter().enumerate() {
-        let y = rules.y + u16::try_from(index).unwrap_or(u16::MAX);
-        canvas.text(
-            rules.x + 1,
-            y,
-            &format!("{count:>3}  {rule}"),
-            Token::Fg,
-            rules,
-        );
-    }
-    for (index, alert) in analysis.alerts().iter().enumerate() {
-        let y = hits.y + u16::try_from(index).unwrap_or(u16::MAX);
-        let mark = if alert.severity == Severity::Error {
-            "!!"
-        } else {
-            "!"
-        };
-        let value = alert.metric.descriptor().format(alert.value);
-        canvas.text(
-            hits.x + 1,
-            y,
-            &format!("{mark:<3}{}  {}={value}", alert.subject, alert.metric),
-            Token::Fg,
-            hits,
-        );
-    }
+    alerts_ci(app, analysis, canvas, ci_area);
 }
 
 fn status(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
-    let inside = canvas.pane(body, "Status", app.pane() == Some(Pane::Status));
-    let mut y = inside.y;
-    let layer = if app.precise_layer() {
-        "precise"
-    } else {
-        "syntax"
+    let left = Rect {
+        width: 56.min(body.width / 2),
+        ..body
     };
-    canvas.text(
-        inside.x + 1,
-        y,
-        &format!("Layer {layer}"),
-        Token::Fg,
-        inside,
-    );
-    y += 2;
-    if let Some(failure) = app.failure() {
-        canvas.text(inside.x + 1, y, failure, Token::H2, inside);
-        y += 1;
-    }
-    if let Some(analysis) = app.analysis() {
-        canvas.text(inside.x + 1, y, "Problems", Token::B, inside);
-        y += 1;
-        for problem in analysis.problems() {
-            canvas.text(inside.x + 1, y, &problem.to_string(), Token::Fg, inside);
-            y += 1;
-        }
-        for unavailable in analysis.unavailable() {
-            canvas.text(
-                inside.x + 1,
-                y,
-                &unavailable.to_string(),
-                Token::Dim,
-                inside,
-            );
-            y += 1;
-        }
-    }
+    let right = Rect {
+        x: body.x + left.width,
+        width: body.width - left.width,
+        ..body
+    };
+    let half = body.height / 2;
+    let pipeline = Rect {
+        height: half,
+        ..left
+    };
+    let problems = Rect {
+        y: left.y + half,
+        height: left.height - half,
+        ..left
+    };
+    let precise = Rect {
+        height: half,
+        ..right
+    };
+    let lower = Rect {
+        y: right.y + half,
+        height: right.height - half,
+        ..right
+    };
+    status_pipeline(app, canvas, pipeline);
+    status_problems(app, canvas, problems);
+    status_precise(app, canvas, precise);
+    status_left_out(app, canvas, lower);
 }
 
 fn popups(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
@@ -1762,13 +1733,11 @@ fn help(app: &App, canvas: &mut Canvas<'_>, body: Rect, all: bool) {
 fn running_lines(app: &App, running: &Running, canvas: &mut Canvas<'_>, inside: Rect) {
     let elapsed = app.now().saturating_sub(running.since) / 1000;
     if running.step == Some(Step::Indexing) || running.indexer.is_some() {
-        canvas.text(
-            inside.x + 1,
-            inside.y,
-            "Precise running",
-            Token::Accb,
-            inside,
+        let label = running.percent.map_or_else(
+            || "Precise running".to_owned(),
+            |percent| format!("Precise {percent}%"),
         );
+        canvas.text(inside.x + 1, inside.y, &label, Token::Accb, inside);
         canvas.text(
             inside.x + 1,
             inside.y + 1,
@@ -1999,4 +1968,578 @@ fn find_headings(
             Target::Column(*metric),
         );
     }
+}
+
+/// The source of the focus with the points each line added, beside the reasons.
+fn why_view(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
+    let Some((path, text)) = app.why_source() else {
+        return;
+    };
+    let side = 40.min(body.width / 2);
+    let left = Rect {
+        width: body.width - side,
+        ..body
+    };
+    let right = Rect {
+        x: body.x + body.width - side,
+        width: side,
+        ..body
+    };
+    let title = format!("{path}   gutter: cognitive points");
+    let inside = canvas.pane(left, &title, app.pane() != Some(Pane::Inspector));
+    let points: HashMap<u32, u32> = app.gutter().into_iter().collect();
+    let current = app.why_line();
+    let room = u32::from(inside.height);
+    let first = current.saturating_sub(room / 3).max(1);
+    for (offset, line) in text
+        .lines()
+        .skip(usize::try_from(first - 1).unwrap_or(0))
+        .take(usize::from(inside.height))
+        .enumerate()
+    {
+        let number = first + u32::try_from(offset).unwrap_or(0);
+        let y = inside.y + u16::try_from(offset).unwrap_or(0);
+        let row = Rect {
+            y,
+            height: 1,
+            ..inside
+        };
+        canvas.text(inside.x + 1, y, &format!("{number:>5}"), Token::Faint, row);
+        if let Some(added) = points.get(&number) {
+            canvas.text(inside.x + 8, y, &format!("+{added}"), Token::H1, row);
+        }
+        canvas.text(inside.x + 13, y, line, Token::Fg, row);
+        if number == current {
+            canvas.paint(row, Token::Sel);
+        }
+    }
+    inspector(app, canvas, right, app.pane() == Some(Pane::Inspector));
+}
+
+/// The rule being written, what it would fire on, and the change to the file.
+fn rule_editor(app: &App, editor: &RuleEditor, canvas: &mut Canvas<'_>, body: Rect) {
+    let top = Rect {
+        height: body.height.saturating_sub(12).max(10).min(body.height),
+        ..body
+    };
+    let left = Rect {
+        width: 54.min(top.width / 2),
+        ..top
+    };
+    let right = Rect {
+        x: top.x + left.width,
+        width: top.width - left.width,
+        ..top
+    };
+    let title = if editor.existing.is_some() {
+        "Rule"
+    } else {
+        "New rule"
+    };
+    let inside = canvas.pane(left, title, true);
+    for (index, (name, value)) in FIELDS.iter().zip(&editor.values).enumerate() {
+        let y = inside.y + 1 + u16::try_from(index).unwrap_or(0);
+        let row = Rect {
+            y,
+            height: 1,
+            ..inside
+        };
+        canvas.text(inside.x + 1, y, name, Token::Dim, row);
+        let shown = match (&editor.typing, index == editor.field) {
+            (Some(typed), true) => format!("{typed}█"),
+            _ => value.clone(),
+        };
+        canvas.text(inside.x + 12, y, &shown, Token::Fg, row);
+        if index == editor.field {
+            canvas.paint(row, Token::Sel);
+        }
+    }
+    let notes = inside.y + 9;
+    canvas.text(
+        inside.x + 1,
+        notes,
+        "i edit field   Tab next field",
+        Token::Dim,
+        inside,
+    );
+    canvas.text(
+        inside.x + 1,
+        notes + 1,
+        ":w save rule  :w user keep it yours  :q discard",
+        Token::Dim,
+        inside,
+    );
+    if let Some(error) = &editor.error {
+        canvas.text(inside.x + 1, notes + 3, error, Token::H2, inside);
+    }
+    let hits = app.editor_hits();
+    let preview = canvas.pane(
+        right,
+        &format!("Preview: would fire on {hits} symbols"),
+        false,
+    );
+    if let (Some(analysis), Ok(rule)) = (app.analysis(), editor.rule()) {
+        let mut y = preview.y + 1;
+        for alert in analysis.fire(std::slice::from_ref(&rule)).iter().take(8) {
+            let value = alert.metric.descriptor().format(alert.value);
+            canvas.text(
+                preview.x + 1,
+                y,
+                &format!("!  {}", alert.subject),
+                Token::Fg,
+                preview,
+            );
+            canvas.text_right(preview.x + preview.width - 2, y, &value, Token::Fg, preview);
+            y += 1;
+        }
+        if let Some((subject, value)) = analysis.next_closest(&rule) {
+            let value = rule.metric.descriptor().format(value);
+            let line = format!("Next closest: {subject} at {value}.");
+            canvas.text(preview.x + 1, y + 1, &line, Token::Dim, preview);
+        }
+    }
+    let bottom = Rect {
+        y: top.y + top.height,
+        height: body.height - top.height,
+        ..body
+    };
+    rule_writes(editor, canvas, bottom);
+}
+
+fn status_pipeline(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
+    let inside = canvas.pane(area, "Last analysis", app.pane() == Some(Pane::Status));
+    if let Some(failure) = app.failure() {
+        canvas.text(inside.x + 1, inside.y, failure, Token::H2, inside);
+    }
+    let Some(analysis) = app.analysis() else {
+        return;
+    };
+    canvas.text(
+        inside.x + 1,
+        inside.y,
+        "step         time result",
+        Token::Faint,
+        inside,
+    );
+    for (row, report) in analysis.steps().iter().enumerate() {
+        let y = inside.y + 1 + u16::try_from(row).unwrap_or(u16::MAX);
+        let seconds = format!("{}.{}s", report.millis / 1000, (report.millis % 1000) / 100);
+        canvas.text(
+            inside.x + 1,
+            y,
+            &capitalized(report.step.name()),
+            Token::Fg,
+            inside,
+        );
+        canvas.text_right(inside.x + 18, y, &seconds, Token::Dim, inside);
+        canvas.text(inside.x + 19, y, &report.result, Token::Fg, inside);
+    }
+}
+
+fn status_problems(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
+    let problems: Vec<String> = app
+        .analysis()
+        .map(|analysis| {
+            analysis
+                .problems()
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let title = format!("Problems: {}", problems.len());
+    let inside = canvas.pane(area, &title, false);
+    if problems.is_empty() {
+        canvas.text(
+            inside.x + 1,
+            inside.y,
+            "Every file was read.",
+            Token::Dim,
+            inside,
+        );
+    }
+    for (row, problem) in problems.iter().enumerate() {
+        let y = inside.y + u16::try_from(row).unwrap_or(u16::MAX);
+        let line = Rect {
+            y,
+            height: 1,
+            ..inside
+        };
+        canvas.text(inside.x + 1, y, problem, Token::Fg, line);
+        if app.problem_at() == Some(row) {
+            canvas.paint(line, Token::Sel);
+        }
+    }
+}
+
+fn status_precise(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
+    let inside = canvas.pane(area, "Precise analysis", false);
+    canvas.text(
+        inside.x + 1,
+        inside.y,
+        "language                 indexer          ready?",
+        Token::Faint,
+        inside,
+    );
+    let mut y = inside.y + 1;
+    for report in app.indexers() {
+        let ready = if report.ready.is_ok() { "yes" } else { "no" };
+        let languages: Vec<&str> = report
+            .languages
+            .iter()
+            .map(|language| language.name())
+            .collect();
+        canvas.text(inside.x + 1, y, &languages.join(", "), Token::Fg, inside);
+        canvas.text(inside.x + 26, y, &report.indexer, Token::Fg, inside);
+        canvas.text(inside.x + 43, y, ready, Token::Fg, inside);
+        y += 1;
+        if let Err(reason) = &report.ready {
+            canvas.text(inside.x + 3, y, reason, Token::Dim, inside);
+            y += 1;
+        }
+    }
+    y += 1;
+    if let Some(running) = app.running_analysis().filter(|running| running.precise) {
+        let elapsed = app.now().saturating_sub(running.since) / 1000;
+        let indexer = running.indexer.as_deref().unwrap_or("the indexer");
+        let line = format!("Running {indexer} for {elapsed}s. No progress reported.");
+        canvas.text(inside.x + 1, y, &line, Token::Fg, inside);
+        y += 1;
+    }
+    let index = app.analysis().map_or_else(
+        || "none yet".to_owned(),
+        |analysis| {
+            let status = analysis.precise();
+            if status.current.is_none() {
+                "none yet".to_owned()
+            } else {
+                plural(status.changed, "file") + " changed"
+            }
+        },
+    );
+    canvas.text(
+        inside.x + 1,
+        y,
+        &format!("index {index}"),
+        Token::Fg,
+        inside,
+    );
+}
+
+fn status_left_out(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
+    let inside = canvas.pane(area, "What is left out", false);
+    let Some(analysis) = app.analysis() else {
+        return;
+    };
+    let test_files: Vec<_> = analysis
+        .files()
+        .iter()
+        .filter(|file| file.role == CodeRole::Test || file.test_lines.code > 0)
+        .collect();
+    let lines: u32 = test_files.iter().map(|file| file.test_lines.code).sum();
+    let state = if app.lens().tests {
+        "Included"
+    } else {
+        "Left out"
+    };
+    let test_code = format!(
+        "Test code  {state}: {}, {}",
+        plural(test_files.len(), "file"),
+        plural(usize::try_from(lines).unwrap_or(0), "line")
+    );
+    canvas.text(inside.x + 1, inside.y, &test_code, Token::Fg, inside);
+    let unavailable: Vec<String> = analysis
+        .unavailable()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    if unavailable.is_empty() {
+        canvas.text(
+            inside.x + 1,
+            inside.y + 2,
+            "Metrics unavailable: none",
+            Token::Fg,
+            inside,
+        );
+    } else {
+        canvas.text(
+            inside.x + 1,
+            inside.y + 2,
+            "Metrics unavailable:",
+            Token::Fg,
+            inside,
+        );
+        for (row, line) in unavailable.iter().enumerate() {
+            let y = inside.y + 3 + u16::try_from(row).unwrap_or(u16::MAX);
+            canvas.text(inside.x + 3, y, line, Token::Fg, inside);
+        }
+    }
+}
+
+/// What a value is made of, line by line, for the metric of the lens.
+fn why_lines(
+    app: &App,
+    analysis: &ProjectAnalysis,
+    symbol: &Symbol,
+    metric: MetricId,
+) -> Vec<String> {
+    let name = |id: &cyclops_domain::symbol::SymbolId| id.to_string();
+    match metric {
+        MetricId::Lcom => analysis
+            .method_groups(&symbol.id)
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+            .flat_map(|(index, group)| {
+                [
+                    format!("{}  {}", index + 1, group.methods.join(", ")),
+                    format!("   uses {}", group.fields.join(", ")),
+                ]
+            })
+            .collect(),
+        MetricId::Members => {
+            let children = analysis.children(&symbol.id);
+            let fields: Vec<&str> = children
+                .iter()
+                .filter(|child| child.kind == SymbolKind::Field)
+                .map(|child| child.name.as_str())
+                .collect();
+            let methods: Vec<&str> = children
+                .iter()
+                .filter(|child| child.kind == SymbolKind::Method)
+                .map(|child| child.name.as_str())
+                .collect();
+            vec![
+                format!("Fields  {}", fields.join(", ")),
+                format!("Methods {}", methods.join(", ")),
+            ]
+        }
+        MetricId::Afferent
+        | MetricId::Efferent
+        | MetricId::Instability
+        | MetricId::Abstractness
+        | MetricId::Distance => {
+            let relations = app.relations_of(&symbol.id);
+            let modules = |incoming: bool| -> Vec<String> {
+                let mut found: Vec<String> = relations
+                    .iter()
+                    .filter(|(other, kind, _, used)| {
+                        *used == incoming
+                            && *kind == cyclops_domain::relation::RelationKind::Imports
+                            && app
+                                .symbol(other)
+                                .is_some_and(|symbol| symbol.kind == SymbolKind::Module)
+                    })
+                    .map(|(other, ..)| name(other))
+                    .collect();
+                found.dedup();
+                found
+            };
+            let out = modules(false);
+            let into = modules(true);
+            vec![
+                format!("Depends on {}", out.len()),
+                format!("  {}", out.join(", ")),
+                format!("Depended on by {}", into.len()),
+                format!("  {}", into.join(", ")),
+            ]
+        }
+        MetricId::CycleSize => match analysis.cycle_path(&symbol.id) {
+            Some(path) => {
+                let mut hops: Vec<String> = path.iter().map(|(from, _, _)| name(from)).collect();
+                if let Some(first) = hops.first().cloned() {
+                    hops.push(first);
+                }
+                vec![hops.join(" -> ")]
+            }
+            None => vec!["Not in a cycle.".to_owned()],
+        },
+        MetricId::Duplication => {
+            let copies = symbol
+                .location
+                .as_ref()
+                .and_then(|location| analysis.duplication().copies.get(&location.file));
+            match copies {
+                Some(copies) if !copies.is_empty() => copies
+                    .iter()
+                    .flat_map(|(file, ranges)| {
+                        ranges
+                            .iter()
+                            .map(move |(start, end)| format!("{file}  lines {start}-{end}"))
+                    })
+                    .collect(),
+                _ => vec!["No copies.".to_owned()],
+            }
+        }
+        MetricId::CommentLines | MetricId::BlankLines => vec!["The value for the file.".to_owned()],
+        _ => source_reasons(analysis, symbol),
+    }
+}
+
+/// The parts of a function's score, and the history of its file.
+fn source_reasons(analysis: &ProjectAnalysis, symbol: &Symbol) -> Vec<String> {
+    let mut lines = Vec::new();
+    if let Some(explanation) = analysis.explain(&symbol.id) {
+        for (kind, count) in &explanation.kinds {
+            lines.push(format!("{kind:<16} {count}"));
+        }
+        lines.push(format!("Decision points  {}", explanation.decisions));
+        lines.push(format!("Added by nesting +{}", explanation.nesting));
+        if let Some((line, _)) = &explanation.deepest {
+            lines.push(format!("Deepest at line {line}."));
+        }
+    }
+    lines.push(String::new());
+    if let Some(reason) = analysis.why_unavailable(MetricId::Churn) {
+        lines.push(format!("History: {reason}"));
+    } else if let Some(location) = &symbol.location {
+        lines.push("Recent commits to this file".to_owned());
+        for commit in analysis.commits_of(&location.file).iter().take(8) {
+            lines.push(format!("{} {}", commit.short_id, commit.subject));
+        }
+    }
+    lines
+}
+
+/// What `cyclops check` would do now.
+fn alerts_ci(app: &App, analysis: &ProjectAnalysis, canvas: &mut Canvas<'_>, ci_area: Rect) {
+    let ci = canvas.pane(ci_area, "If CI ran now", false);
+    if let Some((errors, warnings, code, yours)) = app.ci_verdict() {
+        let fail_on = if analysis.fail_on() == Severity::Error {
+            "error"
+        } else {
+            "warning"
+        };
+        canvas.text(ci.x + 1, ci.y, "cyclops check", Token::B, ci);
+        canvas.text(
+            ci.x + 1,
+            ci.y + 2,
+            &format!("fail_on      {fail_on}"),
+            Token::Fg,
+            ci,
+        );
+        canvas.text(
+            ci.x + 1,
+            ci.y + 3,
+            &format!("errors       {errors}"),
+            Token::Fg,
+            ci,
+        );
+        canvas.text(
+            ci.x + 1,
+            ci.y + 4,
+            &format!("warnings     {warnings}"),
+            Token::Fg,
+            ci,
+        );
+        let verdict = if code == 0 {
+            "Exit code 0: the build would pass.".to_owned()
+        } else {
+            format!("Exit code {code}: this would fail the build.")
+        };
+        canvas.text(ci.x + 1, ci.y + 5, &verdict, Token::Fg, ci);
+        if yours > 0 {
+            let rules = if yours == 1 { "rule" } else { "rules" };
+            let line = format!("Leaves out {yours} {rules} of yours.");
+            canvas.text(ci.x + 1, ci.y + 6, &line, Token::Dim, ci);
+        }
+    }
+}
+
+/// The rules, errors first, with their hits.
+fn alerts_rules(app: &App, analysis: &ProjectAnalysis, canvas: &mut Canvas<'_>, rules: Rect) {
+    let listed = app.listed_rules();
+    if listed.is_empty() {
+        canvas.text(
+            rules.x + 1,
+            rules.y,
+            "No alert rules yet.",
+            Token::Dim,
+            rules,
+        );
+        canvas.text(
+            rules.x + 1,
+            rules.y + 1,
+            "A starts one from the focus.",
+            Token::Dim,
+            rules,
+        );
+    } else {
+        canvas.text(rules.x + 4, rules.y, "hits name", Token::Faint, rules);
+    }
+    for (row, (index, rule)) in listed.iter().enumerate() {
+        let y = rules.y + 1 + u16::try_from(row).unwrap_or(u16::MAX);
+        let line = Rect {
+            y,
+            height: 1,
+            ..rules
+        };
+        let hits = analysis
+            .alerts()
+            .iter()
+            .filter(|alert| alert.rule_index == *index)
+            .count();
+        let (mark, token) = match (rule.enabled, rule.severity) {
+            (false, _) => ("-", Token::Dim),
+            (true, Severity::Error) => ("!!", Token::H3),
+            (true, Severity::Warning) => ("!", Token::H2),
+        };
+        let mut title = rule.title();
+        if rule.origin == cyclops_domain::settings::Origin::UserFile {
+            title.push_str(" (yours)");
+        }
+        if !rule.enabled {
+            title.push_str(" (disabled)");
+        }
+        canvas.text(rules.x + 1, y, mark, token, line);
+        canvas.text_right(rules.x + 8, y, &hits.to_string(), Token::Fg, line);
+        canvas.text(rules.x + 9, y, &title, Token::Fg, line);
+        if row == app.selected_rule() {
+            canvas.paint(line, Token::Sel);
+        }
+    }
+}
+
+/// The change the rule makes to its settings file.
+fn rule_writes(editor: &RuleEditor, canvas: &mut Canvas<'_>, bottom: Rect) {
+    let file = if editor.existing.is_some_and(|(yours, _)| yours) {
+        "~/.config/cyclops/config.toml"
+    } else {
+        ".cyclops/config.toml"
+    };
+    let writes = canvas.pane(bottom, &format!("Writes to {file}"), false);
+    let mut y = writes.y;
+    let marker = if editor.existing.is_some() { "~" } else { "+" };
+    if editor.existing.is_none() {
+        canvas.text(writes.x + 1, y, "+ [[alerts]]", Token::Fg, writes);
+        y += 1;
+    }
+    for (name, raw) in editor.fields() {
+        let shown = match raw {
+            RawValue::Text(text) => format!("\"{text}\""),
+            RawValue::Bool(flag) => flag.to_string(),
+            RawValue::Integer(number) => number.to_string(),
+            RawValue::List(items) => {
+                let items: Vec<String> = items
+                    .iter()
+                    .filter_map(|item| match item {
+                        RawValue::Text(text) => Some(format!("\"{text}\"")),
+                        _ => None,
+                    })
+                    .collect();
+                format!("[{}]", items.join(", "))
+            }
+            RawValue::Other => String::new(),
+        };
+        canvas.text(
+            writes.x + 1,
+            y,
+            &format!("{marker} {name} = {shown}"),
+            Token::Fg,
+            writes,
+        );
+        y += 1;
+    }
+    let note = "Nothing is saved until :w. Existing lines and comments stay as they are.";
+    canvas.text(writes.x + 1, y + 1, note, Token::Dim, writes);
 }

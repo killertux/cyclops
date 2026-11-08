@@ -26,7 +26,9 @@ pub enum Problem {
 }
 
 impl Problem {
-    fn path(&self) -> Option<&RelativePath> {
+    /// The file it is about, if it is about one.
+    #[must_use]
+    pub fn path(&self) -> Option<&RelativePath> {
         match self {
             Self::NoSourceFiles
             | Self::CacheUnavailable(_)

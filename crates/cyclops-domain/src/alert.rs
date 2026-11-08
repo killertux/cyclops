@@ -12,10 +12,14 @@ pub struct AlertRule {
     pub scope: Scope,
     pub comparison: Comparison,
     pub threshold: f64,
+    /// The threshold as the settings file wrote it, such as `>= 1`.
+    pub when: String,
     pub severity: Severity,
     pub paths: Vec<Glob>,
     pub enabled: bool,
     pub origin: Origin,
+    /// Its place among the rules of its file, from 0.
+    pub position: usize,
 }
 
 fn text<'a>(source: &'a AlertSource, field: &str) -> Result<Option<&'a str>, SettingsError> {
@@ -37,13 +41,7 @@ impl AlertRule {
     /// What the rule says, such as `cyclomatic function > 2`.
     #[must_use]
     pub fn describe(&self) -> String {
-        let threshold = self.metric.descriptor().format(self.threshold);
-        format!(
-            "{} {} {} {threshold}",
-            self.metric.name(),
-            self.scope.name(),
-            self.comparison.symbol()
-        )
+        format!("{} {} {}", self.metric.name(), self.scope.name(), self.when)
     }
 
     /// Its name, or what it says when it has none.
@@ -116,10 +114,12 @@ impl AlertRule {
             scope,
             comparison,
             threshold,
+            when: when.trim().to_owned(),
             severity,
             paths,
             enabled,
             origin: source.origin,
+            position: source.position,
         })
     }
 
@@ -169,6 +169,7 @@ mod tests {
                 .map(|(name, value)| ((*name).to_owned(), RawValue::Text((*value).to_owned())))
                 .collect(),
             origin,
+            position: 0,
         }
     }
 
@@ -234,5 +235,21 @@ mod tests {
             rules.first().map(|rule| rule.severity),
             Some(Severity::Error)
         );
+    }
+
+    #[test]
+    fn a_rule_is_described_with_its_threshold_as_written() {
+        let rule = AlertRule::parse(&source(
+            &[
+                ("metric", "instability"),
+                ("scope", "module"),
+                ("when", ">= 1"),
+                ("severity", "error"),
+            ],
+            Origin::ProjectFile,
+        ))
+        .unwrap();
+        assert_eq!(rule.describe(), "instability module >= 1");
+        assert_eq!(rule.title(), "instability module >= 1");
     }
 }

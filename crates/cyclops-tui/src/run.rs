@@ -229,6 +229,7 @@ fn perform(
                 stop.store(true, Ordering::Relaxed);
                 quit = true;
             }
+            other => crate::perform(app, backend.as_ref(), other),
         }
     }
     Ok(quit)

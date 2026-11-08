@@ -14,7 +14,7 @@ Status lists each step of the last analysis with what it did. The steps are `dis
 `check`, `extract`, `link`, `enrich`, `history`, `analyze` and `evaluate`.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps     | keys                                        | text                  | includes? |
 | ----------- | --------- | --------- | ------------------------------------------- | --------------------- | --------- |
@@ -28,7 +28,7 @@ Status lists each step of the last analysis with what it did. The steps are `dis
 Status shows which [indexers](../analysis/precise-analysis.md) are ready. For one that is
 not, it says exactly what is missing. `ready?` reads the row of the `language`.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                       | keys       | language   | ready? |
 | ----------- | --------- | --------------------------- | ---------- | ---------- | ------ |
@@ -60,14 +60,14 @@ Results replace guesses when it finishes.
 
 `indexer reports PERCENT` makes the indexer report its progress.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | steps                                        | keys        | text            | includes? | other text      | other includes? |
 | ------------- | --------- | -------------------------------------------- | ----------- | --------------- | --------- | --------------- | --------------- |
 | No percentage | rust-shop | `pause before indexing`                      | `<Space>py` | Precise running | yes       | Precise 38%     | no              |
 | A percentage  | rust-shop | `pause before indexing; indexer reports 38%` | `<Space>py` | Precise 38%     | yes       | Precise running | no              |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                   | keys                | view?    | text          | includes? |
 | ----------- | --------- | ----------------------- | ------------------- | -------- | ------------- | --------- |
@@ -77,7 +77,7 @@ Results replace guesses when it finishes.
 Status shows the commit an index belongs to. [Files changed since](../analysis/precise-analysis.md#results-that-are-out-of-date)
 go back to syntax relations, and are marked `*` wherever they appear.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                        | keys                                        | text            | includes? |
 | ----------- | --------- | ---------------------------- | ------------------------------------------- | --------------- | --------- |
@@ -90,7 +90,7 @@ go back to syntax relations, and are marked `*` wherever they appear.
 Problems lists the [files that could not be fully read](../analysis/parse-failures.md).
 `]p` and `[p` step through them from any view, and `Enter` opens one in the editor.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps             | keys       | view?  | rows?                                              | opened?      |
 | ----------- | --------- | ----------------- | ---------- | ------ | -------------------------------------------------- | ------------ |
@@ -104,7 +104,7 @@ Problems lists the [files that could not be fully read](../analysis/parse-failur
 Status says what was not measured and why: test code, and any metric that is
 [unavailable](../metrics/hotspots.md#without-git).
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation   | workspace | steps                    | keys       | text                           | includes? |
 | ------------- | --------- | ------------------------ | ---------- | ------------------------------ | --------- |

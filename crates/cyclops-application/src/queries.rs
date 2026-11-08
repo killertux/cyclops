@@ -6,7 +6,7 @@ use crate::analyzers::cohesion_groups;
 use crate::graph::ModuleGraph;
 use cyclops_domain::alert::AlertRule;
 use cyclops_domain::facts::{BodyFacts, DecisionKind};
-use cyclops_domain::filter::{Candidate, Filter};
+use cyclops_domain::filter::{Candidate, Comparison, Filter};
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::metric::{MetricId, Scope, Subject};
 use cyclops_domain::path::RelativePath;
@@ -23,6 +23,8 @@ pub struct Alert {
     pub metric: MetricId,
     pub value: f64,
     pub rule: Option<String>,
+    /// The place of the rule that fired it, among the rules given.
+    pub rule_index: usize,
 }
 
 /// Which way to sort results by a metric.
@@ -257,7 +259,7 @@ impl ProjectAnalysis {
     #[must_use]
     pub fn fire(&self, rules: &[AlertRule]) -> Vec<Alert> {
         let mut alerts = Vec::new();
-        for rule in rules.iter().filter(|rule| rule.enabled) {
+        for (rule_index, rule) in rules.iter().enumerate().filter(|(_, rule)| rule.enabled) {
             for (subject, metric, value) in self.measurements() {
                 if metric != rule.metric
                     || !self.of_scope(subject, rule.scope)
@@ -276,6 +278,7 @@ impl ProjectAnalysis {
                         metric,
                         value,
                         rule: rule.name.clone(),
+                        rule_index,
                     });
                 }
             }
@@ -353,6 +356,29 @@ impl ProjectAnalysis {
             }
         }
         Some(counts)
+    }
+
+    /// The subject a rule would fire on next if its threshold moved: of those it leaves
+    /// alone, the one whose value is nearest to firing.
+    #[must_use]
+    pub fn next_closest(&self, rule: &AlertRule) -> Option<(Subject, f64)> {
+        let higher_fires = matches!(
+            rule.comparison,
+            Comparison::Greater | Comparison::GreaterOrEqual | Comparison::NotEqual
+        );
+        self.measurements()
+            .filter(|(subject, metric, value)| {
+                *metric == rule.metric && self.of_scope(subject, rule.scope) && !rule.fires(*value)
+            })
+            .map(|(subject, _, value)| (subject.clone(), value))
+            .max_by(|(a, x), (b, y)| {
+                let order = if higher_fires {
+                    x.total_cmp(y)
+                } else {
+                    y.total_cmp(x)
+                };
+                order.then_with(|| b.cmp(a))
+            })
     }
 
     /// The worst subjects for a metric where it is measured, worst first, as the
@@ -721,5 +747,47 @@ mod tests {
         );
         let rank = project.rank(&Subject::Symbol(SymbolId::new("b")), MetricId::Cyclomatic);
         assert_eq!(rank, Some(Rank { position: 1, of: 2 }));
+    }
+
+    #[test]
+    fn the_next_closest_is_the_one_nearest_to_firing() {
+        let functions = ["a", "b", "c"].map(|id| symbol(id, SymbolKind::Function));
+        let measurements = [("a", 3.0), ("b", 2.0), ("c", 1.0)]
+            .map(|(id, value)| Measurement {
+                metric: MetricId::Cyclomatic,
+                subject: Subject::Symbol(SymbolId::new(id)),
+                value,
+            })
+            .to_vec();
+        let project = analysis(functions.to_vec(), Vec::new(), measurements);
+        let rule = |when: &str| {
+            AlertRule::parse(&cyclops_domain::settings::AlertSource {
+                fields: [
+                    ("metric", "cyclomatic"),
+                    ("scope", "function"),
+                    ("when", when),
+                    ("severity", "warning"),
+                ]
+                .iter()
+                .map(|(name, value)| {
+                    (
+                        (*name).to_owned(),
+                        cyclops_domain::settings::RawValue::Text((*value).to_owned()),
+                    )
+                })
+                .collect(),
+                origin: cyclops_domain::settings::Origin::ProjectFile,
+                position: 0,
+            })
+            .unwrap()
+        };
+        let closest = |when: &str| {
+            project
+                .next_closest(&rule(when))
+                .map(|(subject, _)| subject.to_string())
+        };
+        assert_eq!(closest("> 2").as_deref(), Some("b"));
+        assert_eq!(closest("< 2").as_deref(), Some("b"));
+        assert_eq!(closest("> 0"), None);
     }
 }

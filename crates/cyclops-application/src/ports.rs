@@ -420,6 +420,9 @@ pub trait Progress: Sync {
 
     /// An indexer is about to run, before the `Indexing` step starts.
     fn indexing(&self, _indexer: &str) {}
+
+    /// How far the running indexer has got, for one that says.
+    fn indexed(&self, _percent: u8) {}
 }
 
 /// Progress nobody listens to.

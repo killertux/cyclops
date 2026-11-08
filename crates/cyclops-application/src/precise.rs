@@ -29,6 +29,8 @@ pub struct PreciseStatus {
     pub ran: Vec<String>,
     /// Whether every index still matches the code, or nothing if there is no index.
     pub current: Option<bool>,
+    /// How many files of the indexed languages changed, appeared or went since.
+    pub changed: usize,
 }
 
 /// A file as the analysis found it.
@@ -108,6 +110,28 @@ pub fn resolve(index: &SemanticIndex, symbols: &[Symbol]) -> Vec<(SymbolId, Symb
         }
     }
     uses.into_iter().collect()
+}
+
+/// How many files of an index's languages changed, appeared or went since it was made.
+fn changed_since(index: &StoredIndex, files: &[CurrentFile<'_>]) -> usize {
+    let recorded: HashMap<&RelativePath, &ContentHash> = index
+        .files
+        .iter()
+        .map(|(path, hash)| (path, hash))
+        .collect();
+    let theirs: Vec<&CurrentFile<'_>> = files
+        .iter()
+        .filter(|file| index.languages.contains(&file.language))
+        .collect();
+    let differ = theirs
+        .iter()
+        .filter(|file| recorded.get(file.path) != Some(&&file.hash))
+        .count();
+    let gone = recorded
+        .keys()
+        .filter(|path| !theirs.iter().any(|file| file.path == **path))
+        .count();
+    differ + gone
 }
 
 /// Whether an index still matches the files of its languages.
@@ -303,7 +327,18 @@ pub(crate) fn run(
     }
     let current =
         (!indexes.is_empty()).then(|| indexes.iter().all(|index| is_current(index, files)));
-    Some((indexes, PreciseStatus { ran, current }))
+    let changed = indexes
+        .iter()
+        .map(|index| changed_since(index, files))
+        .sum();
+    Some((
+        indexes,
+        PreciseStatus {
+            ran,
+            current,
+            changed,
+        },
+    ))
 }
 
 /// Runs one indexer, if the project has any of its languages.
@@ -601,6 +636,30 @@ mod tests {
         assert_eq!(
             proven.first().map(|one| one.confidence),
             Some(Confidence::Exact)
+        );
+    }
+
+    #[test]
+    fn files_changed_since_an_index_are_counted() {
+        let index = stored(Vec::new());
+        let orders = RelativePath::new("src/orders.rs");
+        let billing = RelativePath::new("src/billing.rs");
+        let added = RelativePath::new("src/added.rs");
+        assert_eq!(
+            changed_since(&index, &[file(&orders, 1), file(&billing, 2)]),
+            0
+        );
+        assert_eq!(
+            changed_since(&index, &[file(&orders, 7), file(&billing, 2)]),
+            1
+        );
+        assert_eq!(changed_since(&index, &[file(&orders, 1)]), 1);
+        assert_eq!(
+            changed_since(
+                &index,
+                &[file(&orders, 1), file(&billing, 2), file(&added, 3)]
+            ),
+            1
         );
     }
 

@@ -5,6 +5,7 @@
 pub mod app;
 pub mod canvas;
 pub mod draw;
+pub mod editor;
 pub mod input;
 mod run;
 pub mod state;
@@ -16,9 +17,10 @@ pub use run::{Backend, run};
 use app::Heard;
 use cyclops_application::analysis::ProjectAnalysis;
 use cyclops_application::ports::{Partial, Progress, Step};
+use cyclops_domain::settings::RawValue;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use state::Effect;
+use state::{Effect, IndexerReport};
 use std::sync::Mutex;
 
 /// What the interface needs from the core, through whoever composes it.
@@ -63,6 +65,36 @@ pub trait Core {
     ///
     /// Says why the clipboard could not be used.
     fn copy(&self, text: &str) -> Result<(), String>;
+
+    /// Saves an alert rule to your own file or the project's, in place of the rule at
+    /// `position` of that file, or as a new one. Says where it went.
+    ///
+    /// # Errors
+    ///
+    /// Says why it could not be saved.
+    fn save_rule(
+        &self,
+        fields: &[(String, RawValue)],
+        yours: bool,
+        position: Option<usize>,
+    ) -> Result<String, String>;
+
+    /// Turns a rule of your own file or the project's on or off.
+    ///
+    /// # Errors
+    ///
+    /// Says why the file could not be changed.
+    fn toggle_rule(&self, yours: bool, position: usize, enabled: bool) -> Result<(), String>;
+
+    /// The text of a file of the project.
+    ///
+    /// # Errors
+    ///
+    /// Says why it cannot be read.
+    fn read(&self, path: &str) -> Result<String, String>;
+
+    /// Every indexer, and whether it can run.
+    fn indexers(&self) -> Vec<IndexerReport>;
 }
 
 /// Collects what an analysis says, to hand to the interface once it is done.
@@ -94,6 +126,10 @@ impl Progress for Recorded {
     fn indexing(&self, indexer: &str) {
         self.push(Heard::Indexer(indexer.to_owned()));
     }
+
+    fn indexed(&self, percent: u8) {
+        self.push(Heard::Percent(percent));
+    }
 }
 
 /// Does one thing the interface asked for, straight away, other than analyzing.
@@ -115,6 +151,21 @@ pub fn perform(app: &mut App, core: &dyn Core, effect: Effect) {
                 app.tell(reason);
             }
         }
+        Effect::SaveRule {
+            fields,
+            yours,
+            position,
+        } => app.rule_saved(core.save_rule(&fields, yours, position)),
+        Effect::ToggleRule {
+            yours,
+            position,
+            enabled,
+        } => app.rule_toggled(core.toggle_rule(yours, position, enabled)),
+        Effect::Load(path) => {
+            let text = core.read(&path);
+            app.loaded(&path, text);
+        }
+        Effect::CheckIndexers => app.indexers_checked(core.indexers()),
         Effect::Quit => {}
     }
 }
