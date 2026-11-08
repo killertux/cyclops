@@ -122,7 +122,14 @@ fn tokens(
 ) -> Vec<Token> {
     root.descendants_with_tokens()
         .filter_map(NodeOrToken::into_token)
-        .filter(|token| !token.kind().is_trivia())
+        // Doc comments are comments, not code that can be copied.
+        .filter(|token| {
+            !token.kind().is_trivia()
+                && !matches!(
+                    token.kind(),
+                    SyntaxKind::INNER_DOC_COMMENT | SyntaxKind::OUTER_DOC_COMMENT
+                )
+        })
         .map(|token| {
             let kind = match token.kind() {
                 SyntaxKind::IDENT | SyntaxKind::LIFETIME_IDENT => Token::NAME,
@@ -818,6 +825,15 @@ mod tests {
         assert_ne!(
             kinds("fn a(b: u8) -> u8 { b + 1 }"),
             kinds("fn a(b: u8) -> u8 { b - 1 }")
+        );
+    }
+
+    #[test]
+    fn doc_comments_are_not_tokens() {
+        let kinds = |text: &str| facts(text).tokens.len();
+        assert_eq!(
+            kinds("//! A crate.\n/// A module.\nmod a;\n"),
+            kinds("mod a;\n")
         );
     }
 

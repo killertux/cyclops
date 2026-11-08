@@ -14,6 +14,7 @@ mod run;
 pub mod scene;
 pub mod state;
 pub mod tokens;
+pub mod treemap;
 
 pub use app::App;
 pub use run::{Backend, run};

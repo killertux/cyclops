@@ -464,7 +464,8 @@ pub const fn metric_label(metric: MetricId) -> &'static str {
 #[must_use]
 pub fn shown(metric: MetricId, value: f64) -> String {
     if metric == MetricId::Duplication {
-        return format!("{:.1}%", value * 100.0);
+        // Measured as a percentage already.
+        return format!("{value:.1}%");
     }
     let plain = metric.descriptor().format(value);
     if metric.descriptor().ratio {
@@ -481,4 +482,20 @@ pub fn shown(metric: MetricId, value: f64) -> String {
         out.push(digit);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duplication_is_already_a_percentage() {
+        assert_eq!(shown(MetricId::Duplication, 100.0), "100.0%");
+        assert_eq!(shown(MetricId::Duplication, 6.2), "6.2%");
+    }
+
+    #[test]
+    fn counts_group_thousands() {
+        assert_eq!(shown(MetricId::Lines, 18_204.0), "18,204");
+    }
 }

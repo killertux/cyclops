@@ -65,6 +65,22 @@ pub fn fit(text: &str, room: u16) -> String {
     kept
 }
 
+/// Text cut to `room` cells from its start, with `…` where it was cut, so that the end
+/// of a path, its file, stays.
+#[must_use]
+pub fn fit_start(text: &str, room: u16) -> String {
+    if width(text) <= room {
+        return text.to_owned();
+    }
+    let keep = usize::from(room.saturating_sub(1));
+    let count = text.chars().count();
+    let mut kept: String = text.chars().skip(count.saturating_sub(keep)).collect();
+    if room > 0 {
+        kept.insert(0, '…');
+    }
+    kept
+}
+
 /// A buffer to draw on.
 pub struct Canvas<'a> {
     buffer: &'a mut Buffer,
@@ -274,6 +290,14 @@ mod tests {
         assert_eq!(fit("orders", 6), "orders");
         assert_eq!(fit("orders", 4), "ord…");
         assert_eq!(fit("orders", 0), "");
+    }
+
+    #[test]
+    fn a_long_path_keeps_its_end() {
+        let path = "crates/cyclops-lang-typescript/src/lib.rs";
+        assert_eq!(fit_start(path, 50), path);
+        assert_eq!(fit_start(path, 12), "…/src/lib.rs");
+        assert_eq!(fit_start(path, 0), "");
     }
 
     #[test]

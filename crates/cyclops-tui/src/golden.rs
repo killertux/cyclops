@@ -318,9 +318,9 @@ fn billing_metrics(design: &mut Design) {
         (MetricId::Lines, 18_204.0, 1, None),
         (
             MetricId::Duplication,
-            0.062,
+            6.2,
             48,
-            Some(("shop_jobs::export", 0.234)),
+            Some(("shop_jobs::export", 23.4)),
         ),
         (
             MetricId::Afferent,
@@ -498,9 +498,9 @@ fn shop_alerts(design: &mut Design) {
 /// copied.
 fn measure_file(design: &mut Design, path: &str, (churn, complexity, hotspot): (f64, f64, f64)) {
     let duplication = if path == "shop-jobs/src/export.rs" {
-        0.234
+        23.4
     } else {
-        0.01
+        1.0
     };
     for (metric, value) in [
         (MetricId::Duplication, duplication),
@@ -1236,6 +1236,42 @@ fn the_map_has_the_design_frames() {
         found
     };
     assert_eq!(stands(&ours), stands(&theirs));
+}
+
+#[test]
+fn moving_on_the_map_goes_to_the_tile_that_way() {
+    use ratatui::layout::Rect;
+    type Way = fn(Rect, Rect) -> bool;
+    let mut app = opened(shop().build(), "<Space>m");
+    let scene = app.map_scene(app.map_area());
+    let area_of = |app: &App| {
+        let selected = app.selected().expect("a selected tile");
+        scene
+            .tiles
+            .iter()
+            .find(|tile| tile.id == selected)
+            .map(|tile| tile.area)
+            .expect("a tile drawn for the selection")
+    };
+    // The first move selects a tile.
+    press(&mut app, "l");
+    let ways: [(&str, Way); 4] = [
+        ("l", |from, to| to.x >= from.x + from.width),
+        ("j", |from, to| to.y >= from.y + from.height),
+        ("h", |from, to| to.x + to.width <= from.x),
+        ("k", |from, to| to.y + to.height <= from.y),
+    ];
+    let mut moves = 0;
+    for (key, that_way) in ways {
+        let from = area_of(&app);
+        press(&mut app, key);
+        let to = area_of(&app);
+        if to != from {
+            assert!(that_way(from, to), "{key} went from {from:?} to {to:?}");
+            moves += 1;
+        }
+    }
+    assert!(moves >= 2, "only {moves} of the moves went anywhere");
 }
 
 #[test]

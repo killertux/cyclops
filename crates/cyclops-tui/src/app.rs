@@ -274,6 +274,10 @@ pub struct App {
     effects: Vec<Effect>,
 }
 
+mod map;
+
+pub use map::{MapFrame, MapGroup, MapScene, MapTile, Toward};
+
 fn parent_of(symbol: &Symbol) -> Option<&SymbolId> {
     symbol.parent.as_ref()
 }
@@ -417,6 +421,17 @@ impl App {
     #[must_use]
     pub fn opened(&self) -> Option<&str> {
         self.opened.as_deref()
+    }
+
+    /// Whether the screen changes with time alone: a running analysis, a key waiting for
+    /// its hints, or the mascot.
+    #[must_use]
+    pub fn moving(&self) -> bool {
+        self.analyzing()
+            || self.pending.is_some()
+            || self.pose() == Pose::Found
+            // The mascot on the Overview blinks.
+            || self.view == View::Overview
     }
 
     /// What the mascot is doing.
@@ -634,48 +649,6 @@ impl App {
             filter: None,
         };
         analysis.diagram(&request).nodes.len()
-    }
-
-    /// How many tiles the map would show without the filter.
-    #[must_use]
-    pub fn unfiltered_tiles(&self) -> usize {
-        self.map_contents().len()
-    }
-
-    /// The lines of a tile, which its area follows: a file's lines of code, or else the
-    /// symbol's.
-    #[must_use]
-    pub fn tile_lines(&self, id: &SymbolId) -> f64 {
-        let Some(analysis) = self.analysis.as_ref() else {
-            return 1.0;
-        };
-        let tests = analysis.tests();
-        let in_files: u32 = analysis
-            .files()
-            .iter()
-            .filter(|file| file.module.as_ref() == Some(id) && tests.shows(file.role))
-            .map(|file| file.counted_lines(tests).code)
-            .sum();
-        if in_files > 0 {
-            return f64::from(in_files);
-        }
-        analysis
-            .value(&Subject::Symbol(id.clone()), MetricId::Lines)
-            .unwrap_or(1.0)
-            .max(1.0)
-    }
-
-    /// The tile with the most lines.
-    #[must_use]
-    pub fn largest_tile(&self) -> Option<SymbolId> {
-        self.tiles()
-            .into_iter()
-            .max_by(|a, b| {
-                self.tile_lines(&a.id)
-                    .total_cmp(&self.tile_lines(&b.id))
-                    .then_with(|| b.id.cmp(&a.id))
-            })
-            .map(|symbol| symbol.id.clone())
     }
 
     /// `!` or `!!` for an alert on a node or a member itself, and `@` for a module in a
@@ -1110,158 +1083,6 @@ impl App {
             .into_iter()
             .map(|(subject, _)| subject)
             .collect()
-    }
-
-    /// The tiles of the map: what is inside the focus, or inside its parent when the
-    /// focus has nothing inside it.
-    #[must_use]
-    pub fn tiles(&self) -> Vec<&Symbol> {
-        let kept = self.kept();
-        let mut tiles: Vec<&Symbol> = self
-            .map_contents()
-            .into_iter()
-            .filter(|symbol| kept.as_ref().is_none_or(|kept| kept.contains(&symbol.id)))
-            .collect();
-        tiles.sort_by(|a, b| a.id.cmp(&b.id));
-        tiles.dedup_by(|a, b| a.id == b.id);
-        tiles
-    }
-
-    /// What the map shows before the filter: the files inside its holder, each as its
-    /// module, or the holder's symbols when it holds no files.
-    fn map_contents(&self) -> Vec<&Symbol> {
-        let (Some(analysis), Some(holder)) = (&self.analysis, self.map_holder()) else {
-            return Vec::new();
-        };
-        let files = self.map_files(&holder);
-        if files.is_empty() {
-            analysis.view().children(&holder).collect()
-        } else {
-            files
-        }
-    }
-
-    /// The packages the map is drawn for: every package at the top of the project, or the
-    /// holder alone below it.
-    fn map_scope(&self, holder: &SymbolId) -> Vec<SymbolId> {
-        let Some(analysis) = &self.analysis else {
-            return Vec::new();
-        };
-        let at_top = analysis
-            .view()
-            .symbol(holder)
-            .is_some_and(|symbol| symbol.parent.is_none());
-        if at_top {
-            analysis
-                .roots_by(MetricId::Lines)
-                .iter()
-                .map(|symbol| symbol.id.clone())
-                .collect()
-        } else {
-            vec![holder.clone()]
-        }
-    }
-
-    /// The modules of the files inside the holder. A file that is the holder itself is
-    /// the frame around the others, not a tile.
-    fn map_files(&self, holder: &SymbolId) -> Vec<&Symbol> {
-        let Some(analysis) = &self.analysis else {
-            return Vec::new();
-        };
-        let view = analysis.view();
-        let scope = self.map_scope(holder);
-        analysis
-            .files()
-            .iter()
-            .filter_map(|file| file.module.as_ref())
-            .filter(|module| {
-                scope
-                    .iter()
-                    .any(|top| *module != top && view.is_within(module, top))
-            })
-            .filter_map(|module| view.symbol(module))
-            .collect()
-    }
-
-    /// The group a file's tile sits in: the module that holds it, unless that is the
-    /// holder or a package.
-    #[must_use]
-    pub fn tile_group(&self, tile: &SymbolId) -> Option<SymbolId> {
-        let analysis = self.analysis.as_ref()?;
-        let holder = self.map_holder()?;
-        if self.map_files(&holder).is_empty() {
-            return None;
-        }
-        let view = analysis.view();
-        let parent = view.symbol(tile).and_then(parent_of)?;
-        let group = view.symbol(parent)?;
-        let scope = self.map_scope(&holder);
-        (group.kind != SymbolKind::Package && !scope.contains(&group.id)).then(|| group.id.clone())
-    }
-
-    /// The groups the map shows, in order.
-    #[must_use]
-    pub fn map_groups(&self) -> Vec<SymbolId> {
-        let mut groups: Vec<SymbolId> = self
-            .tiles()
-            .iter()
-            .filter_map(|tile| self.tile_group(&tile.id))
-            .collect();
-        groups.sort();
-        groups.dedup();
-        groups
-    }
-
-    /// The package a file's tile is framed in, when the map shows files.
-    #[must_use]
-    pub fn tile_frame(&self, tile: &SymbolId) -> Option<SymbolId> {
-        let analysis = self.analysis.as_ref()?;
-        let holder = self.map_holder()?;
-        if self.map_files(&holder).is_empty() {
-            return None;
-        }
-        self.map_scope(&holder)
-            .into_iter()
-            .find(|top| analysis.view().is_within(tile, top))
-    }
-
-    /// The name of a tile: the file's name for a file, and the symbol's otherwise.
-    #[must_use]
-    pub fn tile_name(&self, tile: &SymbolId) -> String {
-        let file = self.analysis.as_ref().and_then(|analysis| {
-            analysis
-                .files()
-                .iter()
-                .find(|file| file.module.as_ref() == Some(tile))
-        });
-        match file {
-            Some(file) if self.tile_frame(tile).is_some() => file
-                .path
-                .as_str()
-                .rsplit('/')
-                .next()
-                .unwrap_or_default()
-                .to_owned(),
-            _ => self
-                .symbol(tile)
-                .map(|symbol| symbol.name.clone())
-                .unwrap_or_default(),
-        }
-    }
-
-    /// The symbol the map is drawn inside.
-    fn map_holder(&self) -> Option<SymbolId> {
-        let analysis = self.analysis.as_ref()?;
-        let focus = self.focus.as_ref()?;
-        if analysis.view().children(focus).next().is_some() {
-            return Some(focus.clone());
-        }
-        analysis
-            .view()
-            .symbol(focus)
-            .and_then(parent_of)
-            .cloned()
-            .or_else(|| Some(focus.clone()))
     }
 
     /// The level the diagram shows for the focus.
@@ -2651,7 +2472,7 @@ impl App {
                 }
             }
             View::Diagram => self.diagram_step(0, by.signum()),
-            View::Map => self.map_step(by.signum()),
+            View::Map => self.map_move(if by > 0 { Toward::Down } else { Toward::Up }),
             View::Alerts => {
                 if self.pane() == Some(Pane::Hits) {
                     let count = self.alert_rows().len();
@@ -2703,7 +2524,7 @@ impl App {
                 }
             }
             View::Diagram => self.diagram_step(if right { 1 } else { -1 }, 0),
-            View::Map => self.map_step(if right { 1 } else { -1 }),
+            View::Map => self.map_move(if right { Toward::Right } else { Toward::Left }),
             _ => {}
         }
     }
@@ -2792,22 +2613,6 @@ impl App {
             .min_by_key(|other| other.area.y.abs_diff(level));
         if let Some(next) = next {
             self.diagram.selected = Some(next.id.clone());
-        }
-    }
-
-    fn map_step(&mut self, by: isize) {
-        let ids: Vec<SymbolId> = self
-            .tiles()
-            .iter()
-            .map(|symbol| symbol.id.clone())
-            .collect();
-        let here = self
-            .map_selected
-            .as_ref()
-            .and_then(|selected| ids.iter().position(|id| id == selected));
-        let next = here.map_or(0, |here| moved(here, by, ids.len()));
-        if let Some(id) = ids.get(next) {
-            self.map_selected = Some(id.clone());
         }
     }
 

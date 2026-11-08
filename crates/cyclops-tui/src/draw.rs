@@ -2,15 +2,16 @@
 //! See `specs/tui/design/`.
 
 use crate::app::{App, MIN_COLUMNS, MIN_ROWS, Running, SIDE_BY_SIDE, hints, picked, space_menu};
-use crate::app::{CONTEXT_MENU, relation_choices};
+use crate::app::{CONTEXT_MENU, MapScene, MapTile, relation_choices};
 use crate::canvas::inner;
-use crate::canvas::{Canvas, fit, width};
+use crate::canvas::{Canvas, fit, fit_start, width};
 use crate::editor::{FIELDS, RuleEditor};
 use crate::scene::{BoxRow, Card, Route, routes};
 use crate::state::{
     OVERVIEW_METRICS, Pane, Popup, PromptKind, Section, Target, View, metric_label,
 };
 use crate::tokens::Token;
+use crate::treemap::steps;
 use cyclops_application::analysis::ProjectAnalysis;
 use cyclops_application::diagram::Level;
 use cyclops_application::ports::{Partial, Step};
@@ -652,15 +653,6 @@ fn value_token(analysis: &ProjectAnalysis, symbol: &Symbol, metric: MetricId) ->
     } else {
         heat_token(heat)
     }
-}
-
-/// How many whole steps of `limit` fit in `share` of it, a share being from 0 to 1.
-fn steps(share: f64, limit: u16) -> u16 {
-    let target = share.clamp(0.0, 1.0) * f64::from(limit);
-    (0..=limit)
-        .rev()
-        .find(|step| f64::from(*step) <= target + 0.5)
-        .unwrap_or(0)
 }
 
 /// A bar of `cells` cells, filled in proportion and rounded down to the half cell, so
@@ -1817,7 +1809,9 @@ fn overview_ranking(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool
         });
         let token = heat_token(heat);
         if on_files {
-            canvas.text(inside.x + 1, y, &subject.to_string(), Token::Fg, line);
+            // The path stops short of the churn column.
+            let path = fit_start(&subject.to_string(), 35);
+            canvas.text(inside.x + 1, y, &path, Token::Fg, line);
             let churn = analysis
                 .value(subject, MetricId::Churn)
                 .map_or_else(String::new, |value| {
@@ -1841,7 +1835,8 @@ fn overview_ranking(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool
                 Subject::Symbol(id) => app.symbol(id).map_or("", |symbol| symbol.kind.name()),
                 Subject::File(_) => "file",
             };
-            canvas.text(inside.x + 1, y, &subject.to_string(), Token::Fg, line);
+            let name = fit_start(&subject.to_string(), 51);
+            canvas.text(inside.x + 1, y, &name, Token::Fg, line);
             canvas.text(inside.x + 53, y, kind, Token::Fg, line);
             canvas.text_right(right - 3, y, &shown, token, line);
         }
@@ -2033,168 +2028,74 @@ fn column_labels(
 }
 
 fn map(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
-    let tiles = app.tiles();
-    let framed = tiles
-        .first()
-        .is_some_and(|tile| app.tile_frame(&tile.id).is_some());
-    if !framed {
-        map_inside(app, canvas, area, active);
-        return;
-    }
     let frames_area = Rect {
         height: area.height.saturating_sub(1),
         ..area
     };
-    // Each package is a frame, with its share of the lines.
-    let mut packages: Vec<(SymbolId, Vec<&Symbol>)> = Vec::new();
-    for tile in &tiles {
-        let Some(frame) = app.tile_frame(&tile.id) else {
-            continue;
-        };
-        match packages.iter_mut().find(|(id, _)| *id == frame) {
-            Some((_, members)) => members.push(tile),
-            None => packages.push((frame, vec![tile])),
-        }
-    }
-    let lines =
-        |members: &[&Symbol]| -> f64 { members.iter().map(|tile| app.tile_lines(&tile.id)).sum() };
-    let weights: Vec<f64> = packages.iter().map(|(_, members)| lines(members)).collect();
-    for ((frame, members), slot) in packages.iter().zip(squarify(&weights, frames_area)) {
-        let title = frame_title(app, frame, members, slot.width);
-        let inside = canvas.pane(slot, &title, active);
-        map_frame(app, canvas, members, inside);
-    }
-    map_legend(app, canvas, area, tiles.len());
-}
-
-/// A package's frame title: its name, main language and lines, or only its name and
-/// lines where the frame is narrow.
-fn frame_title(app: &App, frame: &SymbolId, members: &[&Symbol], width: u16) -> String {
-    let name = app
-        .symbol(frame)
-        .map(|symbol| symbol.name.clone())
-        .unwrap_or_default();
-    let lines: f64 = members.iter().map(|tile| app.tile_lines(&tile.id)).sum();
-    let lines = crate::state::shown(MetricId::Lines, lines);
-    let language = app.analysis().and_then(|analysis| {
-        let mut by_language: Vec<(&'static str, u32)> = Vec::new();
-        for file in analysis.files() {
-            let inside = file
-                .module
-                .as_ref()
-                .is_some_and(|module| members.iter().any(|tile| &tile.id == module));
-            if !inside {
-                continue;
-            }
-            let name = file.language.name();
-            match by_language
-                .iter_mut()
-                .find(|(language, _)| *language == name)
-            {
-                Some((_, total)) => *total += file.lines.code,
-                None => by_language.push((name, file.lines.code)),
-            }
-        }
-        by_language
-            .into_iter()
-            .max_by_key(|(_, total)| *total)
-            .map(|(language, _)| language)
-    });
-    // The title gives up the language, then the lines, rather than be cut short.
-    let room = usize::from(width.saturating_sub(6));
-    let short = format!("{name}  {lines}");
-    match language {
-        Some(language) if width >= 40 => format!("{name}  {language}  {lines} lines"),
-        _ if short.chars().count() <= room => short,
-        _ => name,
-    }
-}
-
-/// What a frame holds: groups with their tiles, and tiles of their own.
-fn map_frame(app: &App, canvas: &mut Canvas<'_>, members: &[&Symbol], inside: Rect) {
-    let mut units: Vec<(Option<SymbolId>, Vec<&Symbol>)> = Vec::new();
-    for tile in members {
-        let group = app.tile_group(&tile.id);
-        match units
-            .iter_mut()
-            .find(|(id, _)| group.is_some() && *id == group)
-        {
-            Some((_, tiles)) => tiles.push(tile),
-            None => units.push((group, vec![tile])),
-        }
-    }
-    let weights: Vec<f64> = units
-        .iter()
-        .map(|(_, tiles)| tiles.iter().map(|tile| app.tile_lines(&tile.id)).sum())
-        .collect();
+    let scene = app.map_scene(frames_area);
     let marks = app.tree_marks();
-    for ((group, tiles), slot) in units.iter().zip(squarify(&weights, inside)) {
-        let Some(group) = group else {
-            for tile in tiles {
-                map_tile(app, canvas, tile, slot);
-            }
-            continue;
-        };
-        let name = app
-            .symbol(group)
-            .map(|symbol| symbol.name.clone())
-            .unwrap_or_default();
-        let mark = marks
-            .get(group)
-            .map_or_else(String::new, |mark| format!(" {mark}"));
-        canvas.text(slot.x + 1, slot.y, &format!("{name}{mark}"), Token::B, slot);
-        let room = Rect {
-            x: slot.x + 1,
-            y: slot.y + 1,
-            width: slot.width.saturating_sub(1),
-            height: slot.height.saturating_sub(1),
-        };
-        let sizes: Vec<f64> = tiles.iter().map(|tile| app.tile_lines(&tile.id)).collect();
-        for (tile, place) in tiles.iter().zip(squarify(&sizes, room)) {
-            map_tile(app, canvas, tile, place);
-        }
+    if let Some(title) = &scene.title {
+        canvas.pane(frames_area, title, active);
     }
+    for frame in &scene.frames {
+        canvas.pane(frame.area, &frame.title, active);
+    }
+    for group in &scene.groups {
+        let mark = marks
+            .get(&group.id)
+            .map_or_else(String::new, |mark| format!(" {mark}"));
+        let label = format!("{}{mark}", group.name);
+        canvas.text(group.area.x + 1, group.area.y, &label, Token::B, group.area);
+    }
+    let selected = app.selected();
+    for tile in &scene.tiles {
+        map_tile(app, canvas, tile, &marks, selected.as_ref());
+    }
+    map_legend(app, canvas, area, &scene);
 }
 
 /// One tile: colored by the metric, with its name, marks and value.
-fn map_tile(app: &App, canvas: &mut Canvas<'_>, tile: &Symbol, slot: Rect) {
+fn map_tile(
+    app: &App,
+    canvas: &mut Canvas<'_>,
+    tile: &MapTile,
+    marks: &HashMap<SymbolId, String>,
+    selected: Option<&SymbolId>,
+) {
     let Some(analysis) = app.analysis() else {
         return;
     };
-    let metric = app.lens().metric;
-    let tile_area = Rect {
-        width: slot.width.saturating_sub(1).max(1),
-        height: slot.height.saturating_sub(1).max(1),
-        ..slot
+    let Some(symbol) = app.symbol(&tile.id) else {
+        return;
     };
-    let token = match value_token(analysis, tile, metric) {
+    let metric = app.lens().metric;
+    let area = tile.area;
+    let token = match value_token(analysis, symbol, metric) {
         Token::H1 => Token::T2,
         Token::H2 => Token::T3,
         Token::H3 => Token::T4,
         Token::H0 => Token::T1,
         _ => Token::T0,
     };
-    canvas.fill(tile_area, token);
-    let mark = app
-        .tree_marks()
+    canvas.fill(area, token);
+    let mark = marks
         .get(&tile.id)
         .map_or_else(String::new, |mark| format!(" {mark}"));
-    let name = app.tile_name(&tile.id);
-    if app.selected().as_ref() == Some(&tile.id) {
-        let label = format!("▸ {name}{mark} ");
-        canvas.text(tile_area.x + 1, tile_area.y, &label, Token::On, tile_area);
+    if selected == Some(&tile.id) {
+        let label = format!("▸ {}{mark} ", tile.name);
+        canvas.text(area.x + 1, area.y, &label, Token::On, area);
     } else {
-        let label = format!("{name}{mark}");
-        canvas.text(tile_area.x + 1, tile_area.y, &label, token, tile_area);
+        let label = format!("{}{mark}", tile.name);
+        canvas.text(area.x + 1, area.y, &label, token, area);
     }
     let value = app.shown_value(&tile.id, metric);
-    canvas.text(tile_area.x + 1, tile_area.y + 1, &value, token, tile_area);
-    canvas.hit(tile_area, Target::Symbol(tile.id.clone()));
+    canvas.text(area.x + 1, area.y + 1, &value, token, area);
+    canvas.hit(area, Target::Symbol(tile.id.clone()));
 }
 
 /// The row below the map: what area and color say, how much a filter left, and the
 /// size of the selected tile.
-fn map_legend(app: &App, canvas: &mut Canvas<'_>, area: Rect, shown: usize) {
+fn map_legend(app: &App, canvas: &mut Canvas<'_>, area: Rect, scene: &MapScene) {
     let y = area.y + area.height.saturating_sub(1);
     let row = Rect {
         y,
@@ -2215,33 +2116,19 @@ fn map_legend(app: &App, canvas: &mut Canvas<'_>, area: Rect, shown: usize) {
         end = canvas.text(end, y, &format!(" {label} "), token, row);
     }
     if app.lens().filter.is_some() {
-        let left = format!("{shown} of {} tiles", app.unfiltered_tiles());
+        let left = format!("{} of {} tiles", scene.tiles.len(), app.unfiltered_tiles());
         canvas.text(end + 2, y, &left, Token::Dim, row);
     }
-    if let Some(selected) = app.selected() {
-        let lines = crate::state::shown(MetricId::Lines, app.tile_lines(&selected));
-        let size = format!("{}: {lines} lines", app.tile_name(&selected));
+    let selected = app.selected();
+    if let Some(tile) = scene
+        .tiles
+        .iter()
+        .find(|tile| Some(&tile.id) == selected.as_ref())
+    {
+        let lines = crate::state::shown(MetricId::Lines, tile.lines);
+        let size = format!("{}: {lines} lines", tile.name);
         canvas.text_right(area.x + area.width - 1, y, &size, Token::Faint, row);
     }
-}
-
-/// The map inside one file: a pane of its symbols.
-fn map_inside(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
-    let title = app.focus().and_then(|focus| app.symbol(focus)).map_or_else(
-        || "Map".to_owned(),
-        |symbol| format!("Map of {}", symbol.name),
-    );
-    let pane = Rect {
-        height: area.height.saturating_sub(1),
-        ..area
-    };
-    let inside = canvas.pane(pane, &title, active);
-    let tiles = app.tiles();
-    let sizes: Vec<f64> = tiles.iter().map(|tile| app.tile_lines(&tile.id)).collect();
-    for (tile, slot) in tiles.iter().zip(squarify(&sizes, inside)) {
-        map_tile(app, canvas, tile, slot);
-    }
-    map_legend(app, canvas, area, tiles.len());
 }
 
 fn find(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
@@ -4106,43 +3993,6 @@ fn draw_card(
     draw_box_rows(canvas, card, rows, y, selected, metric, (border, divider));
 }
 
-/// Splits an area into one rectangle for each weight, keeping each close to square: a
-/// squarified treemap. A cell is about twice as tall as it is wide, so widths count
-/// double.
-fn squarify(weights: &[f64], area: Rect) -> Vec<Rect> {
-    let weight = |index: usize| weights.get(index).copied().unwrap_or(0.0);
-    let mut placed = vec![Rect::default(); weights.len()];
-    let mut order: Vec<usize> = (0..weights.len()).collect();
-    order.sort_by(|a, b| weight(*b).total_cmp(&weight(*a)));
-    let mut left = area;
-    let mut remaining: f64 = weights.iter().sum();
-    let mut index = 0;
-    while index < order.len() && left.width > 0 && left.height > 0 && remaining > 0.0 {
-        let wide = left.width >= left.height * 2;
-        let side = if wide {
-            f64::from(left.height) * 2.0
-        } else {
-            f64::from(left.width)
-        };
-        let scale = f64::from(left.width) * f64::from(left.height) * 2.0 / remaining;
-        let row = best_row(order.get(index..).unwrap_or_default(), &weight, scale, side);
-        let row_weight: f64 = row.iter().map(|member| weight(*member)).sum();
-        let last = index + row.len() >= order.len();
-        left = place_row(
-            &mut placed,
-            &row,
-            &weight,
-            left,
-            row_weight / remaining,
-            wide,
-            last,
-        );
-        remaining -= row_weight;
-        index += row.len().max(1);
-    }
-    placed
-}
-
 /// Lists entries of a popup, each one clickable, with the current one marked.
 fn popup_entries(canvas: &mut Canvas<'_>, area: Rect, entries: &[(String, String)], cursor: usize) {
     for (index, (label, right)) in entries.iter().enumerate() {
@@ -4402,16 +4252,18 @@ fn draw_box_rows<'a>(
             } => {
                 let mark = if *alerted { " !" } else { "" };
                 let pointer = if selected == Some(id) { "▸" } else { " " };
-                canvas.text(
-                    inside.x,
-                    y,
-                    &format!("{pointer}{text}{mark}"),
-                    Token::Fg,
-                    line,
-                );
                 let shown = value.map_or_else(
                     || "n/a".to_owned(),
                     |value| crate::state::shown(metric, value),
+                );
+                // The name gives way to the value, and keeps a space before it.
+                let room = inside.width.saturating_sub(width(&shown) + 1);
+                canvas.text(
+                    inside.x,
+                    y,
+                    &fit(&format!("{pointer}{text}{mark}"), room),
+                    Token::Fg,
+                    line,
                 );
                 canvas.text_right(inside.x + inside.width, y, &shown, Token::Fg, line);
                 if selected == Some(id) {
@@ -4431,87 +4283,6 @@ fn draw_box_rows<'a>(
             BoxRow::Stereotype(_) => {}
         }
         y += 1;
-    }
-}
-
-/// The members of the next row: as many as keep the worst ratio of sides from growing.
-fn best_row(next: &[usize], weight: &dyn Fn(usize) -> f64, scale: f64, side: f64) -> Vec<usize> {
-    let mut row: Vec<usize> = Vec::new();
-    let mut total = 0.0;
-    let mut worst = f64::INFINITY;
-    for member in next {
-        let trial = total + weight(*member);
-        let thickness = trial * scale / side;
-        let ratio = row
-            .iter()
-            .chain(std::iter::once(member))
-            .map(|one| {
-                let length = weight(*one) * scale / thickness;
-                (length / thickness).max(thickness / length)
-            })
-            .fold(0.0, f64::max);
-        if !row.is_empty() && ratio > worst {
-            break;
-        }
-        worst = ratio;
-        row.push(*member);
-        total = trial;
-    }
-    row
-}
-
-/// Places one row along the short side of what is left, and returns what is left after.
-fn place_row(
-    placed: &mut [Rect],
-    row: &[usize],
-    weight: &dyn Fn(usize) -> f64,
-    left: Rect,
-    share: f64,
-    wide: bool,
-    last: bool,
-) -> Rect {
-    let total: f64 = row.iter().map(|member| weight(*member)).sum();
-    let (across, along) = if wide {
-        (left.width, left.height)
-    } else {
-        (left.height, left.width)
-    };
-    let thickness = if last {
-        across
-    } else {
-        steps(share, across).max(1)
-    };
-    let mut offset = 0;
-    for (position, member) in row.iter().enumerate() {
-        let length = if position + 1 == row.len() {
-            along - offset
-        } else {
-            steps(weight(*member) / total.max(f64::MIN_POSITIVE), along).max(1)
-        };
-        let rect = if wide {
-            Rect::new(left.x, left.y + offset, thickness, length)
-        } else {
-            Rect::new(left.x + offset, left.y, length, thickness)
-        };
-        if let Some(slot) = placed.get_mut(*member) {
-            *slot = rect;
-        }
-        offset += length;
-    }
-    if wide {
-        Rect::new(
-            left.x + thickness,
-            left.y,
-            left.width.saturating_sub(thickness),
-            left.height,
-        )
-    } else {
-        Rect::new(
-            left.x,
-            left.y + thickness,
-            left.width,
-            left.height.saturating_sub(thickness),
-        )
     }
 }
 
@@ -4723,24 +4494,37 @@ fn status_index(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
 mod tests {
     use super::*;
 
-    fn cells(rect: Rect) -> u32 {
-        u32::from(rect.width) * u32::from(rect.height)
-    }
-
     #[test]
-    fn a_treemap_fills_the_area_and_larger_weighs_more() {
-        let area = Rect::new(0, 0, 60, 20);
-        let tiles = squarify(&[10.0, 40.0, 20.0, 30.0], area);
-        let total: u32 = tiles.iter().map(|tile| cells(*tile)).sum();
-        assert_eq!(total, cells(area));
-        let size = |index: usize| tiles.get(index).map_or(0, |tile| cells(*tile));
-        assert!(size(1) > size(3) && size(3) > size(2) && size(2) > size(0));
-        for tile in &tiles {
-            assert!(
-                tile.x + tile.width <= 60 && tile.y + tile.height <= 20,
-                "{tile:?}"
-            );
-        }
+    fn a_long_member_keeps_a_space_before_its_value() {
+        let area = Rect::new(0, 0, 24, 4);
+        let mut buffer = Buffer::empty(area);
+        let id = SymbolId::new("Cli::ignored_by_git");
+        let row = BoxRow::Member {
+            id,
+            text: "+ ignored_by_git()".to_owned(),
+            value: None,
+            alerted: false,
+        };
+        let card = Card {
+            id: SymbolId::new("Cli"),
+            column: 0,
+            area,
+            rows: vec![row],
+        };
+        let mut canvas = Canvas::new(&mut buffer, crate::state::Theme::NoColor);
+        let style = (Token::Line, ('├', '─', '┤'));
+        draw_box_rows(
+            &mut canvas,
+            &card,
+            card.rows.iter(),
+            1,
+            None,
+            MetricId::Lcom,
+            style,
+        );
+        let text = crate::canvas::screen_text(&buffer);
+        let line = text.lines().nth(1).unwrap_or_default();
+        assert!(line.ends_with("+ ignored_by_git… n/a"), "{line:?}");
     }
 
     #[test]
@@ -4750,10 +4534,5 @@ mod tests {
         assert_eq!(sparkline(&[70, 55, 25, 15, 5, 4, 0, 1]), "▇▆▃▂▁▁ ▁");
         assert_eq!(sparkline(&[10, 20, 30, 50, 70, 50, 30, 20]), "▁▂▃▅▇▅▃▂");
         assert_eq!(sparkline(&[0; 8]), "        ");
-    }
-
-    #[test]
-    fn nothing_to_lay_out_is_nothing_drawn() {
-        assert_eq!(squarify(&[], Rect::new(0, 0, 10, 10)), Vec::new());
     }
 }

@@ -237,6 +237,10 @@ fn perform(
     Ok(quit)
 }
 
+const fn is_tick(message: &Message) -> bool {
+    matches!(message, Message::Input(Input::Tick(_)))
+}
+
 fn handle(app: &mut App, message: Message) {
     match message {
         Message::Input(input) => app.update(input),
@@ -273,18 +277,27 @@ pub fn run(backend: &Arc<dyn Backend>, startup: Startup) -> io::Result<()> {
         changes.send(Message::Input(Input::FilesChanged)).is_ok()
     }));
     let outcome = (|| -> io::Result<()> {
+        // The screen is drawn again only when something changed, or when it moves with
+        // time alone, so that the passing of time costs nothing when nothing moves.
+        let mut dirty = true;
         loop {
             if perform(&mut app, &mut terminal, backend, &sender, &stop)? || !app.running() {
                 return Ok(());
             }
-            terminal.draw(|frame| draw::draw(&mut app, frame.buffer_mut()))?;
+            if dirty {
+                terminal.draw(|frame| draw::draw(&mut app, frame.buffer_mut()))?;
+            }
             let Ok(message) = receiver.recv() else {
                 return Ok(());
             };
+            let was_moving = app.moving();
+            dirty = !is_tick(&message);
             handle(&mut app, message);
             while let Ok(message) = receiver.try_recv() {
+                dirty |= !is_tick(&message);
                 handle(&mut app, message);
             }
+            dirty |= was_moving || app.moving();
         }
     })();
     drop(watching);

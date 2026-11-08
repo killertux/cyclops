@@ -56,6 +56,54 @@ fn window_hashes(tokens: &[Token], size: usize) -> Vec<u64> {
     hashes
 }
 
+/// For each start, whether the window there only repeats a shorter piece of itself, as
+/// a list of `mod a;` lines does. Such a window matches any other list of its kind, and
+/// that is not a copy.
+fn repeating_windows(tokens: &[Token], size: usize) -> Vec<bool> {
+    let starts = (tokens.len() + 1).saturating_sub(size);
+    let mut repeating = vec![false; starts];
+    for period in 1..=size / 2 {
+        // How far from each place the code goes on matching itself one period later.
+        let mut run = 0_usize;
+        let mut runs = vec![0_usize; tokens.len()];
+        for index in (0..tokens.len()).rev() {
+            let same = tokens
+                .get(index + period)
+                .zip(tokens.get(index))
+                .is_some_and(|(later, here)| later.kind == here.kind);
+            run = if same { run + 1 } else { 0 };
+            if let Some(slot) = runs.get_mut(index) {
+                *slot = run;
+            }
+        }
+        for (start, flag) in repeating.iter_mut().enumerate() {
+            if runs.get(start).is_some_and(|run| *run >= size - period) {
+                *flag = true;
+            }
+        }
+    }
+    repeating
+}
+
+/// Where each window of tokens starts, by language family and hash, leaving out the
+/// windows that only repeat themselves.
+fn window_places(streams: &[Stream<'_>], size: usize) -> HashMap<(u8, u64), Vec<(usize, usize)>> {
+    let mut places: HashMap<(u8, u64), Vec<(usize, usize)>> = HashMap::new();
+    for (index, stream) in streams.iter().enumerate() {
+        let repeating = repeating_windows(&stream.tokens, size);
+        for (start, hash) in window_hashes(&stream.tokens, size).into_iter().enumerate() {
+            if repeating.get(start).copied().unwrap_or(false) {
+                continue;
+            }
+            places
+                .entry((stream.family, hash))
+                .or_default()
+                .push((index, start));
+        }
+    }
+    places
+}
+
 fn find(group: &mut [usize], start: usize) -> usize {
     let mut root = start;
     while let Some(next) = group.get(root).copied().filter(|next| *next != root) {
@@ -124,15 +172,7 @@ impl Duplication {
             .collect();
         let size = usize::try_from(min_tokens).unwrap_or(usize::MAX).max(1);
 
-        let mut places: HashMap<(u8, u64), Vec<(usize, usize)>> = HashMap::new();
-        for (index, stream) in streams.iter().enumerate() {
-            for (start, hash) in window_hashes(&stream.tokens, size).into_iter().enumerate() {
-                places
-                    .entry((stream.family, hash))
-                    .or_default()
-                    .push((index, start));
-            }
-        }
+        let places = window_places(&streams, size);
 
         let mut group: Vec<usize> = (0..streams.len()).collect();
         let mut lines: BTreeMap<RelativePath, BTreeSet<u32>> = BTreeMap::new();
@@ -320,6 +360,21 @@ mod tests {
         let list = stream_facts("lib.rs", &pattern.repeat(6));
         let other = stream_facts("mod.rs", &pattern.repeat(6));
         assert_eq!(found(&[list, other], 8).lines, BTreeMap::new());
+    }
+
+    #[test]
+    fn a_short_list_that_repeats_itself_is_not_a_copy() {
+        // Too short for every window to have a neighbor in its own file.
+        let pattern = [2, 3, 0, 4];
+        let list = stream_facts("lib.rs", &pattern.repeat(3));
+        let other = stream_facts("mod.rs", &pattern.repeat(3));
+        assert_eq!(found(&[list, other], 8).lines, BTreeMap::new());
+    }
+
+    #[test]
+    fn windows_that_repeat_a_shorter_piece_are_found() {
+        let repeating = repeating_windows(&tokens(&[1, 2, 1, 2, 1, 2, 3]), 4);
+        assert_eq!(repeating, [true, true, true, false]);
     }
 
     #[test]
