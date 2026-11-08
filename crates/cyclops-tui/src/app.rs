@@ -491,7 +491,15 @@ impl App {
             (None, Some(Popup::SortPicker { .. })) => Mode::Search,
             (None, Some(Popup::ConfirmPrecise)) => Mode::Confirm,
             (None, None) if self.editor.is_some() => Mode::Edit,
-            (None, _) if self.progress.is_some() => Mode::Analyzing,
+            // Indexing runs in the background, so it leaves the keys as they are.
+            (None, _)
+                if self
+                    .progress
+                    .as_ref()
+                    .is_some_and(|running| !running.precise) =>
+            {
+                Mode::Analyzing
+            }
             (None, _) => Mode::Normal,
         }
     }
@@ -1018,11 +1026,8 @@ impl App {
                     .value(&Subject::Symbol(symbol.id.clone()), MetricId::CycleSize)
                     .is_some();
             if in_cycle {
-                let mark = marks.entry(symbol.id.clone()).or_default();
-                if !mark.is_empty() {
-                    mark.push(' ');
-                }
-                mark.push('@');
+                // Written close, so that the value beside it keeps its gap.
+                marks.entry(symbol.id.clone()).or_default().push('@');
             }
         }
         marks
@@ -1143,12 +1148,18 @@ impl App {
         }
     }
 
+    /// The level the diagram draws at.
+    #[must_use]
+    pub fn diagram_level(&self) -> Level {
+        self.diagram.level.unwrap_or_else(|| self.natural_level())
+    }
+
     /// The diagram around the focus, laid out in columns: what depends on the focus on
     /// the left, and what it depends on on the right.
     #[must_use]
     pub fn drawing(&self) -> Option<Drawing> {
         let analysis = self.analysis.as_ref()?;
-        let level = self.diagram.level.unwrap_or_else(|| self.natural_level());
+        let level = self.diagram_level();
         let depth = self.diagram.depth.unwrap_or(1);
         let request = DiagramRequest {
             level,
@@ -1362,19 +1373,7 @@ impl App {
         let Some(analysis) = &self.analysis else {
             return Vec::new();
         };
-        let Some((index, _)) = self.listed_rules().get(self.alerts.rule).copied() else {
-            return Vec::new();
-        };
-        let mut hits: Vec<&Alert> = analysis
-            .alerts()
-            .iter()
-            .filter(|alert| alert.rule_index == index)
-            .collect();
-        hits.sort_by(|a, b| {
-            b.value
-                .total_cmp(&a.value)
-                .then_with(|| a.subject.cmp(&b.subject))
-        });
+        let hits = self.alert_hits();
         if !self.alerts.by_location {
             return hits.iter().map(|alert| alert.subject.to_string()).collect();
         }
@@ -1389,6 +1388,53 @@ impl App {
         places.sort();
         places.dedup();
         places
+    }
+
+    /// The hits of the selected rule, worst first.
+    #[must_use]
+    pub fn alert_hits(&self) -> Vec<&Alert> {
+        let Some(analysis) = &self.analysis else {
+            return Vec::new();
+        };
+        let Some((index, _)) = self.listed_rules().get(self.alerts.rule).copied() else {
+            return Vec::new();
+        };
+        let mut hits: Vec<&Alert> = analysis
+            .alerts()
+            .iter()
+            .filter(|alert| alert.rule_index == index)
+            .collect();
+        hits.sort_by(|a, b| {
+            b.value
+                .total_cmp(&a.value)
+                .then_with(|| a.subject.cmp(&b.subject))
+        });
+        hits
+    }
+
+    /// The errors `cyclops check` would count, worst first: your own rules are left out.
+    #[must_use]
+    pub fn counted_errors(&self) -> Vec<&Alert> {
+        let Some(analysis) = &self.analysis else {
+            return Vec::new();
+        };
+        let rules = analysis.rules();
+        let mut errors: Vec<&Alert> = analysis
+            .alerts()
+            .iter()
+            .filter(|alert| {
+                alert.severity == Severity::Error
+                    && rules
+                        .get(alert.rule_index)
+                        .is_some_and(|rule| rule.origin != Origin::UserFile)
+            })
+            .collect();
+        errors.sort_by(|a, b| {
+            b.value
+                .total_cmp(&a.value)
+                .then_with(|| a.subject.cmp(&b.subject))
+        });
+        errors
     }
 
     /// Every alert on a symbol, worst first, as `]a` steps through them.
@@ -1494,6 +1540,12 @@ impl App {
         let (path, text) = self.why.source.as_ref()?;
         let focus_file = self.place_of_symbol()?.0;
         (focus_file == *path).then_some((path.as_str(), text.as_str()))
+    }
+
+    /// The first line of the focus, where Why's source starts.
+    #[must_use]
+    pub fn why_start(&self) -> Option<u32> {
+        self.place_of_symbol().map(|(_, line)| line)
     }
 
     fn place_of_symbol(&self) -> Option<(String, u32)> {
@@ -3164,21 +3216,28 @@ impl App {
         }
     }
 
+    /// The search of Find as a `cyclops query` command.
+    #[must_use]
+    pub fn query_command(&self) -> String {
+        let (metric, lowest_first) = self.sorted_by();
+        let order = if lowest_first { "asc" } else { "desc" };
+        let filter = self.lens.filter.as_ref().map_or_else(
+            || format!("{} >= 0", metric.name()),
+            |filter| filter.text.clone(),
+        );
+        format!(
+            "cyclops query '{filter}' --sort '{} {order}'",
+            metric.name()
+        )
+    }
+
     /// Copies the selection, the filter, or the search as a command.
     fn copy(&mut self, what: char) {
         let filter = self.lens.filter.as_ref().map(|filter| filter.text.clone());
         let text = match what {
             'y' => self.selected().map(|id| id.to_string()),
             'f' => filter,
-            _ => {
-                let (metric, lowest_first) = self.sorted_by();
-                let order = if lowest_first { "asc" } else { "desc" };
-                let filter = filter.unwrap_or_else(|| format!("{} >= 0", metric.name()));
-                Some(format!(
-                    "cyclops query '{filter}' --sort '{} {order}'",
-                    metric.name()
-                ))
-            }
+            _ => Some(self.query_command()),
         };
         if let Some(text) = text {
             self.copied = Some(text.clone());
@@ -3264,7 +3323,7 @@ impl App {
             .and_then(|analysis| analysis.value(&Subject::Symbol(id.clone()), metric))
             .map_or_else(
                 || "n/a".to_owned(),
-                |value| metric.descriptor().format(value),
+                |value| crate::state::shown(metric, value),
             )
     }
 
@@ -3422,14 +3481,19 @@ fn layout(view: &DiagramView, focus: Option<&SymbolId>) -> Vec<Placed> {
             let mut next = Vec::new();
             for here in frontier {
                 let at = column.get(here).copied().unwrap_or_default();
-                for edge in &view.edges {
-                    let (other, offset) = if &edge.from == here {
-                        (&edge.to, 1)
-                    } else if &edge.to == here {
-                        (&edge.from, -1)
-                    } else {
-                        continue;
-                    };
+                // What depends on a node goes left of it, and what it depends on right. A
+                // node in a cycle with it is both, and goes left, with its dependents.
+                let incoming = view
+                    .edges
+                    .iter()
+                    .filter(|edge| &edge.to == here)
+                    .map(|edge| (&edge.from, -1));
+                let outgoing = view
+                    .edges
+                    .iter()
+                    .filter(|edge| &edge.from == here)
+                    .map(|edge| (&edge.to, 1));
+                for (other, offset) in incoming.chain(outgoing) {
                     if !column.contains_key(other) {
                         column.insert(other, at + offset);
                         next.push(other);

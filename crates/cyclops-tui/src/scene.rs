@@ -9,10 +9,17 @@ use cyclops_domain::symbol::{SymbolId, Visibility};
 use ratatui::layout::Rect;
 use std::collections::{BTreeMap, HashSet};
 
-/// The width of a node, at the design size.
-pub const CARD_WIDTH: u16 = 24;
-/// The columns between two columns of nodes, where relations run.
-const GAP: u16 = 6;
+/// The width of a node at the design size: a module's card, and a class box.
+const CARD_WIDTH: u16 = 20;
+const BOX_WIDTH: u16 = 24;
+/// The columns left of the first node, and the fewest between two columns of nodes.
+const CARD_MARGIN: u16 = 2;
+const BOX_MARGIN: u16 = 1;
+const LEAST_GAP: u16 = 2;
+/// The rows a module's card takes with the rows below it: its border, its name, and the
+/// overlay metric, then a gap of two.
+const CARD_HEIGHT: u16 = 4;
+const SLOT: u16 = 6;
 /// How many rows of each compartment a class box shows: on the focus, and elsewhere.
 const FOCUS_ROWS: usize = 5;
 const NEIGHBOR_ROWS: usize = 2;
@@ -161,16 +168,32 @@ pub fn lay_out(view: &DiagramView, placed: &[Placed], setting: &Setting<'_>, are
     for one in placed {
         columns.entry(one.column).or_default().push(&one.id);
     }
+    let boxes = setting.level == Level::Type;
+    let (wanted, margin) = if boxes {
+        (BOX_WIDTH, BOX_MARGIN)
+    } else {
+        (CARD_WIDTH, CARD_MARGIN)
+    };
     let count = u16::try_from(columns.len()).unwrap_or(1).max(1);
-    let width = CARD_WIDTH
-        .min(area.width.saturating_sub(GAP * (count - 1)) / count)
+    // The width the nodes leave goes between the columns.
+    let spare = area.width.saturating_sub(wanted * count + 2 * margin);
+    let gap = if count > 1 {
+        (spare / (count - 1)).max(LEAST_GAP)
+    } else {
+        0
+    };
+    let width = wanted
+        .min(area.width.saturating_sub(gap * (count - 1)) / count)
         .max(10);
-    let used = width * count + GAP * (count - 1);
+    let used = width * count + gap * (count - 1);
     let left = area.x + area.width.saturating_sub(used) / 2;
+    if !boxes {
+        return cards(view, &columns, setting, area, (left, width, gap));
+    }
     let bottom = area.y + area.height;
     let mut scene = Scene::default();
     for (index, (column, ids)) in columns.iter().enumerate() {
-        let x = left + u16::try_from(index).unwrap_or(0) * (width + GAP);
+        let x = left + u16::try_from(index).unwrap_or(0) * (width + gap);
         let mut ids = ids.clone();
         if let Some(promoted) = setting.promoted
             && let Some(at) = ids.iter().position(|id| *id == promoted)
@@ -184,18 +207,14 @@ pub fn lay_out(view: &DiagramView, placed: &[Placed], setting: &Setting<'_>, are
             let Some(node) = nodes.get(id) else {
                 continue;
             };
-            let rows = if setting.level == Level::Type {
-                let shown = if setting.expanded.contains(*id) {
-                    usize::MAX
-                } else if setting.focus == Some(*id) {
-                    FOCUS_ROWS
-                } else {
-                    NEIGHBOR_ROWS
-                };
-                members(node, shown)
+            let shown = if setting.expanded.contains(*id) {
+                usize::MAX
+            } else if setting.focus == Some(*id) {
+                FOCUS_ROWS
             } else {
-                Vec::new()
+                NEIGHBOR_ROWS
             };
+            let rows = members(node, shown);
             let card_height = height(&rows);
             let remaining = ids.len() - row - 1;
             let room_for_more = if remaining > 0 { 4 } else { 0 };
@@ -226,6 +245,82 @@ pub fn lay_out(view: &DiagramView, placed: &[Placed], setting: &Setting<'_>, are
                     height: 3,
                 },
                 hidden,
+            });
+        }
+    }
+    scene
+}
+
+/// Lays out cards of modules or packages: each column in slots of the same height,
+/// centered against the fullest column, folding what does not fit into a `+N more` card.
+fn cards(
+    view: &DiagramView,
+    columns: &BTreeMap<usize, Vec<&SymbolId>>,
+    setting: &Setting<'_>,
+    area: Rect,
+    (left, width, gap): (u16, u16, u16),
+) -> Scene {
+    let known: HashSet<&SymbolId> = view.nodes.iter().map(|node| &node.id).collect();
+    // The first row is for the columns' labels. Cards are two rows apart, or one if that
+    // is all it takes for every card to fit.
+    let slots_of =
+        |slot: u16| usize::from((area.height.saturating_sub(1) + slot - CARD_HEIGHT) / slot).max(1);
+    let longest = columns.values().map(Vec::len).max().unwrap_or(0);
+    let slot = if longest > slots_of(SLOT) && longest <= slots_of(SLOT - 1) {
+        SLOT - 1
+    } else {
+        SLOT
+    };
+    let slots = slots_of(slot);
+    let shown = |ids: &Vec<&SymbolId>| ids.len().min(slots);
+    let fullest = columns.values().map(shown).max().unwrap_or(1);
+    let mut scene = Scene::default();
+    for (index, (column, ids)) in columns.iter().enumerate() {
+        let x = left + u16::try_from(index).unwrap_or(0) * (width + gap);
+        let mut ids: Vec<&SymbolId> = ids
+            .iter()
+            .copied()
+            .filter(|id| known.contains(id))
+            .collect();
+        if let Some(promoted) = setting.promoted
+            && let Some(at) = ids.iter().position(|id| *id == promoted)
+        {
+            let chosen = ids.remove(at);
+            ids.insert(0, chosen);
+        }
+        let folded = ids.len() > slots;
+        let kept = if folded { slots - 1 } else { ids.len() };
+        let offset = (fullest - shown(&ids)) / 2;
+        let top = |at: usize| {
+            area.y
+                + 1
+                + u16::try_from(at + offset)
+                    .unwrap_or(u16::MAX)
+                    .saturating_mul(slot)
+        };
+        for (at, id) in ids.iter().take(kept).enumerate() {
+            scene.cards.push(Card {
+                id: (*id).clone(),
+                column: *column,
+                area: Rect {
+                    x,
+                    y: top(at),
+                    width,
+                    height: CARD_HEIGHT,
+                },
+                rows: Vec::new(),
+            });
+        }
+        if folded {
+            scene.more.push(MoreCard {
+                column: *column,
+                area: Rect {
+                    x,
+                    y: top(kept),
+                    width,
+                    height: 3,
+                },
+                hidden: ids.iter().skip(kept).map(|id| (*id).clone()).collect(),
             });
         }
     }
@@ -354,13 +449,14 @@ mod tests {
             expanded: &expanded,
             promoted: None,
         };
+        // Fourteen rows hold the labels and two slots of six: one card, then the rest.
         let small = lay_out(&view, &layout, &setting, Rect::new(0, 0, 80, 14));
         let more = small.more.first().expect("a more card");
         assert_eq!(
             small.cards.iter().filter(|card| card.column == 0).count(),
-            2
+            1
         );
-        assert_eq!(more.hidden.len(), 10);
+        assert_eq!(more.hidden.len(), 11);
         let large = lay_out(&view, &layout, &setting, Rect::new(0, 0, 200, 70));
         assert_eq!(large.more, Vec::new());
         assert_eq!(large.cards.len(), 13);

@@ -95,6 +95,19 @@ fn analyzed_files(extracted: &[Extracted], linked: &LinkedFiles) -> Vec<Analyzed
     files
 }
 
+/// A count with commas between thousands, such as `21,840`.
+fn grouped(count: usize) -> String {
+    let digits = count.to_string();
+    let mut out = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
+}
+
 /// The name of a symbol within its file, such as `Order::total`.
 fn local_name(facts: &FileFacts, index: usize) -> String {
     let mut parts = Vec::new();
@@ -319,9 +332,9 @@ impl AnalysisService {
         run.begin(Step::Link)?;
         let (symbols, relations, linked) = self.link(&extracted, sources.files);
         run.end(format!(
-            "{} symbols, {} relations",
-            symbols.len(),
-            relations.len()
+            "{} relations, {} symbols",
+            grouped(relations.len()),
+            grouped(symbols.len())
         ));
 
         run.begin(Step::Enrich)?;
@@ -367,7 +380,16 @@ impl AnalysisService {
         let (measurements, mut extras) =
             self.measure(&model, &files, &extracted, settings, history);
         extras.precise = precise_status;
-        run.end(format!("{} measurements", measurements.len()));
+        run.end(if extras.unavailable.is_empty() {
+            "all metrics".to_owned()
+        } else {
+            let left_out: Vec<&str> = extras
+                .unavailable
+                .iter()
+                .flat_map(|unavailable| unavailable.metrics.iter().map(|metric| metric.name()))
+                .collect();
+            format!("all metrics but {}", left_out.join(", "))
+        });
         Problem::sort(&mut problems);
 
         run.begin(Step::Evaluate)?;
@@ -386,6 +408,7 @@ impl AnalysisService {
         analysis.set_steps(run.steps);
         analysis.set_rules(rules);
         analysis.set_fail_on(settings.fail_on);
+        analysis.set_semantic_mode(settings.semantic);
         Ok(analysis)
     }
 
@@ -422,7 +445,8 @@ impl AnalysisService {
             Ok((commits, read)) => {
                 extras.commits_read = read;
                 let paths: Vec<&RelativePath> = files.iter().map(|file| &file.path).collect();
-                let since = start_of(settings.hotspots_since, now());
+                extras.analyzed_at = now();
+                let since = start_of(settings.hotspots_since, extras.analyzed_at);
                 let churn = churn(&commits, &paths, since);
                 extras.file_commits = history::file_commits(&commits, &paths, since);
                 let complexity: BTreeMap<RelativePath, f64> = measurements
@@ -518,11 +542,11 @@ impl AnalysisService {
         {
             problems.push(Problem::CacheUnavailable(error.to_string()));
         }
-        run.end(format!("{parsed} parsed"));
-        run.amend(
-            Step::Check,
-            format!("{} from cache, {parsed} changed", extracted.len() - parsed),
-        );
+        run.end(format!(
+            "{parsed} parsed, {} from cache",
+            extracted.len() - parsed
+        ));
+        run.amend(Step::Check, format!("{parsed} changed"));
         let facts: Vec<&FileFacts> = extracted.iter().map(|file| &file.facts).collect();
         run.progress.partial(partial_of(&facts));
         Ok((extracted, parsed))

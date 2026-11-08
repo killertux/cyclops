@@ -458,3 +458,27 @@ pub const fn metric_label(metric: MetricId) -> &'static str {
         other => other.name(),
     }
 }
+
+/// A value as the interface shows it: a share of copies as a percent, a count with commas
+/// between thousands, and any other ratio with two decimals.
+#[must_use]
+pub fn shown(metric: MetricId, value: f64) -> String {
+    if metric == MetricId::Duplication {
+        return format!("{:.1}%", value * 100.0);
+    }
+    let plain = metric.descriptor().format(value);
+    if metric.descriptor().ratio {
+        return plain;
+    }
+    let (sign, digits) = plain
+        .strip_prefix('-')
+        .map_or(("", plain.as_str()), |digits| ("-", digits));
+    let mut out = String::from(sign);
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
+}

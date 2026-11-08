@@ -39,6 +39,15 @@ pub enum Token {
     Line,
     Track,
     Sel,
+    PxB,
+    PxD,
+    PxW,
+    PxI,
+    PxP,
+    PxH,
+    PxM,
+    PxO,
+    PxL,
 }
 
 /// What a token looks like in one theme.
@@ -62,7 +71,7 @@ const PLAIN: Look = Look {
 pub const DARK_GROUND: Color = Color::Rgb(0x0F, 0x12, 0x16);
 
 /// Each token in the dark theme, in the order of [`Token`].
-const DARK: [Look; 33] = [
+const DARK: [Look; 42] = [
     Look {
         fg: Some(Color::Rgb(0xD5, 0xDA, 0xE1)),
         bg: None,
@@ -261,6 +270,60 @@ const DARK: [Look; 33] = [
         bold: false,
         underline: false,
     },
+    Look {
+        fg: Some(Color::Rgb(0x5E, 0x7F, 0x94)),
+        bg: Some(Color::Rgb(0x5E, 0x7F, 0x94)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x3F, 0x58, 0x68)),
+        bg: Some(Color::Rgb(0x3F, 0x58, 0x68)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0xF1, 0xF4, 0xF8)),
+        bg: Some(Color::Rgb(0xF1, 0xF4, 0xF8)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x6C, 0xC4, 0xE8)),
+        bg: Some(Color::Rgb(0x6C, 0xC4, 0xE8)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x0F, 0x12, 0x16)),
+        bg: Some(Color::Rgb(0x0F, 0x12, 0x16)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x8F, 0xB8, 0xDE)),
+        bg: Some(Color::Rgb(0x8F, 0xB8, 0xDE)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x0F, 0x12, 0x16)),
+        bg: Some(Color::Rgb(0x0F, 0x12, 0x16)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0xF2, 0xA0, 0x3D)),
+        bg: Some(Color::Rgb(0xF2, 0xA0, 0x3D)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x4C, 0x68, 0x78)),
+        bg: Some(Color::Rgb(0x4C, 0x68, 0x78)),
+        bold: false,
+        underline: false,
+    },
 ];
 
 /// How a token looks in the dark theme.
@@ -273,7 +336,7 @@ pub fn dark(token: Token) -> Look {
 pub const LIGHT_GROUND: Color = Color::Rgb(0xF6, 0xF7, 0xF9);
 
 /// Each token in the light theme, in the order of [`Token`].
-const LIGHT: [Look; 33] = [
+const LIGHT: [Look; 42] = [
     Look {
         fg: Some(Color::Rgb(0x2A, 0x31, 0x3A)),
         bg: None,
@@ -469,6 +532,60 @@ const LIGHT: [Look; 33] = [
     Look {
         fg: None,
         bg: Some(Color::Rgb(0xCF, 0xE6, 0xF2)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x5E, 0x7F, 0x94)),
+        bg: Some(Color::Rgb(0x5E, 0x7F, 0x94)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x3F, 0x58, 0x68)),
+        bg: Some(Color::Rgb(0x3F, 0x58, 0x68)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0xF1, 0xF4, 0xF8)),
+        bg: Some(Color::Rgb(0xF1, 0xF4, 0xF8)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x6C, 0xC4, 0xE8)),
+        bg: Some(Color::Rgb(0x6C, 0xC4, 0xE8)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x0F, 0x12, 0x16)),
+        bg: Some(Color::Rgb(0x0F, 0x12, 0x16)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x8F, 0xB8, 0xDE)),
+        bg: Some(Color::Rgb(0x8F, 0xB8, 0xDE)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x0F, 0x12, 0x16)),
+        bg: Some(Color::Rgb(0x0F, 0x12, 0x16)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0xF2, 0xA0, 0x3D)),
+        bg: Some(Color::Rgb(0xF2, 0xA0, 0x3D)),
+        bold: false,
+        underline: false,
+    },
+    Look {
+        fg: Some(Color::Rgb(0x4C, 0x68, 0x78)),
+        bg: Some(Color::Rgb(0x4C, 0x68, 0x78)),
         bold: false,
         underline: false,
     },

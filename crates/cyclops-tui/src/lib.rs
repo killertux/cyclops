@@ -6,11 +6,14 @@ pub mod app;
 pub mod canvas;
 pub mod draw;
 pub mod editor;
+#[cfg(test)]
+mod golden;
 pub mod input;
+pub mod mascot;
 mod run;
 pub mod scene;
 pub mod state;
-mod tokens;
+pub mod tokens;
 
 pub use app::App;
 pub use run::{Backend, run};

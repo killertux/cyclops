@@ -98,11 +98,25 @@ impl fmt::Display for SettingsError {
 
 impl std::error::Error for SettingsError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// When precise analysis runs. It runs when asked, unless told otherwise.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SemanticMode {
     Off,
+    #[default]
     Manual,
     Always,
+}
+
+impl SemanticMode {
+    /// The name settings use.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Manual => "manual",
+            Self::Always => "always",
+        }
+    }
 }
 
 /// How serious an alert is. `cyclops check` fails on errors unless told otherwise.

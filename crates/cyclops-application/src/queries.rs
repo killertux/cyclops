@@ -41,6 +41,21 @@ pub struct Rank {
     pub of: usize,
 }
 
+/// How a rule's metric is spread across its scope, one cell per step from the lowest
+/// value to the highest, and where the rule's line falls.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuleSpread {
+    /// How many values fall in each cell.
+    pub counts: Vec<usize>,
+    /// The cell the threshold falls in.
+    pub line: usize,
+    /// The cell of the worst value.
+    pub worst: usize,
+    /// How many values the rule leaves alone, and how many it fires on.
+    pub under: usize,
+    pub over: usize,
+}
+
 /// The symbols ranked first for a metric.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Worst {
@@ -61,6 +76,15 @@ impl Impact {
     pub fn all(&self) -> impl Iterator<Item = &(SymbolId, Confidence)> {
         self.levels.iter().flatten()
     }
+}
+
+/// How far an impact reaches: the modules and packages its dependents are in, of how many.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reach {
+    pub modules: usize,
+    pub of_modules: usize,
+    pub packages: usize,
+    pub of_packages: usize,
 }
 
 /// What a function's complexity is made of.
@@ -329,10 +353,8 @@ impl ProjectAnalysis {
         })
     }
 
-    /// How a metric is spread across the peers of a scope: eight equal ranges from the
-    /// lowest value to the highest, with how many fall in each.
-    #[must_use]
-    pub fn spread(&self, scope: Scope, metric: MetricId) -> Option<[usize; 8]> {
+    /// The values of a metric among the peers of a scope, with the lowest and highest.
+    fn peer_values(&self, scope: Scope, metric: MetricId) -> Option<(Vec<f64>, f64, f64)> {
         let values: Vec<f64> = self
             .ranked(peers_of_scope(scope), metric)
             .into_iter()
@@ -340,22 +362,87 @@ impl ProjectAnalysis {
             .collect();
         let lowest = values.iter().copied().reduce(f64::min)?;
         let highest = values.iter().copied().reduce(f64::max)?;
+        Some((values, lowest, highest))
+    }
+
+    /// How a metric is spread across the peers of a scope: eight equal ranges from the
+    /// lowest value to the highest, with how many fall in each.
+    #[must_use]
+    pub fn spread(&self, scope: Scope, metric: MetricId) -> Option<[usize; 8]> {
+        let (values, lowest, highest) = self.peer_values(scope, metric)?;
         let mut counts = [0; 8];
         for value in values {
-            let share = if highest > lowest {
-                (value - lowest) / (highest - lowest)
-            } else {
-                0.0
-            };
-            let bucket = (0_u8..8)
-                .rev()
-                .find(|bucket| share * 8.0 >= f64::from(*bucket))
-                .unwrap_or(0);
-            if let Some(count) = counts.get_mut(usize::from(bucket)) {
+            if let Some(count) = counts.get_mut(spread_range_of(value, lowest, highest)) {
                 *count += 1;
             }
         }
         Some(counts)
+    }
+
+    /// Which of the eight ranges of [`Self::spread`] a value falls in.
+    #[must_use]
+    pub fn spread_range(&self, scope: Scope, metric: MetricId, value: f64) -> Option<usize> {
+        let (_, lowest, highest) = self.peer_values(scope, metric)?;
+        Some(spread_range_of(value, lowest, highest))
+    }
+
+    /// How a rule's metric is spread across every subject of its scope, in at most `cells`
+    /// cells. A count gets a cell for each whole step, when there are few enough.
+    #[must_use]
+    pub fn rule_spread(&self, rule: &AlertRule, cells: usize) -> Option<RuleSpread> {
+        let values: Vec<f64> = self
+            .measurements()
+            .filter(|(subject, metric, _)| {
+                *metric == rule.metric && self.of_scope(subject, rule.scope)
+            })
+            .map(|(_, _, value)| value)
+            .collect();
+        let lowest = values.iter().copied().reduce(f64::min)?;
+        let highest = values.iter().copied().reduce(f64::max)?;
+        let span = highest - lowest;
+        let float = |index: usize| f64::from(u32::try_from(index).unwrap_or(u32::MAX));
+        // A cell for each whole step, such as each count from 1 to 31, if they fit.
+        let whole = (span.round() - span).abs() < f64::EPSILON && !rule.metric.descriptor().ratio;
+        let count = if whole {
+            (1..=cells)
+                .find(|count| float(*count) > span)
+                .unwrap_or(cells)
+        } else {
+            cells
+        }
+        .max(1);
+        let last = float(count - 1);
+        let cell = |value: f64| {
+            let share = if span > 0.0 {
+                (value - lowest) / span
+            } else {
+                0.0
+            };
+            let at = (share.clamp(0.0, 1.0) * last).round();
+            (0..count)
+                .rev()
+                .find(|index| float(*index) <= at)
+                .unwrap_or(0)
+        };
+        let mut counts = vec![0; count];
+        let (mut under, mut over) = (0, 0);
+        for value in &values {
+            if let Some(slot) = counts.get_mut(cell(*value)) {
+                *slot += 1;
+            }
+            if rule.fires(*value) {
+                over += 1;
+            } else {
+                under += 1;
+            }
+        }
+        Some(RuleSpread {
+            counts,
+            line: cell(rule.threshold),
+            worst: cell(highest),
+            under,
+            over,
+        })
     }
 
     /// The subject a rule would fire on next if its threshold moved: of those it leaves
@@ -419,6 +506,41 @@ impl ProjectAnalysis {
             .collect();
         subjects.sort();
         Some(Worst { subjects, value })
+    }
+
+    /// The modules and packages an impact reaches. Only modules written in a file count,
+    /// so that a folder and the file that is its module count once.
+    #[must_use]
+    pub fn impact_reach(&self, impact: &Impact) -> Reach {
+        let view = self.view();
+        let mut modules = BTreeSet::new();
+        let mut packages = BTreeSet::new();
+        for (id, _) in impact.all() {
+            if let Some(module) = view.module_of(id) {
+                modules.insert(module.id.clone());
+            }
+            let mut top = view.symbol(id);
+            while let Some(parent) = top
+                .and_then(|symbol| symbol.parent.as_ref())
+                .and_then(|parent| view.symbol(parent))
+            {
+                top = Some(parent);
+            }
+            if let Some(top) = top.filter(|top| top.kind == SymbolKind::Package) {
+                packages.insert(top.id.clone());
+            }
+        }
+        let count = |kind: SymbolKind, located: bool| {
+            view.symbols()
+                .filter(|symbol| symbol.kind == kind && (!located || symbol.location.is_some()))
+                .count()
+        };
+        Reach {
+            modules: modules.len(),
+            of_modules: count(SymbolKind::Module, true),
+            packages: packages.len(),
+            of_packages: count(SymbolKind::Package, false),
+        }
     }
 
     /// What depends on a symbol, following the relations its level depends through.
@@ -655,6 +777,19 @@ impl ProjectAnalysis {
     }
 }
 
+/// The range of eight, from `lowest` to `highest`, that a value falls in.
+fn spread_range_of(value: f64, lowest: f64, highest: f64) -> usize {
+    let share = if highest > lowest {
+        (value - lowest) / (highest - lowest)
+    } else {
+        0.0
+    };
+    (0_u8..8)
+        .rev()
+        .find(|range| share * 8.0 >= f64::from(*range))
+        .map_or(0, usize::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -789,5 +924,119 @@ mod tests {
         assert_eq!(closest("> 2").as_deref(), Some("b"));
         assert_eq!(closest("< 2").as_deref(), Some("b"));
         assert_eq!(closest("> 0"), None);
+    }
+
+    fn cyclomatic(values: &[(&str, f64)]) -> ProjectAnalysis {
+        let functions = values
+            .iter()
+            .map(|(id, _)| symbol(id, SymbolKind::Function))
+            .collect();
+        let measurements = values
+            .iter()
+            .map(|(id, value)| Measurement {
+                metric: MetricId::Cyclomatic,
+                subject: Subject::Symbol(SymbolId::new(id)),
+                value: *value,
+            })
+            .collect();
+        analysis(functions, Vec::new(), measurements)
+    }
+
+    fn rule(when: &str, threshold: f64) -> AlertRule {
+        AlertRule {
+            name: None,
+            metric: MetricId::Cyclomatic,
+            scope: Scope::Function,
+            comparison: Comparison::Greater,
+            threshold,
+            when: when.to_owned(),
+            severity: Severity::Warning,
+            paths: Vec::new(),
+            enabled: true,
+            origin: cyclops_domain::settings::Origin::ProjectFile,
+            position: 0,
+        }
+    }
+
+    #[test]
+    fn a_rule_spreads_a_count_one_cell_for_each_value() {
+        let project = cyclomatic(&[("a", 1.0), ("b", 1.0), ("c", 2.0), ("d", 5.0)]);
+        let spread = project.rule_spread(&rule("> 2", 2.0), 60).unwrap();
+        // From 1 to 5 is five cells, the line is on 2, and two values fire.
+        assert_eq!(spread.counts, vec![2, 1, 0, 0, 1]);
+        assert_eq!((spread.line, spread.worst), (1, 4));
+        assert_eq!((spread.under, spread.over), (3, 1));
+        let narrow = project.rule_spread(&rule("> 2", 2.0), 3).unwrap();
+        assert_eq!(narrow.counts.len(), 3);
+        assert_eq!(narrow.counts.iter().sum::<usize>(), 4);
+    }
+
+    #[test]
+    fn a_value_falls_in_the_range_its_spread_counts_it_in() {
+        let project = cyclomatic(&[("a", 1.0), ("b", 4.0), ("c", 9.0)]);
+        let spread = project
+            .spread(Scope::Function, MetricId::Cyclomatic)
+            .unwrap();
+        for value in [1.0, 4.0, 9.0] {
+            let range = project
+                .spread_range(Scope::Function, MetricId::Cyclomatic, value)
+                .unwrap();
+            assert!(spread.get(range).is_some_and(|count| *count > 0));
+        }
+        assert_eq!(
+            project.spread_range(Scope::Function, MetricId::Cyclomatic, 9.0),
+            Some(7)
+        );
+        assert_eq!(
+            project.spread_range(Scope::Module, MetricId::Cyclomatic, 9.0),
+            None
+        );
+    }
+
+    #[test]
+    fn an_impact_reaches_the_modules_and_packages_of_its_dependents() {
+        let mut symbols = vec![
+            symbol("shop", SymbolKind::Package),
+            symbol("tools", SymbolKind::Package),
+        ];
+        for (id, parent, kind) in [
+            ("shop::a", "shop", SymbolKind::Module),
+            ("shop::b", "shop", SymbolKind::Module),
+            ("tools::c", "tools", SymbolKind::Module),
+            ("shop::a::target", "shop::a", SymbolKind::Function),
+            ("shop::b::caller", "shop::b", SymbolKind::Function),
+        ] {
+            let mut one = symbol(id, kind);
+            one.parent = Some(SymbolId::new(parent));
+            if kind == SymbolKind::Module {
+                one.location = Some(cyclops_domain::symbol::Location {
+                    file: RelativePath::new(&format!("{id}.rs")),
+                    span: cyclops_domain::symbol::Span {
+                        start_line: 1,
+                        end_line: 1,
+                    },
+                });
+            }
+            symbols.push(one);
+        }
+        let project = analysis(
+            symbols,
+            vec![calls(
+                "shop::b::caller",
+                "shop::a::target",
+                Confidence::Exact,
+            )],
+            Vec::new(),
+        );
+        let impact = project.impact(&SymbolId::new("shop::a::target"));
+        assert_eq!(
+            project.impact_reach(&impact),
+            Reach {
+                modules: 1,
+                of_modules: 3,
+                packages: 1,
+                of_packages: 2,
+            }
+        );
     }
 }

@@ -12,7 +12,7 @@ use cyclops_domain::metric::{Measurement, MetricId, Subject};
 use cyclops_domain::model::{ModelView, ProjectModel, TestCode};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
-use cyclops_domain::settings::Severity;
+use cyclops_domain::settings::{SemanticMode, Severity};
 use cyclops_domain::symbol::{CodeRole, Symbol, SymbolId};
 use std::collections::BTreeMap;
 
@@ -109,6 +109,9 @@ pub struct Extras {
     pub commits_read: usize,
     /// The commits that changed each file within the hotspot window, newest first.
     pub file_commits: BTreeMap<RelativePath, Vec<CommitSummary>>,
+    /// When the history was read, in seconds since 1970: the ages of commits count back
+    /// from it.
+    pub analyzed_at: i64,
     /// The alerts the rules fire.
     pub alerts: Vec<Alert>,
     pub precise: PreciseStatus,
@@ -118,6 +121,8 @@ pub struct Extras {
     pub rules: Vec<AlertRule>,
     /// The severity at which `cyclops check` fails.
     pub fail_on: Severity,
+    /// When precise analysis runs.
+    pub semantic_mode: SemanticMode,
 }
 
 impl ProjectAnalysis {
@@ -182,6 +187,33 @@ impl ProjectAnalysis {
             .map_or(&[], Vec::as_slice)
     }
 
+    /// How long before the analysis a commit was made, in seconds.
+    #[must_use]
+    pub const fn age_of(&self, commit: &CommitSummary) -> i64 {
+        self.extras.analyzed_at.saturating_sub(commit.time)
+    }
+
+    /// How many commits changed a file in each of the last twelve months of 30 days, the
+    /// oldest month first.
+    #[must_use]
+    pub fn monthly_commits(&self, file: &RelativePath) -> [usize; 12] {
+        const MONTH: i64 = 30 * 24 * 60 * 60;
+        let mut months = [0; 12];
+        for commit in self.commits_of(file) {
+            // A commit after the analysis, or before the twelve months, falls outside.
+            let Ok(back) = usize::try_from(self.age_of(commit) / MONTH) else {
+                continue;
+            };
+            if let Some(month) = 11_usize
+                .checked_sub(back)
+                .and_then(|index| months.get_mut(index))
+            {
+                *month += 1;
+            }
+        }
+        months
+    }
+
     /// Which indexers ran, and whether the indexes are current.
     #[must_use]
     pub fn precise(&self) -> &PreciseStatus {
@@ -202,6 +234,16 @@ impl ProjectAnalysis {
     #[must_use]
     pub const fn fail_on(&self) -> Severity {
         self.extras.fail_on
+    }
+
+    /// When precise analysis runs, by the settings.
+    #[must_use]
+    pub const fn semantic_mode(&self) -> SemanticMode {
+        self.extras.semantic_mode
+    }
+
+    pub(crate) const fn set_semantic_mode(&mut self, mode: SemanticMode) {
+        self.extras.semantic_mode = mode;
     }
 
     pub(crate) const fn set_fail_on(&mut self, fail_on: Severity) {
@@ -226,6 +268,30 @@ impl ProjectAnalysis {
 
     pub(crate) fn set_alerts(&mut self, alerts: Vec<Alert>) {
         self.extras.alerts = alerts;
+    }
+
+    /// An analysis made from its parts, for tests that need a project the pipeline
+    /// cannot make, such as the made-up project the design draws.
+    #[cfg(feature = "test-support")]
+    #[must_use]
+    pub fn from_parts(
+        model: ProjectModel,
+        files: Vec<AnalyzedFile>,
+        measurements: Vec<Measurement>,
+        problems: Vec<Problem>,
+        tests: TestCode,
+        files_parsed: usize,
+        extras: Extras,
+    ) -> Self {
+        Self::new(
+            model,
+            files,
+            measurements,
+            problems,
+            tests,
+            files_parsed,
+            extras,
+        )
     }
 
     /// Whether test code counts in this analysis.
@@ -258,6 +324,16 @@ impl ProjectAnalysis {
         &self.files
     }
 
+    /// How many files count, and their lines of code: test code is left out unless it
+    /// counts.
+    #[must_use]
+    pub fn counted_size(&self) -> (usize, u32) {
+        let counted = self.files.iter().filter(|file| self.tests.shows(file.role));
+        counted.fold((0, 0), |(files, lines), file| {
+            (files + 1, lines + file.counted_lines(self.tests).code)
+        })
+    }
+
     /// What the analysis wants you to know, in order of file.
     #[must_use]
     pub fn problems(&self) -> &[Problem] {
@@ -281,5 +357,83 @@ impl ProjectAnalysis {
     #[must_use]
     pub fn children(&self, id: &SymbolId) -> Vec<&Symbol> {
         self.view().children(id).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(path: &str, role: CodeRole, code: u32, test_code: u32) -> AnalyzedFile {
+        AnalyzedFile {
+            path: RelativePath::new(path),
+            module: None,
+            language: LanguageId::Rust,
+            role,
+            lines: LineCounts {
+                code,
+                comment: 0,
+                blank: 0,
+            },
+            test_lines: LineCounts {
+                code: test_code,
+                comment: 0,
+                blank: 0,
+            },
+        }
+    }
+
+    fn with(files: Vec<AnalyzedFile>, tests: TestCode, extras: Extras) -> ProjectAnalysis {
+        ProjectAnalysis::new(
+            ProjectModel::new(Vec::new(), Vec::new()),
+            files,
+            Vec::new(),
+            Vec::new(),
+            tests,
+            0,
+            extras,
+        )
+    }
+
+    #[test]
+    fn test_code_counts_only_when_it_is_included() {
+        let files = || {
+            vec![
+                file("src/a.rs", CodeRole::Production, 100, 20),
+                file("tests/b.rs", CodeRole::Test, 50, 50),
+            ]
+        };
+        let left_out = with(files(), TestCode::Excluded, Extras::default());
+        assert_eq!(left_out.counted_size(), (1, 80));
+        let counted = with(files(), TestCode::Included, Extras::default());
+        assert_eq!(counted.counted_size(), (2, 150));
+    }
+
+    #[test]
+    fn commits_count_in_the_month_they_were_made() {
+        const DAY: i64 = 24 * 60 * 60;
+        let now = 1_000 * DAY;
+        let commit = |days: i64| CommitSummary {
+            short_id: "abcdef0".to_owned(),
+            time: now - days * DAY,
+            subject: "Change".to_owned(),
+        };
+        let path = RelativePath::new("src/a.rs");
+        let extras = Extras {
+            analyzed_at: now,
+            file_commits: [(
+                path.clone(),
+                vec![commit(1), commit(2), commit(40), commit(400)],
+            )]
+            .into_iter()
+            .collect(),
+            ..Extras::default()
+        };
+        let project = with(Vec::new(), TestCode::Excluded, extras);
+        let months = project.monthly_commits(&path);
+        // The newest month is last, and a commit older than a year is left out.
+        assert_eq!(months[11], 2);
+        assert_eq!(months[10], 1);
+        assert_eq!(months.iter().sum::<usize>(), 3);
     }
 }

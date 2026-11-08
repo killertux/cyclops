@@ -12,5 +12,9 @@ petgraph.workspace = true
 rayon.workspace = true
 thiserror.workspace = true
 
+[features]
+# Lets other crates build an analysis from parts in their tests.
+test-support = []
+
 [lints]
 workspace = true

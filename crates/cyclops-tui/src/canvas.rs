@@ -1,6 +1,7 @@
 //! Drawing on a grid of cells with the design's tokens, and remembering where each thing
 //! the mouse can point at was drawn.
 
+use crate::mascot::HalfBlock;
 use crate::state::{Target, Theme};
 use crate::tokens::{self, Look, Token};
 use ratatui::buffer::Buffer;
@@ -193,6 +194,39 @@ impl<'a> Canvas<'a> {
         for y in area.y + 1..bottom {
             self.text(area.x, y, &down.to_string(), token, area);
             self.text(right, y, &down.to_string(), token, area);
+        }
+    }
+
+    /// Draws half-block art with its top left corner at a cell.
+    pub fn art(&mut self, x: u16, y: u16, rows: &[Vec<Option<HalfBlock>>]) {
+        let theme = self.theme;
+        for (row_index, row) in rows.iter().enumerate() {
+            for (column, cell) in row.iter().enumerate() {
+                let Some(block) = cell else {
+                    continue;
+                };
+                let at = (
+                    x + u16::try_from(column).unwrap_or(0),
+                    y + u16::try_from(row_index).unwrap_or(0),
+                );
+                let look = |token: Token| match theme {
+                    Theme::Light => tokens::light(token),
+                    Theme::Dark | Theme::NoColor => tokens::dark(token),
+                };
+                let mut cell_style = Style::default();
+                if theme != Theme::NoColor {
+                    if let Some(fg) = look(block.token).fg {
+                        cell_style = cell_style.fg(fg);
+                    }
+                    if let Some(bg) = block.below.and_then(|below| look(below).fg) {
+                        cell_style = cell_style.bg(bg);
+                    }
+                }
+                if let Some(target) = self.buffer.cell_mut(at) {
+                    target.set_char(block.glyph);
+                    target.set_style(cell_style);
+                }
+            }
         }
     }
 

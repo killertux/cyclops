@@ -11,5 +11,8 @@ cyclops-domain.workspace = true
 ratatui.workspace = true
 terminal-colorsaurus.workspace = true
 
+[dev-dependencies]
+cyclops-application = { workspace = true, features = ["test-support"] }
+
 [lints]
 workspace = true
