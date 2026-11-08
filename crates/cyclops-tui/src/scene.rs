@@ -463,6 +463,37 @@ mod tests {
     }
 
     #[test]
+    fn columns_stand_where_the_design_has_them() {
+        let ids = ["left", "focus", "right"];
+        let view = DiagramView {
+            nodes: ids.iter().map(|id| node(id)).collect(),
+            edges: Vec::new(),
+        };
+        let layout: Vec<Placed> = ids
+            .iter()
+            .enumerate()
+            .map(|(column, id)| placed(id, column, 0))
+            .collect();
+        let expanded = HashSet::new();
+        let xs = |level: Level| {
+            let setting = Setting {
+                level,
+                focus: None,
+                expanded: &expanded,
+                promoted: None,
+            };
+            // Beside an inspector of 36, the diagram has 82 columns inside its border.
+            lay_out(&view, &layout, &setting, Rect::new(1, 5, 82, 24))
+                .cards
+                .iter()
+                .map(|card| (card.area.x, card.area.width))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(xs(Level::Module), vec![(3, 20), (32, 20), (61, 20)]);
+        assert_eq!(xs(Level::Type), vec![(2, 24), (30, 24), (58, 24)]);
+    }
+
+    #[test]
     fn a_class_box_lists_fields_then_methods_worst_first() {
         let mut order = node("shop::orders::Order");
         order.kind = SymbolKind::Struct;

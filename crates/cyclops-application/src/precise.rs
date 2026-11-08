@@ -4,7 +4,8 @@
 //! keeps the syntax layer's guesses until the next precise analysis.
 
 use crate::ports::{
-    ContentHash, FactStore, Progress, SemanticIndex, SemanticProvider, Step, StoredIndex,
+    ContentHash, FactStore, IndexCommit, Progress, SemanticIndex, SemanticProvider, Step,
+    StoredIndex,
 };
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::path::RelativePath;
@@ -31,6 +32,8 @@ pub struct PreciseStatus {
     pub current: Option<bool>,
     /// How many files of the indexed languages changed, appeared or went since.
     pub changed: usize,
+    /// The commit the indexes were made at, if it is known.
+    pub commit: Option<IndexCommit>,
 }
 
 /// A file as the analysis found it.
@@ -331,12 +334,14 @@ pub(crate) fn run(
         .iter()
         .map(|index| changed_since(index, files))
         .sum();
+    let commit = indexes.iter().find_map(|index| index.commit.clone());
     Some((
         indexes,
         PreciseStatus {
             ran,
             current,
             changed,
+            commit,
         },
     ))
 }
@@ -381,6 +386,7 @@ fn index_with(
                 .map(|document| document.path.clone())
                 .collect(),
             uses: resolve(&index, symbols),
+            commit: None,
         }),
         Err(problem) => {
             problems.push(problem);
@@ -521,6 +527,7 @@ mod tests {
                 RelativePath::new("src/billing.rs"),
             ],
             uses,
+            commit: None,
         }
     }
 

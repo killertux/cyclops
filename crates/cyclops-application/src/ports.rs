@@ -314,6 +314,14 @@ pub trait SemanticProvider: Send + Sync {
     fn index(&self) -> Result<SemanticIndex, IndexError>;
 }
 
+/// The commit an index was made at: the first seven characters of its id, and its
+/// subject.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct IndexCommit {
+    pub id: String,
+    pub subject: String,
+}
+
 /// What precise analysis found for some languages, kept for later analyses.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StoredIndex {
@@ -326,6 +334,8 @@ pub struct StoredIndex {
     pub covered: Vec<RelativePath>,
     /// Which symbol uses which: the innermost symbol around each use, and what it uses.
     pub uses: Vec<(SymbolId, SymbolId)>,
+    /// The commit it was made at, once the history has been read.
+    pub commit: Option<IndexCommit>,
 }
 
 /// A step of the analysis. See `specs/tui/status.md`.

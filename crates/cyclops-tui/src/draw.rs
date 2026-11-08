@@ -466,11 +466,12 @@ fn view_hints(view: View) -> &'static [(&'static str, &'static str)] {
             (":export", "save view"),
         ],
         View::Map => &[
-            ("hjkl", "move"),
+            ("hjkl", "move between tiles"),
             ("Enter", "zoom in"),
             ("-", "zoom out"),
-            ("K", "inspector"),
-            ("M", "metric"),
+            ("M", "color by"),
+            ("K", "inspect"),
+            ("gd", "why"),
         ],
         View::Find => &[
             ("f", "filter"),
@@ -1178,10 +1179,58 @@ fn inspector_why(
         canvas.text(body.x + 1, body.y + 2, reason, Token::Dim, body);
         return;
     }
+    // The value, what it means, a list, and the keys that go further, in the last row.
+    let meaning = why_meaning(analysis, symbol, metric);
+    for (row, line) in meaning.iter().enumerate() {
+        let y = body.y + 1 + u16::try_from(row).unwrap_or(u16::MAX);
+        canvas.text(body.x + 1, y, line, Token::Dim, body);
+    }
+    let first = body.y + 2 + u16::try_from(meaning.len()).unwrap_or(u16::MAX);
     let lines = why_lines(app, analysis, symbol, metric);
     for (row, line) in lines.iter().enumerate() {
-        let y = body.y + 2 + u16::try_from(row).unwrap_or(u16::MAX);
+        let y = first + u16::try_from(row).unwrap_or(u16::MAX);
         canvas.text(body.x + 1, y, line, Token::Fg, body);
+    }
+    let keys: &[(&str, &str)] = match metric {
+        MetricId::Afferent
+        | MetricId::Efferent
+        | MetricId::Instability
+        | MetricId::Abstractness
+        | MetricId::Distance => &[("gr", "impact")],
+        MetricId::CycleSize => &[("]c", "next cycle")],
+        _ => &[],
+    };
+    let mut x = body.x + 1;
+    let y = body.y + body.height.saturating_sub(1);
+    for (key, meaning) in keys {
+        x = canvas.text(x, y, key, Token::Acc, body);
+        x = canvas.text(x + 1, y, meaning, Token::Dim, body) + 3;
+    }
+}
+
+/// What a value of a metric with no lines to point at is, in a line or two.
+fn why_meaning(analysis: &ProjectAnalysis, symbol: &Symbol, metric: MetricId) -> Vec<String> {
+    let name = &symbol.name;
+    match metric {
+        MetricId::Lcom => {
+            let groups = analysis.method_groups(&symbol.id).unwrap_or_default().len();
+            vec![
+                format!("These {groups} groups of methods share no fields."),
+                "Each group could become its own type.".to_owned(),
+            ]
+        }
+        MetricId::Members => vec!["Its fields, then its methods.".to_owned()],
+        MetricId::Afferent
+        | MetricId::Efferent
+        | MetricId::Instability
+        | MetricId::Abstractness
+        | MetricId::Distance => vec![format!("The modules on each side of {name}.")],
+        MetricId::CycleSize => vec![
+            "The way around the cycle.".to_owned(),
+            "Removing one link breaks it.".to_owned(),
+        ],
+        MetricId::Duplication => vec![format!("Where the copies of {name} are.")],
+        _ => Vec::new(),
     }
 }
 
@@ -1984,61 +2033,215 @@ fn column_labels(
 }
 
 fn map(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
+    let tiles = app.tiles();
+    let framed = tiles
+        .first()
+        .is_some_and(|tile| app.tile_frame(&tile.id).is_some());
+    if !framed {
+        map_inside(app, canvas, area, active);
+        return;
+    }
+    let frames_area = Rect {
+        height: area.height.saturating_sub(1),
+        ..area
+    };
+    // Each package is a frame, with its share of the lines.
+    let mut packages: Vec<(SymbolId, Vec<&Symbol>)> = Vec::new();
+    for tile in &tiles {
+        let Some(frame) = app.tile_frame(&tile.id) else {
+            continue;
+        };
+        match packages.iter_mut().find(|(id, _)| *id == frame) {
+            Some((_, members)) => members.push(tile),
+            None => packages.push((frame, vec![tile])),
+        }
+    }
+    let lines =
+        |members: &[&Symbol]| -> f64 { members.iter().map(|tile| app.tile_lines(&tile.id)).sum() };
+    let weights: Vec<f64> = packages.iter().map(|(_, members)| lines(members)).collect();
+    for ((frame, members), slot) in packages.iter().zip(squarify(&weights, frames_area)) {
+        let title = frame_title(app, frame, members, slot.width);
+        let inside = canvas.pane(slot, &title, active);
+        map_frame(app, canvas, members, inside);
+    }
+    map_legend(app, canvas, area, tiles.len());
+}
+
+/// A package's frame title: its name, main language and lines, or only its name and
+/// lines where the frame is narrow.
+fn frame_title(app: &App, frame: &SymbolId, members: &[&Symbol], width: u16) -> String {
+    let name = app
+        .symbol(frame)
+        .map(|symbol| symbol.name.clone())
+        .unwrap_or_default();
+    let lines: f64 = members.iter().map(|tile| app.tile_lines(&tile.id)).sum();
+    let lines = crate::state::shown(MetricId::Lines, lines);
+    let language = app.analysis().and_then(|analysis| {
+        let mut by_language: Vec<(&'static str, u32)> = Vec::new();
+        for file in analysis.files() {
+            let inside = file
+                .module
+                .as_ref()
+                .is_some_and(|module| members.iter().any(|tile| &tile.id == module));
+            if !inside {
+                continue;
+            }
+            let name = file.language.name();
+            match by_language
+                .iter_mut()
+                .find(|(language, _)| *language == name)
+            {
+                Some((_, total)) => *total += file.lines.code,
+                None => by_language.push((name, file.lines.code)),
+            }
+        }
+        by_language
+            .into_iter()
+            .max_by_key(|(_, total)| *total)
+            .map(|(language, _)| language)
+    });
+    // The title gives up the language, then the lines, rather than be cut short.
+    let room = usize::from(width.saturating_sub(6));
+    let short = format!("{name}  {lines}");
+    match language {
+        Some(language) if width >= 40 => format!("{name}  {language}  {lines} lines"),
+        _ if short.chars().count() <= room => short,
+        _ => name,
+    }
+}
+
+/// What a frame holds: groups with their tiles, and tiles of their own.
+fn map_frame(app: &App, canvas: &mut Canvas<'_>, members: &[&Symbol], inside: Rect) {
+    let mut units: Vec<(Option<SymbolId>, Vec<&Symbol>)> = Vec::new();
+    for tile in members {
+        let group = app.tile_group(&tile.id);
+        match units
+            .iter_mut()
+            .find(|(id, _)| group.is_some() && *id == group)
+        {
+            Some((_, tiles)) => tiles.push(tile),
+            None => units.push((group, vec![tile])),
+        }
+    }
+    let weights: Vec<f64> = units
+        .iter()
+        .map(|(_, tiles)| tiles.iter().map(|tile| app.tile_lines(&tile.id)).sum())
+        .collect();
+    let marks = app.tree_marks();
+    for ((group, tiles), slot) in units.iter().zip(squarify(&weights, inside)) {
+        let Some(group) = group else {
+            for tile in tiles {
+                map_tile(app, canvas, tile, slot);
+            }
+            continue;
+        };
+        let name = app
+            .symbol(group)
+            .map(|symbol| symbol.name.clone())
+            .unwrap_or_default();
+        let mark = marks
+            .get(group)
+            .map_or_else(String::new, |mark| format!(" {mark}"));
+        canvas.text(slot.x + 1, slot.y, &format!("{name}{mark}"), Token::B, slot);
+        let room = Rect {
+            x: slot.x + 1,
+            y: slot.y + 1,
+            width: slot.width.saturating_sub(1),
+            height: slot.height.saturating_sub(1),
+        };
+        let sizes: Vec<f64> = tiles.iter().map(|tile| app.tile_lines(&tile.id)).collect();
+        for (tile, place) in tiles.iter().zip(squarify(&sizes, room)) {
+            map_tile(app, canvas, tile, place);
+        }
+    }
+}
+
+/// One tile: colored by the metric, with its name, marks and value.
+fn map_tile(app: &App, canvas: &mut Canvas<'_>, tile: &Symbol, slot: Rect) {
+    let Some(analysis) = app.analysis() else {
+        return;
+    };
+    let metric = app.lens().metric;
+    let tile_area = Rect {
+        width: slot.width.saturating_sub(1).max(1),
+        height: slot.height.saturating_sub(1).max(1),
+        ..slot
+    };
+    let token = match value_token(analysis, tile, metric) {
+        Token::H1 => Token::T2,
+        Token::H2 => Token::T3,
+        Token::H3 => Token::T4,
+        Token::H0 => Token::T1,
+        _ => Token::T0,
+    };
+    canvas.fill(tile_area, token);
+    let mark = app
+        .tree_marks()
+        .get(&tile.id)
+        .map_or_else(String::new, |mark| format!(" {mark}"));
+    let name = app.tile_name(&tile.id);
+    if app.selected().as_ref() == Some(&tile.id) {
+        let label = format!("▸ {name}{mark} ");
+        canvas.text(tile_area.x + 1, tile_area.y, &label, Token::On, tile_area);
+    } else {
+        let label = format!("{name}{mark}");
+        canvas.text(tile_area.x + 1, tile_area.y, &label, token, tile_area);
+    }
+    let value = app.shown_value(&tile.id, metric);
+    canvas.text(tile_area.x + 1, tile_area.y + 1, &value, token, tile_area);
+    canvas.hit(tile_area, Target::Symbol(tile.id.clone()));
+}
+
+/// The row below the map: what area and color say, how much a filter left, and the
+/// size of the selected tile.
+fn map_legend(app: &App, canvas: &mut Canvas<'_>, area: Rect, shown: usize) {
+    let y = area.y + area.height.saturating_sub(1);
+    let row = Rect {
+        y,
+        height: 1,
+        ..area
+    };
+    let end = canvas.text(area.x + 1, y, "area ", Token::Faint, row);
+    let end = canvas.text(end, y, "lines", Token::Fg, row);
+    let end = canvas.text(end + 3, y, "color ", Token::Faint, row);
+    let mut end = canvas.text(end, y, app.metric_label(), Token::Fg, row) + 3;
+    for (label, token) in [
+        ("n/a", Token::T0),
+        ("quiet", Token::T1),
+        ("mild", Token::T2),
+        ("high", Token::T3),
+        ("severe", Token::T4),
+    ] {
+        end = canvas.text(end, y, &format!(" {label} "), token, row);
+    }
+    if app.lens().filter.is_some() {
+        let left = format!("{shown} of {} tiles", app.unfiltered_tiles());
+        canvas.text(end + 2, y, &left, Token::Dim, row);
+    }
+    if let Some(selected) = app.selected() {
+        let lines = crate::state::shown(MetricId::Lines, app.tile_lines(&selected));
+        let size = format!("{}: {lines} lines", app.tile_name(&selected));
+        canvas.text_right(area.x + area.width - 1, y, &size, Token::Faint, row);
+    }
+}
+
+/// The map inside one file: a pane of its symbols.
+fn map_inside(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
     let title = app.focus().and_then(|focus| app.symbol(focus)).map_or_else(
         || "Map".to_owned(),
         |symbol| format!("Map of {}", symbol.name),
     );
-    let inside = canvas.pane(area, &title, active);
-    let Some(analysis) = app.analysis() else {
-        return;
+    let pane = Rect {
+        height: area.height.saturating_sub(1),
+        ..area
     };
+    let inside = canvas.pane(pane, &title, active);
     let tiles = app.tiles();
-    let metric = app.lens().metric;
     let sizes: Vec<f64> = tiles.iter().map(|tile| app.tile_lines(&tile.id)).collect();
-    let room = Rect {
-        height: inside.height.saturating_sub(1),
-        ..inside
-    };
-    let selected = app.selected();
-    let marks = app.tree_marks();
-    for (tile, slot) in tiles.iter().zip(squarify(&sizes, room)) {
-        let tile_area = Rect {
-            width: slot.width.saturating_sub(1).max(1),
-            height: slot.height.saturating_sub(1).max(1),
-            ..slot
-        };
-        let token = match value_token(analysis, tile, metric) {
-            Token::H1 => Token::T2,
-            Token::H2 => Token::T3,
-            Token::H3 => Token::T4,
-            Token::H0 => Token::T1,
-            _ => Token::T0,
-        };
-        canvas.fill(tile_area, token);
-        let marker = if selected.as_ref() == Some(&tile.id) {
-            "▸"
-        } else {
-            ""
-        };
-        let mark = marks
-            .get(&tile.id)
-            .map_or_else(String::new, |mark| format!(" {mark}"));
-        let label = format!("{marker}{}{mark}", tile.name);
-        canvas.text(tile_area.x, tile_area.y, &label, token, tile_area);
-        let value = app.shown_value(&tile.id, metric);
-        canvas.text(tile_area.x, tile_area.y + 1, &value, token, tile_area);
-        canvas.hit(tile_area, Target::Symbol(tile.id.clone()));
+    for (tile, slot) in tiles.iter().zip(squarify(&sizes, inside)) {
+        map_tile(app, canvas, tile, slot);
     }
-    let mut legend = format!("area: lines   color: {}", app.metric_label());
-    if app.lens().filter.is_some() {
-        legend = format!(
-            "{legend}   {} of {} tiles",
-            tiles.len(),
-            app.unfiltered_tiles()
-        );
-    }
-    let y = inside.y + inside.height.saturating_sub(1);
-    canvas.text(inside.x + 1, y, &legend, Token::Dim, inside);
+    map_legend(app, canvas, area, tiles.len());
 }
 
 fn find(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
@@ -3436,7 +3639,8 @@ fn why_lines(
             .flat_map(|(index, group)| {
                 [
                     format!("{}  {}", index + 1, group.methods.join(", ")),
-                    format!("   uses {}", group.fields.join(", ")),
+                    format!("   fields {}", group.fields.join(", ")),
+                    String::new(),
                 ]
             })
             .collect(),
@@ -3461,32 +3665,7 @@ fn why_lines(
         | MetricId::Efferent
         | MetricId::Instability
         | MetricId::Abstractness
-        | MetricId::Distance => {
-            let relations = app.relations_of(&symbol.id);
-            let modules = |incoming: bool| -> Vec<String> {
-                let mut found: Vec<String> = relations
-                    .iter()
-                    .filter(|(other, kind, _, used)| {
-                        *used == incoming
-                            && *kind == cyclops_domain::relation::RelationKind::Imports
-                            && app
-                                .symbol(other)
-                                .is_some_and(|symbol| symbol.kind == SymbolKind::Module)
-                    })
-                    .map(|(other, ..)| name(other))
-                    .collect();
-                found.dedup();
-                found
-            };
-            let out = modules(false);
-            let into = modules(true);
-            vec![
-                format!("Depends on {}", out.len()),
-                format!("  {}", out.join(", ")),
-                format!("Depended on by {}", into.len()),
-                format!("  {}", into.join(", ")),
-            ]
-        }
+        | MetricId::Distance => coupling_lines(app, analysis, symbol),
         MetricId::CycleSize => match analysis.cycle_path(&symbol.id) {
             Some(path) => {
                 let mut hops: Vec<String> = path.iter().map(|(from, _, _)| name(from)).collect();
@@ -3517,6 +3696,48 @@ fn why_lines(
         MetricId::CommentLines | MetricId::BlankLines => vec!["The value for the file.".to_owned()],
         _ => source_reasons(analysis, symbol),
     }
+}
+
+/// The modules on each side of a module, and how its instability follows from them.
+fn coupling_lines(app: &App, analysis: &ProjectAnalysis, symbol: &Symbol) -> Vec<String> {
+    let name = |id: &cyclops_domain::symbol::SymbolId| id.to_string();
+    let relations = app.relations_of(&symbol.id);
+    let modules = |incoming: bool| -> Vec<String> {
+        let mut found: Vec<String> = relations
+            .iter()
+            .filter(|(other, kind, _, used)| {
+                *used == incoming
+                    && *kind == cyclops_domain::relation::RelationKind::Imports
+                    && app
+                        .symbol(other)
+                        .is_some_and(|symbol| symbol.kind == SymbolKind::Module)
+            })
+            .map(|(other, ..)| name(other))
+            .collect();
+        found.dedup();
+        found
+    };
+    let out = modules(false);
+    let into = modules(true);
+    let mut lines = vec![format!("Depends on {}", out.len())];
+    lines.extend(out.iter().cloned());
+    lines.push(String::new());
+    lines.push(format!("Depended on by {}", into.len()));
+    lines.extend(into.iter().cloned());
+    // How instability follows from the two, with the value the core measured.
+    if let Some(instability) =
+        analysis.value(&Subject::Symbol(symbol.id.clone()), MetricId::Instability)
+    {
+        lines.push(String::new());
+        lines.push(format!(
+            "Instability {} / ({} + {}) = {}",
+            out.len(),
+            out.len(),
+            into.len(),
+            crate::state::shown(MetricId::Instability, instability)
+        ));
+    }
+    lines
 }
 
 /// The parts of a function's score, and the history of its file.
@@ -4014,30 +4235,100 @@ const fn relation_meaning(kind: RelationKind) -> &'static str {
 }
 
 fn more_nodes(app: &App, canvas: &mut Canvas<'_>, body: Rect, hidden: &[SymbolId], cursor: usize) {
-    let area = Rect {
-        x: body.x + body.width.saturating_sub(56) / 2,
-        y: body.y + 1,
-        width: 56.min(body.width),
-        height: (u16::try_from(hidden.len())
-            .unwrap_or(u16::MAX)
-            .saturating_add(3))
-        .min(body.height),
-    };
-    popup_frame(canvas, area, &format!("{} more", hidden.len()));
-    let metric = app.lens().metric;
-    let entries: Vec<(String, String)> = hidden
-        .iter()
-        .map(|id| (id.to_string(), app.shown_value(id, metric)))
-        .collect();
-    popup_entries(
-        canvas,
-        Rect {
-            y: area.y.saturating_sub(1),
-            ..area
+    let scene = app.scene();
+    let card = scene.as_ref().and_then(|(_, scene)| {
+        scene
+            .more
+            .iter()
+            .find(|more| {
+                more.hidden.len() == hidden.len()
+                    && hidden.iter().all(|id| more.hidden.contains(id))
+            })
+            .cloned()
+    });
+    let height = u16::try_from(hidden.len())
+        .unwrap_or(u16::MAX)
+        .saturating_add(6);
+    // Beside the card it opens from, a little above it, or in the middle without one.
+    let (x, y) = card.as_ref().map_or_else(
+        || (body.x + body.width.saturating_sub(50) / 2, body.y + 1),
+        |card| {
+            (
+                card.area.x + card.area.width + 1,
+                card.area.y.saturating_sub(3),
+            )
         },
-        &entries,
-        cursor,
     );
+    let area = Rect {
+        x: x.min((body.x + body.width).saturating_sub(50)),
+        y: y.min((body.y + body.height).saturating_sub(height)),
+        width: 50.min(body.width),
+        height: height.min(body.height),
+    };
+    popup_frame(canvas, area, "");
+    let focus = app.focus();
+    let focus_name = focus
+        .and_then(|focus| app.symbol(focus))
+        .map(|symbol| symbol.name.clone())
+        .unwrap_or_default();
+    let edges = scene
+        .as_ref()
+        .map(|(drawing, _)| drawing.view.edges.clone())
+        .unwrap_or_default();
+    let depends = hidden.iter().any(|id| {
+        edges
+            .iter()
+            .any(|edge| &edge.from == id && Some(&edge.to) == focus)
+    });
+    let title = if depends {
+        format!("{} more depend on {focus_name}", hidden.len())
+    } else {
+        format!("{focus_name} depends on {} more", hidden.len())
+    };
+    canvas.text(area.x + 2, area.y + 1, &title, Token::Popb, area);
+    let note = "Worst first. Enter selects it in the diagram.";
+    canvas.text(area.x + 2, area.y + 2, note, Token::Popd, area);
+    let metric = app.lens().metric;
+    for (index, id) in hidden.iter().enumerate() {
+        let y = area.y + 4 + u16::try_from(index).unwrap_or(u16::MAX);
+        let row = Rect {
+            x: area.x + 1,
+            y,
+            width: area.width.saturating_sub(2),
+            height: 1,
+        };
+        let token = if index == cursor {
+            Token::Pops
+        } else {
+            Token::Pop
+        };
+        canvas.fill(row, token);
+        let confidence = edges
+            .iter()
+            .find(|edge| {
+                (&edge.from == id && Some(&edge.to) == focus)
+                    || (&edge.to == id && Some(&edge.from) == focus)
+            })
+            .map(|edge| edge.confidence);
+        let guess = if confidence.is_some_and(|sure| sure != Confidence::Exact) {
+            " ~"
+        } else {
+            ""
+        };
+        let name = format!("{}{guess}", short_subject(&Subject::Symbol(id.clone())));
+        canvas.text(area.x + 2, y, &name, token, row);
+        canvas.text_right(area.x + 33, y, &app.shown_value(id, metric), token, row);
+        if let Some(confidence) = confidence {
+            canvas.text_right(
+                area.x + area.width - 2,
+                y,
+                confidence.name(),
+                Token::Popd,
+                row,
+            );
+        }
+        canvas.hit(row, Target::Entry(id.to_string()));
+    }
 }
 
 fn context_menu(app: &App, canvas: &mut Canvas<'_>, body: Rect, cursor: usize) {
@@ -4045,11 +4336,17 @@ fn context_menu(app: &App, canvas: &mut Canvas<'_>, body: Rect, cursor: usize) {
         .selected()
         .and_then(|id| app.symbol(&id).map(|symbol| symbol.name.clone()))
         .unwrap_or_default();
+    let height = (u16::try_from(CONTEXT_MENU.len()).unwrap_or(0) + 3).min(body.height);
+    let width = 38.min(body.width);
+    // Where it was clicked, kept on screen, or near the top for the keyboard.
+    let (x, y) = app
+        .context_at()
+        .unwrap_or((body.x + 20.min(body.width / 4), body.y + 3));
     let area = Rect {
-        x: body.x + 20.min(body.width / 4),
-        y: body.y + 3,
-        width: 38.min(body.width),
-        height: (u16::try_from(CONTEXT_MENU.len()).unwrap_or(0) + 3).min(body.height),
+        x: x.min((body.x + body.width).saturating_sub(width)),
+        y: y.min((body.y + body.height).saturating_sub(height)),
+        width,
+        height,
     };
     popup_frame(canvas, area, "");
     canvas.text(area.x + 2, area.y + 1, &name, Token::Popb, area);
@@ -4399,6 +4696,22 @@ fn status_index(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
             ]
         }
     };
+    // An index names the commit it was made at, when the history says.
+    let commit = app
+        .analysis()
+        .and_then(|analysis| analysis.precise().commit.as_ref())
+        .filter(|_| current.is_some());
+    let lines: Vec<String> = commit
+        .map(|commit| {
+            vec![
+                format!("Indexed at {} {}", commit.id, commit.subject),
+                String::new(),
+            ]
+        })
+        .unwrap_or_default()
+        .into_iter()
+        .chain(lines)
+        .collect();
     for (row, line) in lines.iter().enumerate() {
         let y = inside.y + 1 + u16::try_from(row).unwrap_or(u16::MAX);
         let token = if row == 0 { Token::Fg } else { Token::Dim };

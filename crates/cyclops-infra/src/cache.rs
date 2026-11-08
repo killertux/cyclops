@@ -3,7 +3,7 @@
 
 use cyclops_application::ports::{
     CacheEntry, CacheError, CachedFacts, Commit, ContentHash, FactStore, FileChange, FileStamp,
-    KnownHistory, NewHistory, StoredIndex,
+    IndexCommit, KnownHistory, NewHistory, StoredIndex,
 };
 use cyclops_domain::facts::FileFacts;
 use cyclops_domain::language::LanguageId;
@@ -17,7 +17,7 @@ use std::path::Path;
 
 /// Raise it whenever the layout of the database or of the facts changes. A cache of
 /// another version is started over.
-pub const SCHEMA_VERSION: i64 = 5;
+pub const SCHEMA_VERSION: i64 = 6;
 
 pub struct SqliteFactStore {
     connection: Connection,
@@ -87,6 +87,8 @@ struct KeptIndex {
     files: Vec<(RelativePath, ContentHash)>,
     covered: Vec<RelativePath>,
     uses: Vec<(String, String)>,
+    /// The id and subject of the commit it was made at.
+    commit: Option<(String, String)>,
 }
 
 impl KeptIndex {
@@ -100,6 +102,10 @@ impl KeptIndex {
                 .iter()
                 .map(|(from, to)| (from.as_str().to_owned(), to.as_str().to_owned()))
                 .collect(),
+            commit: index
+                .commit
+                .as_ref()
+                .map(|commit| (commit.id.clone(), commit.subject.clone())),
         }
     }
 
@@ -114,6 +120,7 @@ impl KeptIndex {
                 .into_iter()
                 .map(|(from, to)| (SymbolId::new(&from), SymbolId::new(&to)))
                 .collect(),
+            commit: self.commit.map(|(id, subject)| IndexCommit { id, subject }),
         }
     }
 }
@@ -534,6 +541,10 @@ mod tests {
                 .iter()
                 .map(|(from, to)| (SymbolId::new(from), SymbolId::new(to)))
                 .collect(),
+            commit: Some(IndexCommit {
+                id: "a41f9c2".to_owned(),
+                subject: "First".to_owned(),
+            }),
         }
     }
 

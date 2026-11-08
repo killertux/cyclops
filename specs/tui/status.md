@@ -85,6 +85,14 @@ go back to syntax relations, and are marked `*` wherever they appear.
 | Current     | rust-shop | `git init; precise analysis` | `<Space>s`                                  | 0 files changed | yes       |
 | Stale       | rust-shop | `git init; precise analysis` | `<step edit src/orders.rs><Space>r<Space>s` | 1 file changed  | yes       |
 
+The Semantic index pane names that commit by its id and subject.
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace | steps                        | keys       | text  | includes? |
+| ----------- | --------- | ---------------------------- | ---------- | ----- | --------- |
+| Its commit  | rust-shop | `git init; precise analysis` | `<Space>s` | First | yes       |
+
 ## Problems
 
 Problems lists the [files that could not be fully read](../analysis/parse-failures.md).

@@ -2009,6 +2009,19 @@ impl Tui {
     }
 
     #[must_use]
+    pub fn groups(&self) -> String {
+        self.read(|session| {
+            let groups: Vec<String> = session
+                .app
+                .map_groups()
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            list(&groups)
+        })
+    }
+
+    #[must_use]
     pub fn tiles(&self) -> String {
         self.read(|session| {
             let tiles: Vec<String> = session

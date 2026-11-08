@@ -264,6 +264,8 @@ pub struct App {
     dragging: Option<(u16, u16)>,
     /// What a click would do where the mouse rests.
     hovering: Option<String>,
+    /// Where the right-click menu was opened, so that it opens there.
+    context_at: Option<(u16, u16)>,
     /// How far a list is scrolled by the wheel.
     scroll: usize,
     /// Where `]c` and `[c` are among the cycles.
@@ -345,6 +347,7 @@ impl App {
             inspector_width: None,
             dragging: None,
             hovering: None,
+            context_at: None,
             scroll: 0,
             cycle_at: None,
             hits: Vec::new(),
@@ -636,18 +639,28 @@ impl App {
     /// How many tiles the map would show without the filter.
     #[must_use]
     pub fn unfiltered_tiles(&self) -> usize {
-        let (Some(analysis), Some(holder)) = (&self.analysis, self.map_holder()) else {
-            return 0;
-        };
-        analysis.view().children(&holder).count()
+        self.map_contents().len()
     }
 
-    /// The lines of a tile, which its area follows.
+    /// The lines of a tile, which its area follows: a file's lines of code, or else the
+    /// symbol's.
     #[must_use]
     pub fn tile_lines(&self, id: &SymbolId) -> f64 {
-        self.analysis
-            .as_ref()
-            .and_then(|analysis| analysis.value(&Subject::Symbol(id.clone()), MetricId::Lines))
+        let Some(analysis) = self.analysis.as_ref() else {
+            return 1.0;
+        };
+        let tests = analysis.tests();
+        let in_files: u32 = analysis
+            .files()
+            .iter()
+            .filter(|file| file.module.as_ref() == Some(id) && tests.shows(file.role))
+            .map(|file| file.counted_lines(tests).code)
+            .sum();
+        if in_files > 0 {
+            return f64::from(in_files);
+        }
+        analysis
+            .value(&Subject::Symbol(id.clone()), MetricId::Lines)
             .unwrap_or(1.0)
             .max(1.0)
     }
@@ -1103,20 +1116,137 @@ impl App {
     /// focus has nothing inside it.
     #[must_use]
     pub fn tiles(&self) -> Vec<&Symbol> {
-        let Some(analysis) = &self.analysis else {
-            return Vec::new();
-        };
-        let Some(holder) = self.map_holder() else {
-            return Vec::new();
-        };
         let kept = self.kept();
-        let mut tiles: Vec<&Symbol> = analysis
-            .view()
-            .children(&holder)
+        let mut tiles: Vec<&Symbol> = self
+            .map_contents()
+            .into_iter()
             .filter(|symbol| kept.as_ref().is_none_or(|kept| kept.contains(&symbol.id)))
             .collect();
         tiles.sort_by(|a, b| a.id.cmp(&b.id));
+        tiles.dedup_by(|a, b| a.id == b.id);
         tiles
+    }
+
+    /// What the map shows before the filter: the files inside its holder, each as its
+    /// module, or the holder's symbols when it holds no files.
+    fn map_contents(&self) -> Vec<&Symbol> {
+        let (Some(analysis), Some(holder)) = (&self.analysis, self.map_holder()) else {
+            return Vec::new();
+        };
+        let files = self.map_files(&holder);
+        if files.is_empty() {
+            analysis.view().children(&holder).collect()
+        } else {
+            files
+        }
+    }
+
+    /// The packages the map is drawn for: every package at the top of the project, or the
+    /// holder alone below it.
+    fn map_scope(&self, holder: &SymbolId) -> Vec<SymbolId> {
+        let Some(analysis) = &self.analysis else {
+            return Vec::new();
+        };
+        let at_top = analysis
+            .view()
+            .symbol(holder)
+            .is_some_and(|symbol| symbol.parent.is_none());
+        if at_top {
+            analysis
+                .roots_by(MetricId::Lines)
+                .iter()
+                .map(|symbol| symbol.id.clone())
+                .collect()
+        } else {
+            vec![holder.clone()]
+        }
+    }
+
+    /// The modules of the files inside the holder. A file that is the holder itself is
+    /// the frame around the others, not a tile.
+    fn map_files(&self, holder: &SymbolId) -> Vec<&Symbol> {
+        let Some(analysis) = &self.analysis else {
+            return Vec::new();
+        };
+        let view = analysis.view();
+        let scope = self.map_scope(holder);
+        analysis
+            .files()
+            .iter()
+            .filter_map(|file| file.module.as_ref())
+            .filter(|module| {
+                scope
+                    .iter()
+                    .any(|top| *module != top && view.is_within(module, top))
+            })
+            .filter_map(|module| view.symbol(module))
+            .collect()
+    }
+
+    /// The group a file's tile sits in: the module that holds it, unless that is the
+    /// holder or a package.
+    #[must_use]
+    pub fn tile_group(&self, tile: &SymbolId) -> Option<SymbolId> {
+        let analysis = self.analysis.as_ref()?;
+        let holder = self.map_holder()?;
+        if self.map_files(&holder).is_empty() {
+            return None;
+        }
+        let view = analysis.view();
+        let parent = view.symbol(tile).and_then(parent_of)?;
+        let group = view.symbol(parent)?;
+        let scope = self.map_scope(&holder);
+        (group.kind != SymbolKind::Package && !scope.contains(&group.id)).then(|| group.id.clone())
+    }
+
+    /// The groups the map shows, in order.
+    #[must_use]
+    pub fn map_groups(&self) -> Vec<SymbolId> {
+        let mut groups: Vec<SymbolId> = self
+            .tiles()
+            .iter()
+            .filter_map(|tile| self.tile_group(&tile.id))
+            .collect();
+        groups.sort();
+        groups.dedup();
+        groups
+    }
+
+    /// The package a file's tile is framed in, when the map shows files.
+    #[must_use]
+    pub fn tile_frame(&self, tile: &SymbolId) -> Option<SymbolId> {
+        let analysis = self.analysis.as_ref()?;
+        let holder = self.map_holder()?;
+        if self.map_files(&holder).is_empty() {
+            return None;
+        }
+        self.map_scope(&holder)
+            .into_iter()
+            .find(|top| analysis.view().is_within(tile, top))
+    }
+
+    /// The name of a tile: the file's name for a file, and the symbol's otherwise.
+    #[must_use]
+    pub fn tile_name(&self, tile: &SymbolId) -> String {
+        let file = self.analysis.as_ref().and_then(|analysis| {
+            analysis
+                .files()
+                .iter()
+                .find(|file| file.module.as_ref() == Some(tile))
+        });
+        match file {
+            Some(file) if self.tile_frame(tile).is_some() => file
+                .path
+                .as_str()
+                .rsplit('/')
+                .next()
+                .unwrap_or_default()
+                .to_owned(),
+            _ => self
+                .symbol(tile)
+                .map(|symbol| symbol.name.clone())
+                .unwrap_or_default(),
+        }
     }
 
     /// The symbol the map is drawn inside.
@@ -1553,6 +1683,12 @@ impl App {
         self.place_of(&focus)
     }
 
+    /// Where the right-click menu was opened, if by the mouse.
+    #[must_use]
+    pub const fn context_at(&self) -> Option<(u16, u16)> {
+        self.context_at
+    }
+
     /// Says something on the hint line.
     pub fn tell(&mut self, message: String) {
         self.message = Some(message);
@@ -1710,6 +1846,7 @@ impl App {
             MouseKind::RightClick => {
                 if let Some(Target::Symbol(id)) = target {
                     self.select(id);
+                    self.context_at = Some((column, row));
                     self.popup = Some(Popup::ContextMenu { cursor: 0 });
                 }
                 return;

@@ -6,8 +6,8 @@ use crate::duplication::Duplication;
 use crate::history::{self, churn, start_of};
 use crate::ports::{
     Analyzer, CacheAccess, CacheEntry, CachedFacts, Commit, ContentHash, FactStore, FileSource,
-    FileStamp, HistoryError, HistorySource, KnownHistory, LanguageAdapter, Partial,
-    PartialFunction, Progress, SourceError, SourceFile, Step, StepReport,
+    FileStamp, HistoryError, HistorySource, IndexCommit, KnownHistory, LanguageAdapter, Partial,
+    PartialFunction, Progress, SourceError, SourceFile, Step, StepReport, StoredIndex,
 };
 use crate::precise::{self, CurrentFile, Precise};
 use crate::rollups::roll_up;
@@ -217,6 +217,43 @@ fn read_history(
     Ok((commits, read))
 }
 
+/// What the Enrich step did, as Status says it.
+fn enriched(indexes: &[StoredIndex], relations: &[Relation]) -> String {
+    if indexes.is_empty() {
+        return "skipped: no index yet".to_owned();
+    }
+    let exact = relations
+        .iter()
+        .filter(|relation| relation.confidence == Confidence::Exact)
+        .count();
+    format!("{exact} of {} relations exact", relations.len())
+}
+
+/// Gives the indexes made by this analysis the commit they were made at, the head, and
+/// keeps them so. Says the commit of the indexes.
+fn stamp_indexes(
+    indexes: &mut [StoredIndex],
+    head: Option<&Commit>,
+    cache: &mut Option<&mut dyn FactStore>,
+    problems: &mut Vec<Problem>,
+) -> Option<IndexCommit> {
+    let Some(head) = head else {
+        return indexes.iter().find_map(|index| index.commit.clone());
+    };
+    for index in indexes.iter_mut().filter(|index| index.commit.is_none()) {
+        index.commit = Some(IndexCommit {
+            id: head.id.chars().take(7).collect(),
+            subject: head.subject.clone(),
+        });
+        if let Some(store) = cache.as_deref_mut()
+            && let Err(error) = store.save_index(index)
+        {
+            problems.push(Problem::CacheUnavailable(error.to_string()));
+        }
+    }
+    indexes.iter().find_map(|index| index.commit.clone())
+}
+
 /// What linking says about files.
 #[derive(Default)]
 struct LinkedFiles {
@@ -346,7 +383,7 @@ impl AnalysisService {
                 hash: file.hash,
             })
             .collect();
-        let (indexes, precise_status) = precise::run(
+        let (mut indexes, mut precise_status) = precise::run(
             sources.precise,
             settings.semantic,
             &symbols,
@@ -357,15 +394,7 @@ impl AnalysisService {
         )
         .ok_or(AnalysisError::Stopped)?;
         let relations = precise::enrich(relations, &symbols, &indexes, &current);
-        run.end(if indexes.is_empty() {
-            "skipped: no index yet".to_owned()
-        } else {
-            let exact = relations
-                .iter()
-                .filter(|relation| relation.confidence == Confidence::Exact)
-                .count();
-            format!("{exact} of {} relations exact", relations.len())
-        });
+        run.end(enriched(&indexes, &relations));
         let model = ProjectModel::new(symbols, relations);
 
         run.begin(Step::History)?;
@@ -374,6 +403,10 @@ impl AnalysisService {
             Ok((_, read)) => format!("{read} new commits"),
             Err(error) => error.to_string(),
         });
+        if let Ok((commits, _)) = &history {
+            precise_status.commit =
+                stamp_indexes(&mut indexes, commits.first(), &mut cache, &mut problems);
+        }
 
         run.begin(Step::Analyze)?;
         let files = analyzed_files(&extracted, &linked);

@@ -494,6 +494,28 @@ fn shop_alerts(design: &mut Design) {
     }
 }
 
+/// A file's churn, complexity and hotspot, and its duplication: export.rs is the most
+/// copied.
+fn measure_file(design: &mut Design, path: &str, (churn, complexity, hotspot): (f64, f64, f64)) {
+    let duplication = if path == "shop-jobs/src/export.rs" {
+        0.234
+    } else {
+        0.01
+    };
+    for (metric, value) in [
+        (MetricId::Duplication, duplication),
+        (MetricId::Churn, churn),
+        (MetricId::Cyclomatic, complexity),
+        (MetricId::Hotspot, hotspot),
+    ] {
+        design.measurements.push(Measurement {
+            metric,
+            subject: Subject::File(RelativePath::new(path)),
+            value,
+        });
+    }
+}
+
 /// Whether a file of the design is Rust.
 fn is_rust(path: &str) -> bool {
     Path::new(path)
@@ -583,7 +605,7 @@ const RANKED_FILES: [(&str, &str, f64, f64, f64); 8] = [
 ];
 
 /// The files the Overview ranks by hotspot, and the rest of the 842: 71% of the lines in
-/// Rust and 29% in TypeScript.
+/// Rust and 29% in TypeScript, in four packages.
 fn shop_files(design: &mut Design) {
     let ranked = RANKED_FILES;
     let mut files: Vec<DesignFile> = ranked
@@ -598,47 +620,85 @@ fn shop_files(design: &mut Design) {
             )
         })
         .collect();
-    for index in 0..842 - ranked.len() {
-        let (path, module) = if index == 0 {
-            ("shop-jobs/src/export.rs".to_owned(), "shop_jobs::export")
-        } else if index < 600 {
-            (format!("src/f{index:03}.rs"), "shop")
-        } else {
-            (format!("storefront/src/f{index:03}.ts"), "storefront")
-        };
-        files.push((path, module.to_owned(), 1.0, 1.0, 0.01));
+    // The rest of the 842 files, in the packages the map frames, out of sight in the
+    // modules the other screens leave closed.
+    let fillers = [
+        (
+            "shop",
+            "src/f",
+            ".rs",
+            400,
+            &["shop::catalog::model", "shop::notes::digest"][..],
+        ),
+        (
+            "shop_api",
+            "shop-api/src/f",
+            ".rs",
+            120,
+            &["shop_api::admin", "shop_api::auth"][..],
+        ),
+        (
+            "shop_jobs",
+            "shop-jobs/src/f",
+            ".rs",
+            63,
+            &["shop_jobs::export"][..],
+        ),
+        (
+            "storefront",
+            "storefront/src/f",
+            ".ts",
+            250,
+            &["storefront::session", "storefront::orders"][..],
+        ),
+    ];
+    files.push((
+        "shop-jobs/src/export.rs".to_owned(),
+        "shop_jobs::export".to_owned(),
+        1.0,
+        1.0,
+        0.01,
+    ));
+    let mut index = 0;
+    for (_, prefix, extension, count, modules) in fillers {
+        for one in 0..count {
+            let module = modules
+                .get(one % modules.len())
+                .copied()
+                .unwrap_or_default();
+            files.push((
+                format!("{prefix}{index:03}{extension}"),
+                module.to_owned(),
+                1.0,
+                1.0,
+                0.01,
+            ));
+            index += 1;
+        }
     }
     test_files(design);
-    for (language, lines) in [
-        (LanguageId::Rust, 68_451_u32),
-        (LanguageId::TypeScript, 27_959),
+    // The lines of each package, as the map's frames say them, shared out evenly.
+    for (package, lines) in [
+        ("shop", 52_180_u32),
+        ("storefront", 27_960),
+        ("shop_api", 10_840),
+        ("shop_jobs", 5_430),
     ] {
         let mine: Vec<&DesignFile> = files
             .iter()
-            .filter(|file| (language == LanguageId::Rust) == is_rust(&file.0))
+            .filter(|file| file.1.split("::").next() == Some(package))
             .collect();
         let count = u32::try_from(mine.len()).expect("a count");
         for (index, (path, module, churn, complexity, hotspot)) in mine.into_iter().enumerate() {
-            // Shared out evenly, the first file taking what is left over.
+            // The first file takes what is left over.
             let share = lines / count + if index == 0 { lines % count } else { 0 };
-            design.file(path, module, language, share);
-            let duplication = if path.as_str() == "shop-jobs/src/export.rs" {
-                0.234
+            let language = if is_rust(path) {
+                LanguageId::Rust
             } else {
-                0.01
+                LanguageId::TypeScript
             };
-            for (metric, value) in [
-                (MetricId::Duplication, duplication),
-                (MetricId::Churn, *churn),
-                (MetricId::Cyclomatic, *complexity),
-                (MetricId::Hotspot, *hotspot),
-            ] {
-                design.measurements.push(Measurement {
-                    metric,
-                    subject: Subject::File(RelativePath::new(path)),
-                    value,
-                });
-            }
+            design.file(path, module, language, share);
+            measure_file(design, path, (*churn, *complexity, *hotspot));
         }
     }
 }
@@ -1145,6 +1205,84 @@ fn the_first_run_has_the_design_panes() {
         "first-run",
         &["shop", "Highest by cyclomatic, so far"],
     );
+}
+
+#[test]
+fn the_map_has_the_design_frames() {
+    let mut app = opened(shop().build(), "<Space>m");
+    let ours = panes(&screen_text(&render(&mut app)));
+    let theirs = panes(&design("map"));
+    // The design places its frames by hand, and gives shop-jobs more room than its lines
+    // earn. A frame's area follows its lines, as specs/tui/map.md says, so shop-jobs is
+    // too narrow to say its lines.
+    let titles = |list: &[Pane]| {
+        list.iter()
+            .map(|pane| pane.title.clone())
+            .collect::<Vec<_>>()
+    };
+    let mut expected = titles(&theirs);
+    if let Some(last) = expected.last_mut() {
+        *last = "shop-jobs".to_owned();
+    }
+    assert_eq!(titles(&ours), expected);
+    // Each frame stands to the others as in the design: left of them, or above them.
+    let stands = |list: &[Pane]| {
+        let mut found = Vec::new();
+        for a in list {
+            for b in list {
+                found.push((a.x + a.width <= b.x, a.y + a.height <= b.y));
+            }
+        }
+        found
+    };
+    assert_eq!(stands(&ours), stands(&theirs));
+}
+
+#[test]
+fn the_rest_of_a_column_opens_beside_its_card() {
+    let mut app = opened(shop().build(), "Mcyclomatic<CR><C-p>billing<CR><Space>d");
+    let card = app
+        .scene()
+        .and_then(|(_, scene)| scene.more.first().map(|more| more.area))
+        .expect("a +N more card");
+    // A click finds its target among what was drawn last.
+    render(&mut app);
+    app.update(Input::Mouse {
+        kind: crate::input::MouseKind::Click,
+        column: card.x + 1,
+        row: card.y + 1,
+    });
+    let ours = panes(&screen_text(&render(&mut app)));
+    let theirs = panes(&design("more-nodes"));
+    let size = |pane: &Pane| (pane.width, pane.height);
+    // The design's popup, 50 by 9 for three nodes, beside its card and three rows up.
+    let popup = theirs
+        .iter()
+        .find(|pane| size(pane) == (50, 9))
+        .expect("the design's popup");
+    let mine = ours
+        .iter()
+        .find(|pane| size(pane) == size(popup))
+        .expect("our popup");
+    let x = usize::from(card.x + card.width + 1);
+    let y = usize::from(card.y.saturating_sub(3));
+    assert_eq!((mine.x, mine.y), (x, y));
+}
+
+#[test]
+fn the_right_click_menu_opens_where_it_was_clicked() {
+    let mut app = opened(
+        shop().build(),
+        "Mcyclomatic<CR><Space>ezM<C-p>reconcile<CR>",
+    );
+    render(&mut app);
+    // The design right-clicks reconcile, at row 8 and column 24.
+    app.update(Input::Mouse {
+        kind: crate::input::MouseKind::RightClick,
+        column: 24,
+        row: 8,
+    });
+    assert_popup(&mut app, "context-menu", (24, 8, 38, 11));
 }
 
 #[test]

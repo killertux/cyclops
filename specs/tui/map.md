@@ -3,8 +3,11 @@
 Back to the [terminal interface](README.md).
 
 The map answers "how big is each part, and where is the risk?". It is a treemap of the
-focus: each tile is a child, its area shows how many lines it has, and its color shows
-the current metric. A tile prints its value, so color is never the only signal.
+files in the focus: each file is a tile, its area shows how many lines it has, and its
+color shows the current metric. Tiles sit in a group for the module that holds them, and
+groups in a frame for their package, titled with its language and lines. A file
+directly in its package needs no group. When the focus is one file, its symbols are the
+tiles. A tile prints its value, so color is never the only signal.
 
 ![The map](design/screens/map.dark.png)
 
@@ -40,6 +43,15 @@ Larger tiles have larger areas. `largest?` is the tile with the most lines.
 | # situation | workspace | keys       | largest?     |
 | ----------- | --------- | ---------- | ------------ |
 | By lines    | rust-shop | `<Space>m` | shop::orders |
+
+`tiles?` names each file by its module, and `groups?` lists the groups.
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace     | keys       | tiles?                                                  | groups?                  |
+| ----------- | ------------- | ---------- | ------------------------------------------------------- | ------------------------ |
+| Folders     | ts-resolution | `<Space>m` | src/app, src/barrel, src/barrel/thing, src/lib/helper   | src, src/barrel, src/lib |
+| Flat        | rust-shop     | `<Space>m` | shop::billing, shop::catalog, shop::notes, shop::orders | none                     |
 
 ## Color
 
