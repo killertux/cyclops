@@ -16,7 +16,7 @@ Drilling in shows what is inside at depth 0, `>` then adds its
 neighbors, and `-` goes back up to the depth you had. `nodes?` lists what is shown.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                                  | level? | depth? | nodes?                                                           |
 | -------------- | --------- | ------------------------------------- | ------ | ------ | ---------------------------------------------------------------- |
@@ -55,7 +55,7 @@ instead, and `Enter` then applies what is ticked. The default is all of them.
 
 ![The relation picker](design/screens/relation-picker.dark.png)
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                   | popup?          | relations?                                  |
 | ----------- | --------- | ---------------------- | --------------- | ------------------------------------------- |
@@ -71,7 +71,7 @@ the place of the last node in the column, so that what is selected is always on 
 
 ![The popup of the rest](design/screens/more-nodes.dark.png)
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | size   | keys                               | popup?     | text      | includes? | other text | other includes? |
 | ------------ | --------- | ------ | ---------------------------------- | ---------- | --------- | --------- | ---------- | --------------- |
@@ -79,7 +79,7 @@ the place of the last node in the column, so that what is selected is always on 
 | Opening it   | rust-wide | 80x24  | `<C-p>hub<CR><Space>d<click more>` | more nodes | wide::m12 | yes       |            |                 |
 | Room for all | rust-wide | 200x80 | `<C-p>hub<CR><Space>d`             | none       | wide::m12 | yes       | more       | no              |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | size  | keys                                                     | popup? | selected? | text      | includes? |
 | ------------ | --------- | ----- | -------------------------------------------------------- | ------ | --------- | --------- | --------- |
@@ -92,7 +92,7 @@ node shows `!` for an alert and `@` for a cycle. Line style shows
 [confidence](../model/relations.md), as the [design](design/README.md#glyphs) sets out,
 and the legend stays on screen. `node value?` reads the `subject` node.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                       | subject      | node value? |
 | -------------- | --------- | -------------------------- | ------------ | ----------- |
@@ -100,7 +100,7 @@ and the legend stays on screen. `node value?` reads the `subject` node.
 | Another one    | rust-shop | `<Space>dMinstability<CR>` | shop::orders | 1.00        |
 | Does not apply | rust-shop | `<Space>dMlcom<CR>`        | shop::orders | n/a         |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace   | steps                                       | keys                 | subject      | marks? |
 | ----------- | ----------- | ------------------------------------------- | -------------------- | ------------ | ------ |
@@ -109,7 +109,7 @@ and the legend stays on screen. `node value?` reads the `subject` node.
 | Next to one | rust-cycles |                                             | `<Space>d`           | cycles::f    | none   |
 | A class box | rust-cycles |                                             | `<C-p>A<CR><Space>d` | cycles::a::A | @      |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys       | text       | includes? |
 | ----------- | --------- | ---------- | ---------- | --------- |
@@ -118,7 +118,7 @@ and the legend stays on screen. `node value?` reads the `subject` node.
 
 A filter keeps a node whole, so the diagram says how much it left out.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                           | text         | includes? |
 | ----------- | --------- | ------------------------------ | ------------ | --------- |
@@ -138,7 +138,7 @@ leave it for the next node. Whatever acts on the selection acts on a member, exc
 which centers the diagram on the member's type. The interface has no separate member level. `member` stays in the
 [core](../explore/diagrams.md#levels), for `cyclops export`.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys                             | level? | selected?                     | text        | includes? |
 | ------------ | --------- | -------------------------------- | ------ | ----------------------------- | ----------- | --------- |
@@ -156,7 +156,7 @@ which centers the diagram on the member's type. The interface has no separate me
 | ----------- | --------- | -------------------------------- | ------- | -------------------------- | -------- |
 | Why         | rust-shop | `<C-p>Order<CR><Space>d<CR>jjgd` | Explore | shop::orders::Order::total | Why      |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation        | workspace | keys                                                                  | focus?                 | selected?                     |
 | ------------------ | --------- | --------------------------------------------------------------------- | ---------------------- | ----------------------------- |
@@ -165,7 +165,7 @@ which centers the diagram on the member's type. The interface has no separate me
 
 `member value?` reads the overlay on the `subject` member, and `marks?` reads its marks.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps                                       | keys                     | subject                       | member value? | marks? |
 | ----------- | --------- | ------------------------------------------- | ------------------------ | ----------------------------- | ------------- | ------ |
@@ -178,7 +178,7 @@ which centers the diagram on the member's type. The interface has no separate me
 `]c` and `[c` move the focus through the [cycles](../metrics/dependency-cycles.md). They work
 from any view, and go to Diagram if the view cannot show them.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace   | keys   | view?    | focus?    | text                 | includes? |
 | ----------- | ----------- | ------ | -------- | --------- | -------------------- | --------- |
@@ -193,7 +193,7 @@ from any view, and go to Diagram if the view cannot show them.
 with the inspector on [Impact](../explore/impact.md). It shows the dependents at each
 distance, how many modules and packages they reach, and how many of those are guesses.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | steps              | keys                        | view?   | section? | text                     | includes? |
 | ----------- | --------- | ------------------ | --------------------------- | ------- | -------- | ------------------------ | --------- |
@@ -211,7 +211,7 @@ level and overlay. So a diagram of types exports as a
 [class diagram](../cli/commands.md#class-diagrams). A format it does not know is refused.
 `exported text` and `exported includes?` read the file.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                                  | mode?   | created? | text                  | includes? |
 | -------------- | --------- | ------------------------------------- | ------- | -------- | --------------------- | --------- |
@@ -219,7 +219,7 @@ level and overlay. So a diagram of types exports as a
 | Writing        | rust-shop | `<Space>d:export mermaid out.mmd<CR>` | NORMAL  | out.mmd  | out.mmd               | yes       |
 | Unknown format | rust-shop | `<Space>d:export visio out<CR>`       | NORMAL  | none     | Unknown format: visio | yes       |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation     | workspace | keys                                                | created? | exported text | exported includes? |
 | --------------- | --------- | --------------------------------------------------- | -------- | ------------- | ------------------ |

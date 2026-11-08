@@ -10,7 +10,7 @@ use anyhow::{Result, anyhow};
 use clap::{Args, Parser, Subcommand};
 use cyclops_application::analysis::ProjectAnalysis;
 use cyclops_application::analyzers::{CohesionAnalyzer, ComplexityAnalyzer, SizeAnalyzer};
-use cyclops_application::diagram::{DiagramRequest, Level};
+use cyclops_application::diagram::{DiagramRequest, DiagramView, Level};
 use cyclops_application::graph::CouplingAnalyzer;
 use cyclops_application::pipeline::{AnalysisService, Sources};
 use cyclops_application::ports::{
@@ -521,6 +521,43 @@ impl Core for Interactive {
     fn indexers(&self) -> Vec<IndexerReport> {
         indexer_reports(&self.root, &self.environment)
     }
+
+    fn export(
+        &self,
+        format: &str,
+        path: &str,
+        view: &DiagramView,
+        level: Level,
+        overlay: Option<MetricId>,
+    ) -> Result<String, String> {
+        export_view(&self.root, format, path, view, level, overlay)
+    }
+}
+
+/// Writes a diagram to a file of a project, in a format `cyclops export` knows.
+///
+/// # Errors
+///
+/// Says why not, such as a format it does not know.
+pub fn export_view(
+    root: &Path,
+    format: &str,
+    path: &str,
+    view: &DiagramView,
+    level: Level,
+    overlay: Option<MetricId>,
+) -> Result<String, String> {
+    let known = ExportFormat::parse(format).ok_or_else(|| format!("Unknown format: {format}"))?;
+    let written = Export {
+        view,
+        level,
+        overlay,
+    }
+    .write(known)
+    .map_err(|error| error.to_string())?;
+    std::fs::write(root.join(path), written)
+        .map_err(|error| format!("{path} cannot be written: {error}"))?;
+    Ok(format!("Wrote {path}."))
 }
 
 /// The settings file a rule goes to: your own, or the project's, and how to name it.

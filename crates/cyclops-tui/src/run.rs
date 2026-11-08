@@ -99,6 +99,8 @@ fn read_events(sender: &Sender<Message>, started: Instant) {
                         })
                     }
                     MouseEventKind::Down(MouseButton::Right) => Some(MouseKind::RightClick),
+                    MouseEventKind::Drag(MouseButton::Left) => Some(MouseKind::Drag),
+                    MouseEventKind::Up(MouseButton::Left) => Some(MouseKind::Release),
                     MouseEventKind::Moved => Some(MouseKind::Hover),
                     MouseEventKind::ScrollUp if mouse.modifiers.contains(KeyModifiers::CONTROL) => {
                         Some(MouseKind::CtrlWheelUp)

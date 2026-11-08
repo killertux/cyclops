@@ -3,12 +3,14 @@
 
 use crate::editor::RuleEditor;
 use crate::input::{Input, Key, MouseKind};
+use crate::scene::{BoxRow, Scene, Setting, lay_out};
 use crate::state::{
     Effect, IndexerReport, Mode, OVERVIEW_METRICS, Pane, Place, Popup, Pose, Prompt, PromptKind,
     Section, Startup, Target, Theme, ThemeChoice, View, metric_label,
 };
 use cyclops_application::analysis::ProjectAnalysis;
 use cyclops_application::diagram::{DiagramRequest, DiagramView, Level};
+use cyclops_application::graph::ModuleGraph;
 use cyclops_application::ports::{Partial, Step};
 use cyclops_application::queries::{Alert, Order};
 use cyclops_domain::alert::AlertRule;
@@ -93,6 +95,12 @@ struct DiagramState {
     depth: Option<u32>,
     level: Option<Level>,
     drills: Vec<Drill>,
+    /// The kinds of relations drawn. Empty means all of them.
+    relations: Vec<RelationKind>,
+    /// Class boxes that show every member.
+    expanded: HashSet<SymbolId>,
+    /// A node chosen from a `+N more` card.
+    promoted: Option<SymbolId>,
 }
 
 /// What the interface hears from an analysis while it runs.
@@ -250,6 +258,16 @@ pub struct App {
     problem_at: Option<usize>,
     why: WhyState,
     indexers: Vec<IndexerReport>,
+    /// The width of the inspector, once a divider was dragged.
+    inspector_width: Option<u16>,
+    /// A divider being dragged: where the drag started, and the width then.
+    dragging: Option<(u16, u16)>,
+    /// What a click would do where the mouse rests.
+    hovering: Option<String>,
+    /// How far a list is scrolled by the wheel.
+    scroll: usize,
+    /// Where `]c` and `[c` are among the cycles.
+    cycle_at: Option<usize>,
     hits: Vec<(Rect, Target)>,
     effects: Vec<Effect>,
 }
@@ -324,6 +342,11 @@ impl App {
             problem_at: None,
             why: WhyState::default(),
             indexers: Vec::new(),
+            inspector_width: None,
+            dragging: None,
+            hovering: None,
+            scroll: 0,
+            cycle_at: None,
             hits: Vec::new(),
             effects: vec![Effect::Analyze {
                 tests: None,
@@ -465,7 +488,7 @@ impl App {
                 PromptKind::Filter => Mode::Filter,
                 PromptKind::Search | PromptKind::Jump => Mode::Search,
             },
-            (None, Some(Popup::MetricPicker { .. } | Popup::SortPicker { .. })) => Mode::Search,
+            (None, Some(Popup::SortPicker { .. })) => Mode::Search,
             (None, Some(Popup::ConfirmPrecise)) => Mode::Confirm,
             (None, None) if self.editor.is_some() => Mode::Edit,
             (None, _) if self.progress.is_some() => Mode::Analyzing,
@@ -505,17 +528,191 @@ impl App {
 
     /// The keys the open popup lists, in order.
     #[must_use]
-    pub fn popup_keys(&self) -> Vec<char> {
-        let mut keys = match (&self.popup, self.hinting()) {
+    pub fn popup_keys(&self) -> Vec<String> {
+        let mut keys: Vec<String> = match (&self.popup, self.hinting()) {
             (Some(Popup::SpaceMenu), _) => space_menu()
                 .iter()
-                .flat_map(|(_, entries)| entries.iter().map(|(key, _)| *key))
+                .flat_map(|(_, entries)| entries.iter().map(|(key, _)| key.to_string()))
                 .collect(),
-            (None, Some(prefix)) => hints(prefix).iter().map(|(key, _)| *key).collect(),
+            (Some(Popup::ContextMenu { .. }), _) => CONTEXT_MENU
+                .iter()
+                .map(|(_, keys)| (*keys).to_owned())
+                .collect(),
+            (None, Some(prefix)) => hints(prefix)
+                .iter()
+                .map(|(key, _)| key.to_string())
+                .collect(),
             _ => Vec::new(),
         };
         keys.sort_unstable();
         keys
+    }
+
+    /// The kinds of relations the diagram draws, or nothing for all of them.
+    #[must_use]
+    pub fn diagram_relations(&self) -> &[RelationKind] {
+        &self.diagram.relations
+    }
+
+    /// Where the diagram is drawn: inside its pane, below the controls and above the
+    /// legend.
+    #[must_use]
+    pub fn diagram_frame(&self) -> Rect {
+        let body_height = self.rows.saturating_sub(4);
+        let mut width = self.columns;
+        if self.inspector.is_some() && self.columns >= SIDE_BY_SIDE {
+            width = width.saturating_sub(self.inspector_width_for(36).min(width / 2));
+        }
+        Rect {
+            x: 1,
+            y: 2 + 1 + 2,
+            width: width.saturating_sub(2),
+            height: body_height.saturating_sub(2 + 2 + 4),
+        }
+    }
+
+    /// The diagram, laid out on the screen.
+    #[must_use]
+    pub fn scene(&self) -> Option<(Drawing, Scene)> {
+        let drawing = self.drawing()?;
+        let setting = Setting {
+            level: drawing.level,
+            focus: self.focus.as_ref(),
+            expanded: &self.diagram.expanded,
+            promoted: self.diagram.promoted.as_ref(),
+        };
+        let scene = lay_out(
+            &drawing.view,
+            &drawing.placed,
+            &setting,
+            self.diagram_frame(),
+        );
+        Some((drawing, scene))
+    }
+
+    /// The width of the inspector beside a view whose default is `default`.
+    #[must_use]
+    pub fn inspector_width_for(&self, default: u16) -> u16 {
+        self.inspector_width.unwrap_or(default)
+    }
+
+    /// The width of the inspector, if it is open beside the view.
+    #[must_use]
+    pub fn inspector_width(&self) -> Option<u16> {
+        let default = match self.view {
+            View::Explore => 58,
+            View::Find => 40,
+            _ => 36,
+        };
+        self.inspector?;
+        Some(self.inspector_width_for(default))
+    }
+
+    /// How many nodes the diagram would show without the filter.
+    #[must_use]
+    pub fn unfiltered_nodes(&self) -> usize {
+        let (Some(analysis), Some(drawing)) = (&self.analysis, self.drawing()) else {
+            return 0;
+        };
+        let request = DiagramRequest {
+            level: drawing.level,
+            focus: self.focus.clone(),
+            depth: drawing.depth,
+            relations: self.diagram.relations.clone(),
+            overlay: None,
+            filter: None,
+        };
+        analysis.diagram(&request).nodes.len()
+    }
+
+    /// How many tiles the map would show without the filter.
+    #[must_use]
+    pub fn unfiltered_tiles(&self) -> usize {
+        let (Some(analysis), Some(holder)) = (&self.analysis, self.map_holder()) else {
+            return 0;
+        };
+        analysis.view().children(&holder).count()
+    }
+
+    /// The lines of a tile, which its area follows.
+    #[must_use]
+    pub fn tile_lines(&self, id: &SymbolId) -> f64 {
+        self.analysis
+            .as_ref()
+            .and_then(|analysis| analysis.value(&Subject::Symbol(id.clone()), MetricId::Lines))
+            .unwrap_or(1.0)
+            .max(1.0)
+    }
+
+    /// The tile with the most lines.
+    #[must_use]
+    pub fn largest_tile(&self) -> Option<SymbolId> {
+        self.tiles()
+            .into_iter()
+            .max_by(|a, b| {
+                self.tile_lines(&a.id)
+                    .total_cmp(&self.tile_lines(&b.id))
+                    .then_with(|| b.id.cmp(&a.id))
+            })
+            .map(|symbol| symbol.id.clone())
+    }
+
+    /// `!` or `!!` for an alert on a node or a member itself, and `@` for a module in a
+    /// cycle, or a class box whose module is. Members never show `@`.
+    #[must_use]
+    pub fn diagram_marks(&self) -> HashMap<SymbolId, String> {
+        let Some(analysis) = &self.analysis else {
+            return HashMap::new();
+        };
+        let mut marks: HashMap<SymbolId, String> = HashMap::new();
+        for alert in analysis.alerts() {
+            if let Subject::Symbol(id) = &alert.subject {
+                let mark = if alert.severity == Severity::Error {
+                    "!!"
+                } else {
+                    "!"
+                };
+                let entry = marks.entry(id.clone()).or_default();
+                if entry.len() < mark.len() {
+                    mark.clone_into(entry);
+                }
+            }
+        }
+        let view = analysis.view();
+        for symbol in view.symbols() {
+            let module = if symbol.kind == SymbolKind::Module {
+                Some(symbol)
+            } else if symbol.kind.is_type() {
+                view.module_of(&symbol.id)
+            } else {
+                None
+            };
+            let in_cycle = module.is_some_and(|module| {
+                analysis
+                    .value(&Subject::Symbol(module.id.clone()), MetricId::CycleSize)
+                    .is_some()
+            });
+            if in_cycle {
+                let mark = marks.entry(symbol.id.clone()).or_default();
+                if !mark.is_empty() {
+                    mark.push(' ');
+                }
+                mark.push('@');
+            }
+        }
+        marks
+    }
+
+    /// What a click would do where the mouse rests.
+    #[must_use]
+    pub fn hovering(&self) -> Option<&str> {
+        self.hovering.as_deref()
+    }
+
+    /// How far the wheel scrolled the list.
+    #[must_use]
+    pub const fn scrolled(&self) -> usize {
+        self.scroll
     }
 
     #[must_use]
@@ -609,6 +806,19 @@ impl App {
     fn name_of(&self, id: &SymbolId) -> String {
         self.symbol(id)
             .map_or_else(|| id.to_string(), |symbol| symbol.name.clone())
+    }
+
+    /// The symbols of the breadcrumb, from the top down to the focus.
+    #[must_use]
+    pub fn breadcrumb_ids(&self) -> Vec<SymbolId> {
+        let mut ids = Vec::new();
+        let mut current = self.focus.as_ref().and_then(|id| self.symbol(id));
+        while let Some(symbol) = current {
+            ids.push(symbol.id.clone());
+            current = parent_of(symbol).and_then(|parent| self.symbol(parent));
+        }
+        ids.reverse();
+        ids
     }
 
     /// The parts of the breadcrumb, from the top down to the focus.
@@ -928,6 +1138,7 @@ impl App {
             .map_or(SymbolKind::Package, |symbol| symbol.kind);
         match Level::of(kind) {
             Level::Package => Level::Module,
+            Level::Member => Level::Type,
             other => other,
         }
     }
@@ -943,7 +1154,7 @@ impl App {
             level,
             focus: self.focus.clone(),
             depth,
-            relations: Vec::new(),
+            relations: self.diagram.relations.clone(),
             overlay: Some(self.lens.metric),
             filter: self
                 .lens
@@ -1435,10 +1646,75 @@ impl App {
                     && row < area.y + area.height
             })
             .map(|(_, target)| target.clone());
-        let (Some(target), MouseKind::Click) = (target, kind) else {
+        match kind {
+            MouseKind::Click => {}
+            MouseKind::DoubleClick => {
+                if let Some(Target::Symbol(id)) = target {
+                    self.select(id);
+                    self.enter();
+                }
+                return;
+            }
+            MouseKind::RightClick => {
+                if let Some(Target::Symbol(id)) = target {
+                    self.select(id);
+                    self.popup = Some(Popup::ContextMenu { cursor: 0 });
+                }
+                return;
+            }
+            MouseKind::Hover => {
+                self.hovering = match target {
+                    Some(Target::Symbol(id)) => Some(format!("click selects {id}")),
+                    Some(Target::Tab(view)) => Some(format!("click goes to {}", view.name())),
+                    _ => None,
+                };
+                return;
+            }
+            MouseKind::Drag => {
+                if let Some((start, width)) = self.dragging {
+                    let moved = i32::from(start) - i32::from(column);
+                    let width = (i32::from(width) + moved).clamp(20, i32::from(self.columns) - 20);
+                    self.inspector_width = u16::try_from(width).ok();
+                }
+                return;
+            }
+            MouseKind::Release => {
+                self.dragging = None;
+                return;
+            }
+            MouseKind::WheelUp | MouseKind::WheelDown => {
+                let down = kind == MouseKind::WheelDown;
+                self.scroll = if down {
+                    self.scroll.saturating_add(1)
+                } else {
+                    self.scroll.saturating_sub(1)
+                };
+                return;
+            }
+            MouseKind::CtrlWheelUp | MouseKind::CtrlWheelDown => {
+                if self.view == View::Diagram {
+                    let depth = self.diagram.depth.unwrap_or(1);
+                    self.diagram.depth = Some(if kind == MouseKind::CtrlWheelUp {
+                        depth.saturating_add(1)
+                    } else {
+                        depth.saturating_sub(1)
+                    });
+                }
+                return;
+            }
+        }
+        let Some(target) = target else {
             return;
         };
         match target {
+            Target::Breadcrumb(id) => self.set_focus(Some(id)),
+            Target::Chip(chip) => self.chip(chip),
+            Target::More(column) => self.open_more(column),
+            Target::Entry(entry) => self.choose_entry(&entry),
+            Target::Divider => {
+                let width = self.inspector_width().unwrap_or(36);
+                self.dragging = Some((column, width));
+            }
             Target::Menu(key) => {
                 self.popup = None;
                 self.space_action(key);
@@ -1543,12 +1819,27 @@ impl App {
             }
             (View::Diagram, Key::Char('c')) => {
                 if let Some(selected) = self.selected() {
+                    let centered = self
+                        .type_of_member(&selected)
+                        .unwrap_or_else(|| selected.clone());
                     self.jump(Place {
                         view: View::Diagram,
-                        focus: Some(selected),
+                        focus: Some(centered),
                         section: self.inspector,
                     });
+                    self.diagram.selected = Some(selected);
                 }
+            }
+            (View::Diagram, Key::Char('r')) => {
+                self.popup = Some(Popup::RelationPicker {
+                    typed: String::new(),
+                    ticked: if self.diagram.relations.is_empty() {
+                        RELATION_ORDER.to_vec()
+                    } else {
+                        self.diagram.relations.clone()
+                    },
+                    cursor: 0,
+                });
             }
             (View::Diagram, Key::Char('<')) => {
                 let depth = self.diagram.depth.unwrap_or(1);
@@ -1690,6 +1981,8 @@ impl App {
             }
             (Key::Char(']'), Key::Char('m')) => self.next_metric(true),
             (Key::Char(']'), Key::Char('a')) => self.step_alert(true),
+            (Key::Char(']'), Key::Char('c')) => self.step_cycle(true),
+            (Key::Char('['), Key::Char('c')) => self.step_cycle(false),
             (Key::Char('['), Key::Char('a')) => self.step_alert(false),
             (Key::Char(']'), Key::Char('p')) => self.step_problem(true),
             (Key::Char('['), Key::Char('p')) => self.step_problem(false),
@@ -1911,6 +2204,159 @@ impl App {
         self.effects.push(effect);
     }
 
+    /// The type a member belongs to, if the symbol is a member of one.
+    fn type_of_member(&self, id: &SymbolId) -> Option<SymbolId> {
+        let symbol = self.symbol(id)?;
+        if symbol.kind.is_type() {
+            return None;
+        }
+        let parent = parent_of(symbol)?;
+        self.symbol(parent)
+            .filter(|owner| owner.kind.is_type())
+            .map(|owner| owner.id.clone())
+    }
+
+    /// Does what a part of the status line stands for.
+    fn chip(&mut self, chip: &str) {
+        match chip {
+            "metric" => {
+                self.popup = Some(Popup::MetricPicker {
+                    typed: String::new(),
+                });
+            }
+            "filter" => self.normal_key(Key::Char('f')),
+            "tests" => self.space_action('t'),
+            "alerts" => self.switch_view(View::Alerts),
+            "problems" => self.switch_view(View::Status),
+            _ => {}
+        }
+    }
+
+    /// Lists what a `+N more` card of the diagram holds, worst first.
+    fn open_more(&mut self, column: usize) {
+        let Some((_, scene)) = self.scene() else {
+            return;
+        };
+        let Some(more) = scene.more.iter().find(|more| more.column == column) else {
+            return;
+        };
+        let metric = self.lens.metric;
+        let mut hidden = more.hidden.clone();
+        if let Some(analysis) = &self.analysis {
+            hidden.sort_by(|a, b| {
+                let value = |id: &SymbolId| analysis.value(&Subject::Symbol(id.clone()), metric);
+                match (value(a), value(b)) {
+                    (Some(x), Some(y)) => y.total_cmp(&x).then_with(|| a.cmp(b)),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => a.cmp(b),
+                }
+            });
+        }
+        self.popup = Some(Popup::MoreNodes { hidden, cursor: 0 });
+    }
+
+    /// A node from a `+N more` card takes the last place of its column, selected.
+    fn promote(&mut self, id: SymbolId) {
+        self.diagram.promoted = Some(id.clone());
+        self.diagram.selected = Some(id);
+    }
+
+    /// Does what an entry of the open popup says.
+    fn choose_entry(&mut self, entry: &str) {
+        match self.popup.take() {
+            Some(Popup::MoreNodes { hidden, .. }) => {
+                if let Some(id) = hidden.into_iter().find(|id| id.as_str() == entry) {
+                    self.promote(id);
+                }
+            }
+            Some(Popup::ContextMenu { .. }) => self.context_action(entry),
+            other => self.popup = other,
+        }
+    }
+
+    /// Does one action of the right-click menu, as its keys would.
+    fn context_action(&mut self, label: &str) {
+        self.popup = None;
+        match label {
+            "Why is it high?" => self.second_key(Key::Char('g'), Key::Char('d')),
+            "What depends on it?" => self.second_key(Key::Char('g'), Key::Char('r')),
+            "Clones" => self.second_key(Key::Char('g'), Key::Char('c')),
+            "Open in editor" => self.open_in_editor(),
+            "Show in diagram" => {
+                if let Some(selected) = self.selected() {
+                    self.jump(Place {
+                        view: View::Diagram,
+                        focus: Some(selected),
+                        section: self.inspector,
+                    });
+                }
+            }
+            "New alert from here" => self.new_rule(),
+            "Mark this symbol" => {
+                let free = ('a'..='z').find(|letter| !self.marks.contains_key(letter));
+                if let (Some(letter), Some(selected)) = (free, self.selected()) {
+                    self.marks.insert(letter, selected);
+                    self.message = Some(format!("Marked as {letter}"));
+                }
+            }
+            "Copy symbol path" => self.copy('y'),
+            _ => {}
+        }
+    }
+
+    /// Moves the focus through the dependency cycles, in the diagram.
+    fn step_cycle(&mut self, forward: bool) {
+        let Some(analysis) = &self.analysis else {
+            return;
+        };
+        let mut cycles = ModuleGraph::of(&analysis.view()).cycles();
+        for cycle in &mut cycles {
+            cycle.sort();
+        }
+        cycles.sort();
+        let count = cycles.len();
+        if count == 0 {
+            self.message = Some("No dependency cycles".to_owned());
+            return;
+        }
+        let next = match (self.cycle_at, forward) {
+            (None, true) => 0,
+            (None, false) => count - 1,
+            (Some(at), true) => (at + 1) % count,
+            (Some(at), false) => (at + count - 1) % count,
+        };
+        self.cycle_at = Some(next);
+        if let Some(first) = cycles.get(next).and_then(|cycle| cycle.first()).cloned() {
+            self.diagram.level = None;
+            self.jump(Place {
+                view: View::Diagram,
+                focus: Some(first),
+                section: self.inspector,
+            });
+        }
+    }
+
+    /// Writes the diagram of this view to a file, as `cyclops export` would.
+    fn export(&mut self, arguments: &str) {
+        let mut words = arguments.split_whitespace();
+        let (Some(format), Some(path)) = (words.next(), words.next()) else {
+            self.message =
+                Some("Use :export FORMAT PATH, such as :export mermaid out.mmd".to_owned());
+            return;
+        };
+        let Some(drawing) = self.drawing() else {
+            return;
+        };
+        self.effects.push(Effect::Export {
+            format: format.to_owned(),
+            path: path.to_owned(),
+            view: drawing.view,
+            level: drawing.level,
+            overlay: Some(self.lens.metric),
+        });
+    }
+
     /// Steps the focus through every alert, worst first.
     fn step_alert(&mut self, forward: bool) {
         let alerts = self.stepped_alerts();
@@ -2093,25 +2539,68 @@ impl App {
     }
 
     fn diagram_step(&mut self, columns: isize, rows: isize) {
-        let Some(drawing) = self.drawing() else {
+        let Some((_, scene)) = self.scene() else {
             return;
         };
-        let current = self.selected();
-        let here = drawing
-            .placed
-            .iter()
-            .find(|placed| Some(&placed.id) == current.as_ref())
-            .or_else(|| drawing.placed.first());
-        let Some(here) = here else {
+        let selected = self.selected();
+        let card = selected
+            .as_ref()
+            .and_then(|id| scene.card_holding(id))
+            .or_else(|| scene.cards.first());
+        let Some(card) = card else {
             return;
         };
-        let column = here.column.saturating_add_signed(columns);
-        let row = here.row.saturating_add_signed(rows);
-        let next = drawing
-            .placed
+        if columns == 0 && self.diagram.expanded.contains(&card.id) {
+            let mut stops = vec![card.id.clone()];
+            stops.extend(card.rows.iter().filter_map(|row| match row {
+                BoxRow::Member { id, .. } => Some(id.clone()),
+                _ => None,
+            }));
+            let here = selected
+                .as_ref()
+                .and_then(|id| stops.iter().position(|stop| stop == id))
+                .unwrap_or(0);
+            self.diagram.selected = stops.get(moved(here, rows, stops.len())).cloned();
+            return;
+        }
+        if columns == 0 {
+            let mut same: Vec<&crate::scene::Card> = scene
+                .cards
+                .iter()
+                .filter(|other| other.column == card.column)
+                .collect();
+            same.sort_by_key(|other| other.area.y);
+            let here = same
+                .iter()
+                .position(|other| other.id == card.id)
+                .unwrap_or(0);
+            if let Some(next) = same.get(moved(here, rows, same.len())) {
+                self.diagram.selected = Some(next.id.clone());
+            }
+            return;
+        }
+        let mut columns_shown: Vec<usize> = scene.cards.iter().map(|other| other.column).collect();
+        columns_shown.sort_unstable();
+        columns_shown.dedup();
+        let here = columns_shown
             .iter()
-            .filter(|placed| placed.column == column && (columns != 0 || placed.row == row))
-            .min_by_key(|placed| placed.row.abs_diff(row));
+            .position(|column| *column == card.column)
+            .unwrap_or(0);
+        let Some(target) = here
+            .checked_add_signed(columns)
+            .and_then(|index| columns_shown.get(index))
+        else {
+            return;
+        };
+        let level = selected
+            .as_ref()
+            .and_then(|id| card.row_of(id))
+            .unwrap_or(card.area.y);
+        let next = scene
+            .cards
+            .iter()
+            .filter(|other| other.column == *target)
+            .min_by_key(|other| other.area.y.abs_diff(level));
         if let Some(next) = next {
             self.diagram.selected = Some(next.id.clone());
         }
@@ -2148,6 +2637,12 @@ impl App {
                     .symbol(&selected)
                     .is_some_and(|symbol| symbol.kind.is_type())
                 {
+                    if !self.diagram.expanded.remove(&selected) {
+                        self.diagram.expanded.insert(selected);
+                    }
+                    return;
+                }
+                if self.type_of_member(&selected).is_some() {
                     return;
                 }
                 let lower = match self.diagram.level.unwrap_or_else(|| self.natural_level()) {
@@ -2214,6 +2709,15 @@ impl App {
     }
 
     fn up_a_level(&mut self) {
+        if self.view == View::Diagram
+            && let Some(selected) = self.selected()
+        {
+            let holder = self.type_of_member(&selected).unwrap_or(selected);
+            if self.diagram.expanded.remove(&holder) {
+                self.diagram.selected = Some(holder);
+                return;
+            }
+        }
         if self.view == View::Diagram
             && let Some(drill) = self.diagram.drills.pop()
         {
@@ -2304,6 +2808,13 @@ impl App {
                     self.popup = Some(popup);
                 }
             }
+            Popup::RelationPicker {
+                typed,
+                ticked,
+                cursor,
+            } => self.relation_picker_key(key, typed, ticked, cursor),
+            Popup::MoreNodes { hidden, cursor } => self.more_nodes_key(key, hidden, cursor),
+            Popup::ContextMenu { cursor } => self.context_menu_key(key, cursor),
             Popup::ConfirmPrecise => {
                 if matches!(key, Key::Char('y' | 'Y')) {
                     self.analyze(true);
@@ -2348,6 +2859,128 @@ impl App {
         }
     }
 
+    fn relation_picker_key(
+        &mut self,
+        key: Key,
+        mut typed: String,
+        mut ticked: Vec<RelationKind>,
+        mut cursor: usize,
+    ) {
+        match key {
+            Key::Esc => {}
+            Key::Enter => {
+                let choices = relation_choices(&typed);
+                if typed.is_empty() && ticked.is_empty() {
+                    self.message = Some("Pick at least one kind of relation.".to_owned());
+                } else if typed.is_empty() {
+                    self.diagram.relations = if ticked.len() == RELATION_ORDER.len() {
+                        Vec::new()
+                    } else {
+                        RelationKind::ALL
+                            .into_iter()
+                            .filter(|kind| ticked.contains(kind))
+                            .collect()
+                    };
+                } else if let Some(kind) = choices.first() {
+                    self.diagram.relations = vec![*kind];
+                }
+            }
+            Key::Char(' ') => {
+                if let Some(kind) = relation_choices(&typed).get(cursor) {
+                    if let Some(at) = ticked.iter().position(|one| one == kind) {
+                        ticked.remove(at);
+                    } else {
+                        ticked.push(*kind);
+                    }
+                }
+                self.popup = Some(Popup::RelationPicker {
+                    typed,
+                    ticked,
+                    cursor,
+                });
+            }
+            Key::Down | Key::Ctrl('n') => {
+                cursor = moved(cursor, 1, relation_choices(&typed).len());
+                self.popup = Some(Popup::RelationPicker {
+                    typed,
+                    ticked,
+                    cursor,
+                });
+            }
+            Key::Up => {
+                cursor = cursor.saturating_sub(1);
+                self.popup = Some(Popup::RelationPicker {
+                    typed,
+                    ticked,
+                    cursor,
+                });
+            }
+            Key::Backspace => {
+                typed.pop();
+                self.popup = Some(Popup::RelationPicker {
+                    typed,
+                    ticked,
+                    cursor: 0,
+                });
+            }
+            Key::Char(character) => {
+                typed.push(character);
+                self.popup = Some(Popup::RelationPicker {
+                    typed,
+                    ticked,
+                    cursor: 0,
+                });
+            }
+            _ => {
+                self.popup = Some(Popup::RelationPicker {
+                    typed,
+                    ticked,
+                    cursor,
+                });
+            }
+        }
+    }
+
+    fn more_nodes_key(&mut self, key: Key, hidden: Vec<SymbolId>, cursor: usize) {
+        match key {
+            Key::Esc | Key::Char('q') => {}
+            Key::Enter => {
+                if let Some(id) = hidden.get(cursor).cloned() {
+                    self.promote(id);
+                }
+            }
+            Key::Char('j') | Key::Down => {
+                let cursor = moved(cursor, 1, hidden.len());
+                self.popup = Some(Popup::MoreNodes { hidden, cursor });
+            }
+            Key::Char('k') | Key::Up => {
+                let cursor = cursor.saturating_sub(1);
+                self.popup = Some(Popup::MoreNodes { hidden, cursor });
+            }
+            _ => self.popup = Some(Popup::MoreNodes { hidden, cursor }),
+        }
+    }
+
+    fn context_menu_key(&mut self, key: Key, cursor: usize) {
+        match key {
+            Key::Esc | Key::Char('q') => {}
+            Key::Enter => {
+                if let Some((label, _)) = CONTEXT_MENU.get(cursor) {
+                    self.context_action(label);
+                }
+            }
+            Key::Char('j') | Key::Down => {
+                let cursor = moved(cursor, 1, CONTEXT_MENU.len());
+                self.popup = Some(Popup::ContextMenu { cursor });
+            }
+            Key::Char('k') | Key::Up => {
+                let cursor = cursor.saturating_sub(1);
+                self.popup = Some(Popup::ContextMenu { cursor });
+            }
+            _ => self.popup = Some(Popup::ContextMenu { cursor }),
+        }
+    }
+
     fn space_action(&mut self, letter: char) {
         if let Some(view) = View::by_letter(letter) {
             self.switch_view(view);
@@ -2361,9 +2994,7 @@ impl App {
                 self.tests_override = Some(self.lens.tests);
                 self.analyze(false);
             }
-            'x' => {
-                self.message = Some("Export this view with :export FORMAT PATH".to_owned());
-            }
+            'x' => self.open_prompt(PromptKind::Command, "export ".to_owned()),
             '?' => self.popup = Some(Popup::Help { all: true }),
             'q' => self.quit(),
             _ => {}
@@ -2617,7 +3248,7 @@ impl App {
                         None => self.message = Some(format!("Unknown theme: {value}")),
                     }
                 } else if other == "export" || other.starts_with("export ") {
-                    self.message = Some("Exporting from here is not available yet.".to_owned());
+                    self.export(other.trim_start_matches("export").trim());
                 } else {
                     self.message = Some(format!("Unknown command: {other}"));
                 }
@@ -2672,6 +3303,37 @@ const fn scope_of_kind(kind: SymbolKind) -> Option<Scope> {
         SymbolKind::Package | SymbolKind::Field | SymbolKind::Constant => None,
     }
 }
+
+/// The relation kinds, in the order the relation picker lists them.
+pub const RELATION_ORDER: [RelationKind; 6] = [
+    RelationKind::Imports,
+    RelationKind::Implements,
+    RelationKind::Inherits,
+    RelationKind::Composes,
+    RelationKind::Uses,
+    RelationKind::Calls,
+];
+
+/// The relation kinds the picker offers for what was typed.
+#[must_use]
+pub fn relation_choices(typed: &str) -> Vec<RelationKind> {
+    RELATION_ORDER
+        .into_iter()
+        .filter(|kind| kind.name().contains(typed.trim()))
+        .collect()
+}
+
+/// The actions of the right-click menu, and their keys.
+pub const CONTEXT_MENU: [(&str, &str); 8] = [
+    ("Why is it high?", "gd"),
+    ("What depends on it?", "gr"),
+    ("Clones", "gc"),
+    ("Open in editor", "gf"),
+    ("Show in diagram", "Space d"),
+    ("New alert from here", "A"),
+    ("Mark this symbol", "m"),
+    ("Copy symbol path", "yy"),
+];
 
 /// Moves an index by some steps, staying within `count`.
 fn moved(here: usize, by: isize, count: usize) -> usize {
@@ -2936,10 +3598,7 @@ mod tests {
         let mut app = app();
         press(&mut app, "<Space>");
         assert_eq!(app.popup_name(), Some("space menu"));
-        assert_eq!(
-            app.popup_keys().into_iter().collect::<String>(),
-            "?adefmopqrstx"
-        );
+        assert_eq!(app.popup_keys().concat(), "?adefmopqrstx");
         press(&mut app, "z");
         assert_eq!(app.popup_name(), None);
         assert_eq!(app.view(), View::Overview);
@@ -2956,7 +3615,7 @@ mod tests {
         assert_eq!(app.popup_name(), None);
         app.update(Input::Tick(HINT_DELAY_MS + 100));
         assert_eq!(app.popup_name(), Some("key hints"));
-        assert_eq!(app.popup_keys().into_iter().collect::<String>(), "Tcdfgrt");
+        assert_eq!(app.popup_keys().concat(), "Tcdfgrt");
         press(&mut app, "t");
         assert_eq!(app.popup_name(), None);
         assert_eq!(app.view(), View::Map);
@@ -3220,6 +3879,84 @@ mod tests {
                 .iter()
                 .any(|effect| matches!(effect, Effect::Analyze { .. }))
         );
+    }
+
+    #[test]
+    fn the_relation_picker_picks_one_or_applies_what_is_ticked() {
+        let mut app = app();
+        press(&mut app, "<Space>dr");
+        assert_eq!(app.popup_name(), Some("relation picker"));
+        press(&mut app, "imports<CR>");
+        assert_eq!(app.diagram_relations(), &[RelationKind::Imports]);
+        press(&mut app, "r<Space><CR>");
+        assert_eq!(app.message(), Some("Pick at least one kind of relation."));
+        assert_eq!(app.diagram_relations(), &[RelationKind::Imports]);
+        let mut app = self::app();
+        press(&mut app, "<Space>dr<Space><CR>");
+        assert_eq!(
+            app.diagram_relations(),
+            &[
+                RelationKind::Implements,
+                RelationKind::Inherits,
+                RelationKind::Composes,
+                RelationKind::Uses,
+                RelationKind::Calls,
+            ]
+        );
+    }
+
+    #[test]
+    fn dragging_the_divider_widens_the_inspector() {
+        let mut app = app();
+        press(&mut app, "<Space>eK");
+        assert_eq!(app.inspector_width(), Some(58));
+        app.set_hits(vec![(Rect::new(62, 2, 1, 30), Target::Divider)]);
+        let mouse = |kind, column| Input::Mouse {
+            kind,
+            column,
+            row: 10,
+        };
+        app.update(mouse(MouseKind::Click, 62));
+        app.update(mouse(MouseKind::Drag, 57));
+        app.update(mouse(MouseKind::Release, 57));
+        assert_eq!(app.inspector_width(), Some(63));
+        app.update(mouse(MouseKind::Drag, 40));
+        assert_eq!(app.inspector_width(), Some(63));
+    }
+
+    #[test]
+    fn the_status_line_can_be_clicked() {
+        let mut app = app();
+        app.set_hits(vec![
+            (Rect::new(10, 34, 8, 1), Target::Chip("metric")),
+            (Rect::new(20, 34, 8, 1), Target::Chip("filter")),
+        ]);
+        app.update(Input::Mouse {
+            kind: MouseKind::Click,
+            column: 12,
+            row: 34,
+        });
+        assert_eq!(app.popup_name(), Some("metric picker"));
+        assert_eq!(app.mode(), Mode::Normal);
+        press(&mut app, "<Esc>");
+        app.update(Input::Mouse {
+            kind: MouseKind::Click,
+            column: 22,
+            row: 34,
+        });
+        assert_eq!(app.mode(), Mode::Filter);
+    }
+
+    #[test]
+    fn the_right_click_menu_lists_every_action_with_its_keys() {
+        let mut app = app();
+        app.popup = Some(Popup::ContextMenu { cursor: 0 });
+        assert_eq!(
+            app.popup_keys(),
+            vec!["A", "Space d", "gc", "gd", "gf", "gr", "m", "yy"]
+        );
+        press(&mut app, "<Esc>");
+        assert_eq!(app.popup_name(), None);
     }
 
     #[test]

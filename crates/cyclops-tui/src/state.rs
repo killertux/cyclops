@@ -1,8 +1,10 @@
 //! The words of the interface: views, modes, panes, popups, and what it asks the world
 //! to do.
 
+use cyclops_application::diagram::{DiagramView, Level};
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::metric::MetricId;
+use cyclops_domain::relation::RelationKind;
 use cyclops_domain::settings::RawValue;
 use cyclops_domain::symbol::{SymbolId, SymbolKind};
 
@@ -231,6 +233,21 @@ pub enum Popup {
     SortPicker {
         typed: String,
     },
+    /// Picks which kinds of relations the diagram draws.
+    RelationPicker {
+        typed: String,
+        ticked: Vec<RelationKind>,
+        cursor: usize,
+    },
+    /// What a `+N more` card holds, worst first.
+    MoreNodes {
+        hidden: Vec<SymbolId>,
+        cursor: usize,
+    },
+    /// What can be done to the symbol under a right click.
+    ContextMenu {
+        cursor: usize,
+    },
 }
 
 impl Popup {
@@ -242,6 +259,9 @@ impl Popup {
             Self::Help { .. } => "help",
             Self::ConfirmPrecise => "confirm precise",
             Self::SortPicker { .. } => "sort picker",
+            Self::RelationPicker { .. } => "relation picker",
+            Self::MoreNodes { .. } => "more nodes",
+            Self::ContextMenu { .. } => "right-click menu",
         }
     }
 }
@@ -283,6 +303,14 @@ pub enum Effect {
     Load(String),
     /// Find out which indexers are ready.
     CheckIndexers,
+    /// Write a diagram to a file, the way `cyclops export` does.
+    Export {
+        format: String,
+        path: String,
+        view: DiagramView,
+        level: Level,
+        overlay: Option<MetricId>,
+    },
     Quit,
 }
 
@@ -351,6 +379,16 @@ pub enum Target {
     Menu(char),
     /// A column heading of Find, by its metric.
     Column(MetricId),
+    /// A part of the breadcrumb.
+    Breadcrumb(SymbolId),
+    /// A part of the status line: `metric`, `filter`, `tests`, `alerts` or `problems`.
+    Chip(&'static str),
+    /// The `+N more` card of a column of the diagram.
+    More(usize),
+    /// An entry of a popup, by what it says.
+    Entry(String),
+    /// The divider between a view and the inspector.
+    Divider,
 }
 
 /// A place on the trail.

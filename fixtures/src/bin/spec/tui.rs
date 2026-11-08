@@ -5,10 +5,12 @@
 use crate::scenario::{Scenario, no_cyclops};
 use crate::scratch::Scratch;
 use cyclops_application::analysis::ProjectAnalysis;
+use cyclops_application::diagram::{DiagramView, Level};
 use cyclops_application::ports::{FileSource, Partial, Progress, Step};
 use cyclops_cli::{
-    indexer_reports, init, interface_startup, precise_ready, save_rule, toggle_rule,
+    export_view, indexer_reports, init, interface_startup, precise_ready, save_rule, toggle_rule,
 };
+use cyclops_domain::metric::MetricId;
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::settings::RawValue;
 use cyclops_infra::ProjectFiles;
@@ -87,6 +89,17 @@ impl Core for Offered<'_> {
 
     fn indexers(&self) -> Vec<IndexerReport> {
         indexer_reports(self.0.root(), &self.0.environment())
+    }
+
+    fn export(
+        &self,
+        format: &str,
+        path: &str,
+        view: &DiagramView,
+        level: Level,
+        overlay: Option<MetricId>,
+    ) -> Result<String, String> {
+        export_view(self.0.root(), format, path, view, level, overlay)
     }
 }
 
@@ -340,14 +353,32 @@ impl Session {
                     .find(|view| view.name() == rest)
                     .ok_or_else(|| format!("no tab {rest}"))?,
             ),
-            "menu" => {
-                let key = space_menu()
+            "menu" => space_menu()
+                .iter()
+                .flat_map(|(_, entries)| entries.iter())
+                .find(|(_, label)| *label == rest)
+                .map_or_else(
+                    || Target::Entry(rest.to_owned()),
+                    |(key, _)| Target::Menu(*key),
+                ),
+            "breadcrumb" => Target::Breadcrumb(cyclops_domain::symbol::SymbolId::new(rest)),
+            "chip" => match rest {
+                "metric" => Target::Chip("metric"),
+                "filter" => Target::Chip("filter"),
+                "tests" => Target::Chip("tests"),
+                "alerts" => Target::Chip("alerts"),
+                "problems" => Target::Chip("problems"),
+                other => return Err(format!("no chip {other}")),
+            },
+            "divider" => Target::Divider,
+            "more" => {
+                return self
+                    .app
+                    .hits()
                     .iter()
-                    .flat_map(|(_, entries)| entries.iter())
-                    .find(|(_, label)| *label == rest)
-                    .map(|(key, _)| *key)
-                    .ok_or_else(|| format!("no menu entry {rest}"))?;
-                Target::Menu(key)
+                    .find(|(_, target)| matches!(target, Target::More(_)))
+                    .map(|(area, _)| (area.x + area.width / 2, area.y + area.height / 2))
+                    .ok_or_else(|| "there is no more card".to_owned());
             }
             "column" => Target::Column(
                 cyclops_domain::metric::MetricId::parse(rest)
@@ -395,6 +426,25 @@ impl Session {
                 }
                 Gesture::Step(step) => self.scenario.steps(&step, &no_cyclops)?,
                 Gesture::Resume => self.release(Control::Go),
+                Gesture::Drag { target, columns } => {
+                    let (column, row) = self.position_of(&target)?;
+                    self.app.update(Input::Mouse {
+                        kind: MouseKind::Click,
+                        column,
+                        row,
+                    });
+                    let to = column.saturating_add_signed(columns);
+                    self.app.update(Input::Mouse {
+                        kind: MouseKind::Drag,
+                        column: to,
+                        row,
+                    });
+                    self.app.update(Input::Mouse {
+                        kind: MouseKind::Release,
+                        column: to,
+                        row,
+                    });
+                }
             }
             self.settle()?;
         }

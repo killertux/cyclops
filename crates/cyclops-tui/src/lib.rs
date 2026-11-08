@@ -8,6 +8,7 @@ pub mod draw;
 pub mod editor;
 pub mod input;
 mod run;
+pub mod scene;
 pub mod state;
 mod tokens;
 
@@ -16,7 +17,9 @@ pub use run::{Backend, run};
 
 use app::Heard;
 use cyclops_application::analysis::ProjectAnalysis;
+use cyclops_application::diagram::{DiagramView, Level};
 use cyclops_application::ports::{Partial, Progress, Step};
+use cyclops_domain::metric::MetricId;
 use cyclops_domain::settings::RawValue;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -95,6 +98,21 @@ pub trait Core {
 
     /// Every indexer, and whether it can run.
     fn indexers(&self) -> Vec<IndexerReport>;
+
+    /// Writes a diagram to a file of the project, as `cyclops export` would. Says what it
+    /// wrote.
+    ///
+    /// # Errors
+    ///
+    /// Says why not, such as a format it does not know.
+    fn export(
+        &self,
+        format: &str,
+        path: &str,
+        view: &DiagramView,
+        level: Level,
+        overlay: Option<MetricId>,
+    ) -> Result<String, String>;
 }
 
 /// Collects what an analysis says, to hand to the interface once it is done.
@@ -166,6 +184,15 @@ pub fn perform(app: &mut App, core: &dyn Core, effect: Effect) {
             app.loaded(&path, text);
         }
         Effect::CheckIndexers => app.indexers_checked(core.indexers()),
+        Effect::Export {
+            format,
+            path,
+            view,
+            level,
+            overlay,
+        } => match core.export(&format, &path, &view, level, overlay) {
+            Ok(said) | Err(said) => app.tell(said),
+        },
         Effect::Quit => {}
     }
 }

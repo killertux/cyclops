@@ -1533,6 +1533,7 @@ pub struct Tui {
     config_text: String,
     other_config_text: String,
     user_config_text: String,
+    exported_text: String,
     language: String,
     outcome: Option<Result<Session, String>>,
     screen: String,
@@ -1617,6 +1618,112 @@ impl Tui {
 
     pub fn set_language(&mut self, language: String) {
         self.language = language;
+    }
+
+    pub fn set_exported_text(&mut self, text: String) {
+        self.exported_text = text;
+    }
+
+    /// Whether the file an export wrote has the `exported text`.
+    #[must_use]
+    pub fn exported_includes(&self) -> String {
+        self.read(|session| {
+            let written = crate::cli::files_in(session.scenario.root())
+                .difference(&session.before)
+                .find(|path| !path.starts_with(".cyclops"))
+                .and_then(|path| std::fs::read_to_string(session.scenario.root().join(path)).ok())
+                .unwrap_or_default();
+            includes(&written, &self.exported_text)
+        })
+    }
+
+    /// The tile with the most lines.
+    #[must_use]
+    pub fn largest(&self) -> String {
+        self.read(|session| Self::id_or_none(session.app.largest_tile().as_ref()))
+    }
+
+    /// The value on the `subject` tile.
+    #[must_use]
+    pub fn tile_value(&self) -> String {
+        self.read(|session| {
+            let subject = SymbolId::new(&self.subject);
+            if session.app.tiles().iter().any(|tile| tile.id == subject) {
+                session.app.shown_value(&subject, session.app.lens().metric)
+            } else {
+                NONE.into()
+            }
+        })
+    }
+
+    /// The value on the `subject` node of the diagram.
+    #[must_use]
+    pub fn node_value(&self) -> String {
+        self.read(|session| {
+            let subject = SymbolId::new(&self.subject);
+            let shown = session
+                .app
+                .drawing()
+                .is_some_and(|drawing| drawing.view.node(&subject).is_some());
+            if shown {
+                session.app.shown_value(&subject, session.app.lens().metric)
+            } else {
+                NONE.into()
+            }
+        })
+    }
+
+    /// The overlay on the `subject` member of a class box.
+    #[must_use]
+    pub fn member_value(&self) -> String {
+        self.read(|session| {
+            let subject = SymbolId::new(&self.subject);
+            session
+                .app
+                .scene()
+                .and_then(|(_, scene)| {
+                    scene.cards.iter().find_map(|card| {
+                        card.rows.iter().find_map(|row| match row {
+                            cyclops_tui::scene::BoxRow::Member { id, value, .. }
+                                if *id == subject =>
+                            {
+                                let metric = session.app.lens().metric;
+                                Some(value.map_or_else(
+                                    || NOT_APPLICABLE.to_owned(),
+                                    |value| metric.descriptor().format(value),
+                                ))
+                            }
+                            _ => None,
+                        })
+                    })
+                })
+                .unwrap_or_else(|| NONE.into())
+        })
+    }
+
+    /// The relation kinds the diagram draws, or `all`.
+    #[must_use]
+    pub fn relations(&self) -> String {
+        self.read(|session| {
+            let kinds = session.app.diagram_relations();
+            if kinds.is_empty() {
+                "all".to_owned()
+            } else {
+                let names: Vec<String> = kinds.iter().map(|kind| kind.name().to_owned()).collect();
+                names.join(", ")
+            }
+        })
+    }
+
+    /// The width of the inspector, or `closed`.
+    #[must_use]
+    pub fn inspector_width(&self) -> String {
+        self.read(|session| {
+            session
+                .app
+                .inspector_width()
+                .map_or_else(|| "closed".to_owned(), |width| width.to_string())
+        })
     }
 
     #[must_use]
@@ -1807,15 +1914,7 @@ impl Tui {
 
     #[must_use]
     pub fn popup_keys(&self) -> String {
-        self.read(|session| {
-            let keys: Vec<String> = session
-                .app
-                .popup_keys()
-                .iter()
-                .map(ToString::to_string)
-                .collect();
-            list(&keys)
-        })
+        self.read(|session| list(&session.app.popup_keys()))
     }
 
     #[must_use]
@@ -1879,18 +1978,22 @@ impl Tui {
     #[must_use]
     pub fn level(&self) -> String {
         self.read(|session| {
-            session.app.drawing().map_or_else(
-                || NONE.into(),
-                |drawing| {
-                    match drawing.level {
-                        Level::Package => "package",
-                        Level::Module => "module",
-                        Level::Type => "type",
-                        Level::Member => "member",
-                    }
-                    .into()
-                },
-            )
+            session
+                .app
+                .drawing()
+                .filter(|_| session.app.view() == cyclops_tui::state::View::Diagram)
+                .map_or_else(
+                    || NONE.into(),
+                    |drawing| {
+                        match drawing.level {
+                            Level::Package => "package",
+                            Level::Module => "module",
+                            Level::Type => "type",
+                            Level::Member => "member",
+                        }
+                        .into()
+                    },
+                )
         })
     }
 
@@ -1900,6 +2003,7 @@ impl Tui {
             session
                 .app
                 .drawing()
+                .filter(|_| session.app.view() == cyclops_tui::state::View::Diagram)
                 .map_or_else(|| NONE.into(), |drawing| drawing.depth.to_string())
         })
     }
@@ -1968,9 +2072,12 @@ impl Tui {
     #[must_use]
     pub fn marks(&self) -> String {
         self.read(|session| {
-            session
-                .app
-                .tree_marks()
+            let marks = if session.app.view() == cyclops_tui::state::View::Diagram {
+                session.app.diagram_marks()
+            } else {
+                session.app.tree_marks()
+            };
+            marks
                 .get(&SymbolId::new(&self.subject))
                 .cloned()
                 .unwrap_or_else(|| NONE.into())

@@ -35,7 +35,7 @@ A focus with nothing inside it shows its parent, with its own tile selected.
 
 Larger tiles have larger areas. `largest?` is the tile with the most lines.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys       | largest?     |
 | ----------- | --------- | ---------- | ------------ |
@@ -46,7 +46,7 @@ Larger tiles have larger areas. `largest?` is the tile with the most lines.
 `tile value?` reads the value on the `subject` tile. A tile with no value has no color
 and prints `n/a`.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                                            | subject      | tile value? |
 | -------------- | --------- | ----------------------------------------------- | ------------ | ----------- |
@@ -80,7 +80,7 @@ inside them, and the value on a tile stays whole.
 
 A kept tile keeps its whole value, so the legend says how much the filter left out.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                           | text         | includes? |
 | ----------- | --------- | ------------------------------ | ------------ | --------- |

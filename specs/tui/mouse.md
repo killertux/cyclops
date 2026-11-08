@@ -13,7 +13,7 @@ to the terminal, and `yy` copies a symbol.
 A click selects, and a double click does what `Enter` does.
 
 [//]: # "import Spec.Fixtures"
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation    | workspace | keys                                         | view?   | focus?       | selected?    |
 | -------------- | --------- | -------------------------------------------- | ------- | ------------ | ------------ |
@@ -22,7 +22,7 @@ A click selects, and a double click does what `Enter` does.
 | A double click | rust-shop | `<Space>e<double-click symbol shop::orders>` | Explore | shop::orders | shop::orders |
 | A breadcrumb   | rust-shop | `<Space>ej<click breadcrumb shop>`           | Explore | shop         | shop         |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation          | workspace | keys                                         | rows?                                                                              |
 | -------------------- | --------- | -------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -32,7 +32,7 @@ A click selects, and a double click does what `Enter` does.
 
 Each part of the status line can be clicked.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                  | popup?        | mode?  | tests? |
 | ----------- | --------- | --------------------- | ------------- | ------ | ------ |
@@ -40,7 +40,7 @@ Each part of the status line can be clicked.
 | The filter  | rust-shop | `<click chip filter>` | none          | FILTER | off    |
 | Test code   | rust-shop | `<click chip tests>`  | none          | NORMAL | on     |
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation  | workspace | keys                    | view?  |
 | ------------ | --------- | ----------------------- | ------ |
@@ -53,7 +53,7 @@ A right click selects what is under it and opens its actions. Each one shows its
 
 ![The right-click menu](design/screens/context-menu.dark.png)
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                                                           | popup?           | popup keys?                       | view?   | section? |
 | ----------- | --------- | -------------------------------------------------------------- | ---------------- | --------------------------------- | ------- | -------- |
@@ -68,7 +68,7 @@ The wheel scrolls what is under it, and pans a diagram. `Ctrl` and the wheel cha
 the diagram's depth. Dragging a divider resizes panes, and dragging a diagram pans it.
 Hovering shows what a click would do in the hint line, and changes nothing.
 
-[//]: # "decisionTable Tui -- snooze until 2099-12-31"
+[//]: # "decisionTable Tui"
 
 | # situation | workspace | keys                                  | depth? | selected? | inspector width? | text         | includes? |
 | ----------- | --------- | ------------------------------------- | ------ | --------- | ---------------- | ------------ | --------- |

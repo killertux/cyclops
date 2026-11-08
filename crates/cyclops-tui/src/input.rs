@@ -21,6 +21,10 @@ pub enum Key {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseKind {
     Click,
+    /// The button held down while the mouse moves.
+    Drag,
+    /// The button let go.
+    Release,
     DoubleClick,
     RightClick,
     Hover,
@@ -57,6 +61,11 @@ pub enum Gesture {
     Mouse {
         kind: MouseKind,
         target: String,
+    },
+    /// Dragging what a target names by some columns, such as a divider.
+    Drag {
+        target: String,
+        columns: i16,
     },
     Wait(u64),
     Resize {
@@ -115,6 +124,18 @@ fn named(name: &str) -> Result<Gesture, String> {
         "double-click" => Ok(mouse(MouseKind::DoubleClick, rest)),
         "right-click" => Ok(mouse(MouseKind::RightClick, rest)),
         "hover" => Ok(mouse(MouseKind::Hover, rest)),
+        "drag" => {
+            let (target, columns) = rest
+                .rsplit_once(' ')
+                .ok_or_else(|| format!("not a drag: {rest}"))?;
+            let columns = columns
+                .parse()
+                .map_err(|_| format!("not a distance: {columns}"))?;
+            Ok(Gesture::Drag {
+                target: target.to_owned(),
+                columns,
+            })
+        }
         _ => Err(format!("unknown key: <{name}>")),
     }
 }

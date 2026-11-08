@@ -2,8 +2,11 @@
 //! See `specs/tui/design/`.
 
 use crate::app::{App, MIN_COLUMNS, MIN_ROWS, Running, SIDE_BY_SIDE, hints, picked, space_menu};
+use crate::app::{CONTEXT_MENU, relation_choices};
+use crate::canvas::inner;
 use crate::canvas::{Canvas, fit, width};
 use crate::editor::{FIELDS, RuleEditor};
+use crate::scene::{BoxRow, Card, Route, routes};
 use crate::state::Pose;
 use crate::state::{
     OVERVIEW_METRICS, Pane, Popup, PromptKind, Section, Target, View, metric_label,
@@ -14,9 +17,11 @@ use cyclops_application::diagram::Level;
 use cyclops_application::ports::Step;
 use cyclops_domain::metric::{Heat, MetricId, Scope, Subject};
 use cyclops_domain::relation::Confidence;
+use cyclops_domain::relation::RelationKind;
 use cyclops_domain::settings::RawValue;
 use cyclops_domain::settings::Severity;
 use cyclops_domain::symbol::CodeRole;
+use cyclops_domain::symbol::SymbolId;
 use cyclops_domain::symbol::{Symbol, SymbolKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -151,6 +156,7 @@ fn grouped(count: usize) -> String {
 fn breadcrumb(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
     let y = area.y + 1;
     let parts = app.breadcrumb();
+    let ids = app.breadcrumb_ids();
     let mut x = area.x + 1;
     let last = parts.len().saturating_sub(1);
     for (index, part) in parts.iter().enumerate() {
@@ -158,7 +164,14 @@ fn breadcrumb(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
             x = canvas.text(x, y, " › ", Token::Faint, area);
         }
         let token = if index == last { Token::B } else { Token::Fg };
+        let start = x;
         x = canvas.text(x, y, part, token, area);
+        if let Some(id) = ids.get(index) {
+            canvas.hit(
+                Rect::new(start, y, x - start, 1),
+                Target::Breadcrumb(id.clone()),
+            );
+        }
     }
     let kind = app
         .focus()
@@ -220,8 +233,15 @@ fn status_line(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
         ("tests", tests),
         ("layer", layer),
     ] {
+        let start = x + 2;
         x = canvas.text(x + 2, y, label, Token::Chip, line);
         x = canvas.text(x + 1, y, value, Token::Chipa, line);
+        if let Some(chip) = ["metric", "filter", "tests"]
+            .into_iter()
+            .find(|chip| *chip == label)
+        {
+            canvas.hit(Rect::new(start, y, x - start, 1), Target::Chip(chip));
+        }
     }
     let mut parts: Vec<(String, Token)> = Vec::new();
     if let Some(analysis) = app.analysis() {
@@ -255,7 +275,18 @@ fn status_line(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
     let total: u16 = parts.iter().map(|(text, _)| width(text) + 2).sum();
     let mut x = (area.x + area.width).saturating_sub(total).max(x + 2);
     for (text, token) in parts {
+        let start = x;
         x = canvas.text(x, y, &text, token, line) + 2;
+        let chip = if text.contains("alert") {
+            Some("alerts")
+        } else if text.contains("problem") {
+            Some("problems")
+        } else {
+            None
+        };
+        if let Some(chip) = chip {
+            canvas.hit(Rect::new(start, y, x - start - 2, 1), Target::Chip(chip));
+        }
     }
 }
 
@@ -365,7 +396,7 @@ fn hint_line(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
         );
         return;
     }
-    if let Some(message) = app.message() {
+    if let Some(message) = app.message().or_else(|| app.hovering()) {
         canvas.text(area.x + 1, y, message, Token::Fg, line);
     } else {
         let mut x = area.x + 1;
@@ -409,7 +440,9 @@ fn with_inspector(
         inspector(app, canvas, body, true);
         return;
     }
-    let side = inspector_width.min(body.width / 2);
+    let side = app
+        .inspector_width_for(inspector_width)
+        .min(body.width.saturating_sub(20));
     let left = Rect {
         width: body.width - side,
         ..body
@@ -421,6 +454,10 @@ fn with_inspector(
     };
     main(app, canvas, left, active == panes.first().copied());
     inspector(app, canvas, right, active == Some(Pane::Inspector));
+    canvas.hit(
+        Rect::new(right.x, right.y, 1, right.height),
+        Target::Divider,
+    );
 }
 
 fn heat_token(heat: Option<Heat>) -> Token {
@@ -776,28 +813,53 @@ fn inspector_impact(
     body: Rect,
 ) {
     let impact = analysis.impact(&symbol.id);
-    canvas.text(
-        body.x + 1,
-        body.y,
-        &format!("Reach {}", impact.all().count()),
-        Token::B,
-        body,
-    );
-    let mut y = body.y + 2;
+    let all: Vec<&(SymbolId, Confidence)> = impact.all().collect();
+    if all.is_empty() {
+        canvas.text(
+            body.x + 1,
+            body.y,
+            "Nothing depends on this.",
+            Token::Dim,
+            body,
+        );
+        return;
+    }
+    let view = analysis.view();
+    let mut modules: Vec<SymbolId> = all
+        .iter()
+        .filter_map(|(id, _)| view.module_of(id).map(|module| module.id.clone()))
+        .collect();
+    modules.sort();
+    modules.dedup();
+    let total = view
+        .symbols()
+        .filter(|symbol| symbol.kind == SymbolKind::Module && symbol.location.is_some())
+        .count();
+    let reach = format!("Reach {}   {} of {total} modules", all.len(), modules.len());
+    canvas.text(body.x + 1, body.y, &reach, Token::B, body);
+    let guesses = all
+        .iter()
+        .filter(|(_, confidence)| *confidence != Confidence::Exact)
+        .count();
+    let sure = match guesses {
+        0 => "All of these are exact.".to_owned(),
+        1 => "1 of these is a guess.".to_owned(),
+        many => format!("{many} of these are guesses."),
+    };
+    canvas.text(body.x + 1, body.y + 1, &sure, Token::Dim, body);
+    let mut y = body.y + 3;
     for (distance, level) in impact.levels.iter().enumerate() {
+        canvas.text(
+            body.x + 1,
+            y,
+            &format!("distance {}", distance + 1),
+            Token::Faint,
+            body,
+        );
+        y += 1;
         for (id, confidence) in level {
-            let guess = if *confidence == cyclops_domain::relation::Confidence::Exact {
-                ""
-            } else {
-                " ~"
-            };
-            canvas.text(
-                body.x + 1,
-                y,
-                &format!("{}  {id}{guess}", distance + 1),
-                Token::Fg,
-                body,
-            );
+            let line = format!("  {id}  {}", confidence.name());
+            canvas.text(body.x + 1, y, &line, Token::Fg, body);
             y += 1;
         }
     }
@@ -1223,7 +1285,7 @@ fn diagram(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
         || (String::new(), SymbolKind::Package),
         |symbol| (symbol.name.clone(), symbol.kind),
     );
-    let Some(drawing) = app.drawing() else {
+    let Some((drawing, scene)) = app.scene() else {
         canvas.pane(area, "Diagram", active);
         return;
     };
@@ -1241,81 +1303,56 @@ fn diagram(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
         Level::Type => "type",
         Level::Member => "member",
     };
-    let controls = format!(
-        "level {level}   depth {}   overlay {}   relations all",
+    let relations = if app.diagram_relations().is_empty() {
+        "all".to_owned()
+    } else {
+        app.diagram_relations()
+            .iter()
+            .map(|kind| kind.name())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mut controls = format!(
+        "level {level}   depth {}   relations {relations}   overlay {}",
         drawing.depth,
         app.metric_label()
     );
+    if app.lens().filter.is_some() {
+        let all = app.unfiltered_nodes();
+        controls = format!("{controls}   {} of {all} nodes", drawing.view.nodes.len());
+    }
     canvas.text(inside.x + 1, inside.y, &controls, Token::Dim, inside);
-    let columns = drawing
-        .placed
-        .iter()
-        .map(|placed| placed.column)
-        .max()
-        .map_or(1, |most| most + 1);
-    let columns = u16::try_from(columns).unwrap_or(1).max(1);
-    let column_width = (inside.width / columns).clamp(12, 28);
+    for route in routes(&scene, &drawing.view.edges) {
+        draw_route(canvas, &route, inside);
+    }
     let selected = app.selected();
     let metric = app.lens().metric;
-    for placed in &drawing.placed {
-        let x = inside.x + 1 + u16::try_from(placed.column).unwrap_or_default() * column_width;
-        let y = inside.y + 2 + u16::try_from(placed.row).unwrap_or_default() * 4;
-        let node_area = Rect {
-            x,
-            y,
-            width: column_width.saturating_sub(4),
-            height: 3,
-        };
-        if node_area.y + node_area.height > inside.y + inside.height
-            || node_area.x + node_area.width > inside.x + inside.width
-        {
-            continue;
-        }
-        let focused = Some(&placed.id) == app.focus();
-        if focused {
-            canvas.frame(node_area, Token::Acc, ['┏', '┓', '┗', '┛', '━', '┃']);
-        } else {
-            canvas.frame(node_area, Token::Line, ['╭', '╮', '╰', '╯', '─', '│']);
-        }
-        let name = app
-            .symbol(&placed.id)
-            .map(|symbol| symbol.name.clone())
-            .unwrap_or_default();
-        let is_selected = selected.as_ref() == Some(&placed.id);
-        let label = if is_selected {
-            format!("▸{name}")
-        } else {
-            name
-        };
-        let name_row = Rect {
-            x: node_area.x + 1,
-            y: y + 1,
-            width: node_area.width.saturating_sub(2),
-            height: 1,
-        };
-        let token = if focused { Token::Accb } else { Token::B };
-        canvas.text(name_row.x, name_row.y, &label, token, name_row);
-        let value = app.shown_value(&placed.id, metric);
-        canvas.text_right(
-            name_row.x + name_row.width,
-            name_row.y,
-            &value,
-            Token::Fg,
-            name_row,
-        );
-        if is_selected {
-            canvas.paint(name_row, Token::Sel);
-        }
-        canvas.hit(node_area, Target::Symbol(placed.id.clone()));
+    let marks = app.diagram_marks();
+    for card in &scene.cards {
+        draw_card(app, canvas, card, selected.as_ref(), metric, &marks);
     }
-    let legend_y = inside.y + inside.height.saturating_sub(1);
-    canvas.text(
-        inside.x + 1,
-        legend_y,
-        "─ exact   ╌ inferred   ┄ ambiguous   > uses, calls, imports",
-        Token::Dim,
-        inside,
-    );
+    for more in &scene.more {
+        canvas.frame(more.area, Token::Line, ['╭', '╮', '╰', '╯', '─', '│']);
+        let label = format!("+{} more", more.hidden.len());
+        canvas.text(
+            more.area.x + 2,
+            more.area.y + 1,
+            &label,
+            Token::Faint,
+            more.area,
+        );
+        canvas.hit(more.area, Target::More(more.column));
+    }
+    let legend = inside.y + inside.height.saturating_sub(3);
+    let rows = [
+        "────── exact  ╌╌╌╌╌╌ inferred  ┄┄┄┄┄┄ ambiguous  ━━━━━━ cycle",
+        "> uses, imports, calls  ▷ inherits  ○ implements  ◆ composes",
+        "+ public  # restricted  - private   ! alert  @ module in a cycle",
+    ];
+    for (offset, row) in rows.iter().enumerate() {
+        let y = legend + u16::try_from(offset).unwrap_or(0);
+        canvas.text(inside.x + 1, y, row, Token::Dim, inside);
+    }
 }
 
 fn map(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
@@ -1329,30 +1366,18 @@ fn map(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
     };
     let tiles = app.tiles();
     let metric = app.lens().metric;
-    let sizes: Vec<f64> = tiles
-        .iter()
-        .map(|tile| {
-            analysis
-                .value(&Subject::Symbol(tile.id.clone()), MetricId::Lines)
-                .unwrap_or(1.0)
-                .max(1.0)
-        })
-        .collect();
-    let total: f64 = sizes.iter().sum();
+    let sizes: Vec<f64> = tiles.iter().map(|tile| app.tile_lines(&tile.id)).collect();
     let room = Rect {
         height: inside.height.saturating_sub(1),
         ..inside
     };
-    let mut x = room.x;
     let selected = app.selected();
-    for (tile, size) in tiles.iter().zip(&sizes) {
-        let share = if total > 0.0 { size / total } else { 0.0 };
-        let cells = steps(share, room.width).max(1);
+    let marks = app.tree_marks();
+    for (tile, slot) in tiles.iter().zip(squarify(&sizes, room)) {
         let tile_area = Rect {
-            x,
-            y: room.y,
-            width: cells.saturating_sub(1).max(1),
-            height: room.height,
+            width: slot.width.saturating_sub(1).max(1),
+            height: slot.height.saturating_sub(1).max(1),
+            ..slot
         };
         let token = match value_token(analysis, tile, metric) {
             Token::H1 => Token::T2,
@@ -1367,31 +1392,25 @@ fn map(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
         } else {
             ""
         };
-        canvas.text(
-            tile_area.x,
-            tile_area.y,
-            &format!("{marker}{}", tile.name),
-            token,
-            tile_area,
-        );
-        canvas.text(
-            tile_area.x,
-            tile_area.y + 1,
-            &app.shown_value(&tile.id, metric),
-            token,
-            tile_area,
-        );
+        let mark = marks
+            .get(&tile.id)
+            .map_or_else(String::new, |mark| format!(" {mark}"));
+        let label = format!("{marker}{}{mark}", tile.name);
+        canvas.text(tile_area.x, tile_area.y, &label, token, tile_area);
+        let value = app.shown_value(&tile.id, metric);
+        canvas.text(tile_area.x, tile_area.y + 1, &value, token, tile_area);
         canvas.hit(tile_area, Target::Symbol(tile.id.clone()));
-        x += cells;
     }
-    let legend = format!("area: lines   color: {}", app.metric_label());
-    canvas.text(
-        inside.x + 1,
-        inside.y + inside.height.saturating_sub(1),
-        &legend,
-        Token::Dim,
-        inside,
-    );
+    let mut legend = format!("area: lines   color: {}", app.metric_label());
+    if app.lens().filter.is_some() {
+        legend = format!(
+            "{legend}   {} of {} tiles",
+            tiles.len(),
+            app.unfiltered_tiles()
+        );
+    }
+    let y = inside.y + inside.height.saturating_sub(1);
+    canvas.text(inside.x + 1, y, &legend, Token::Dim, inside);
 }
 
 fn find(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
@@ -1584,6 +1603,13 @@ fn popups(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
         Some(Popup::Help { all }) => help(app, canvas, body, *all),
         Some(Popup::ConfirmPrecise) => confirm_precise(canvas, body),
         Some(Popup::SortPicker { typed }) => picker(canvas, body, "Sort by", typed),
+        Some(Popup::RelationPicker {
+            typed,
+            ticked,
+            cursor,
+        }) => relation_picker(canvas, body, typed, ticked, *cursor),
+        Some(Popup::MoreNodes { hidden, cursor }) => more_nodes(app, canvas, body, hidden, *cursor),
+        Some(Popup::ContextMenu { cursor }) => context_menu(app, canvas, body, *cursor),
         None => {}
     }
 }
@@ -2542,4 +2568,427 @@ fn rule_writes(editor: &RuleEditor, canvas: &mut Canvas<'_>, bottom: Rect) {
     }
     let note = "Nothing is saved until :w. Existing lines and comments stay as they are.";
     canvas.text(writes.x + 1, y + 1, note, Token::Dim, writes);
+}
+
+/// A relation, in the line style of its confidence, with its head before the target.
+fn draw_route(canvas: &mut Canvas<'_>, route: &Route, clip: Rect) {
+    let (across, down, token) = if route.in_cycle {
+        ('━', '┃', Token::H3)
+    } else {
+        match route.confidence {
+            Confidence::Exact => ('─', '│', Token::Line),
+            Confidence::Inferred => ('╌', '╎', Token::Line),
+            Confidence::Ambiguous => ('┄', '┆', Token::Line),
+        }
+    };
+    let (sx, sy) = route.start;
+    let (ex, ey) = route.end;
+    let middle = u16::midpoint(sx, ex);
+    let line = |canvas: &mut Canvas<'_>, from: u16, to: u16, y: u16| {
+        for x in from.min(to)..=from.max(to) {
+            canvas.text(x, y, &across.to_string(), token, clip);
+        }
+    };
+    line(canvas, sx, middle, sy);
+    for y in sy.min(ey)..=sy.max(ey) {
+        canvas.text(middle, y, &down.to_string(), token, clip);
+    }
+    line(canvas, middle, ex, ey);
+    canvas.text(ex, ey, &route.head.to_string(), Token::Fg, clip);
+}
+
+/// A node: a box with its name and value, or a class box with its members.
+fn draw_card(
+    app: &App,
+    canvas: &mut Canvas<'_>,
+    card: &Card,
+    selected: Option<&SymbolId>,
+    metric: MetricId,
+    marks: &HashMap<SymbolId, String>,
+) {
+    let focused = app.focus() == Some(&card.id);
+    let (border, glyphs, divider) = if focused {
+        (Token::Acc, ['┏', '┓', '┗', '┛', '━', '┃'], ('┠', '─', '┨'))
+    } else {
+        (Token::Line, ['╭', '╮', '╰', '╯', '─', '│'], ('├', '─', '┤'))
+    };
+    canvas.fill(inner(card.area), Token::Fg);
+    canvas.frame(card.area, border, glyphs);
+    let inside = inner(card.area);
+    let mut y = inside.y;
+    let mut rows = card.rows.iter().peekable();
+    if let Some(BoxRow::Stereotype(stereotype)) = rows.peek() {
+        canvas.text(
+            inside.x + 1,
+            y,
+            &format!("«{stereotype}»"),
+            Token::Dim,
+            inside,
+        );
+        y += 1;
+        rows.next();
+    }
+    let name = app.symbol(&card.id).map_or_else(
+        || card.id.to_string(),
+        |symbol| {
+            if symbol.kind.is_type() {
+                symbol.name.clone()
+            } else {
+                symbol.id.to_string()
+            }
+        },
+    );
+    let is_selected = selected == Some(&card.id);
+    let mut label = if is_selected {
+        format!("▸{name}")
+    } else {
+        name
+    };
+    if let Some(mark) = marks.get(&card.id) {
+        label = format!("{label} {mark}");
+    }
+    let name_row = Rect {
+        y,
+        height: 1,
+        ..inside
+    };
+    let token = if focused { Token::Accb } else { Token::B };
+    canvas.text(inside.x + 1, y, &label, token, name_row);
+    let value = app.shown_value(&card.id, metric);
+    canvas.text_right(inside.x + inside.width, y, &value, Token::Fg, name_row);
+    if is_selected {
+        canvas.paint(name_row, Token::Sel);
+    }
+    canvas.hit(name_row, Target::Symbol(card.id.clone()));
+    y += 1;
+    draw_box_rows(canvas, card, rows, y, selected, metric, (border, divider));
+}
+
+/// Splits an area into one rectangle for each weight, keeping each close to square: a
+/// squarified treemap. A cell is about twice as tall as it is wide, so widths count
+/// double.
+fn squarify(weights: &[f64], area: Rect) -> Vec<Rect> {
+    let weight = |index: usize| weights.get(index).copied().unwrap_or(0.0);
+    let mut placed = vec![Rect::default(); weights.len()];
+    let mut order: Vec<usize> = (0..weights.len()).collect();
+    order.sort_by(|a, b| weight(*b).total_cmp(&weight(*a)));
+    let mut left = area;
+    let mut remaining: f64 = weights.iter().sum();
+    let mut index = 0;
+    while index < order.len() && left.width > 0 && left.height > 0 && remaining > 0.0 {
+        let wide = left.width >= left.height * 2;
+        let side = if wide {
+            f64::from(left.height) * 2.0
+        } else {
+            f64::from(left.width)
+        };
+        let scale = f64::from(left.width) * f64::from(left.height) * 2.0 / remaining;
+        let row = best_row(order.get(index..).unwrap_or_default(), &weight, scale, side);
+        let row_weight: f64 = row.iter().map(|member| weight(*member)).sum();
+        let last = index + row.len() >= order.len();
+        left = place_row(
+            &mut placed,
+            &row,
+            &weight,
+            left,
+            row_weight / remaining,
+            wide,
+            last,
+        );
+        remaining -= row_weight;
+        index += row.len().max(1);
+    }
+    placed
+}
+
+/// Lists entries of a popup, each one clickable, with the current one marked.
+fn popup_entries(canvas: &mut Canvas<'_>, area: Rect, entries: &[(String, String)], cursor: usize) {
+    for (index, (label, right)) in entries.iter().enumerate() {
+        let y = area.y + 2 + u16::try_from(index).unwrap_or(u16::MAX);
+        if y + 1 >= area.y + area.height {
+            break;
+        }
+        let row = Rect {
+            x: area.x + 1,
+            y,
+            width: area.width.saturating_sub(2),
+            height: 1,
+        };
+        let token = if index == cursor {
+            Token::Pops
+        } else {
+            Token::Pop
+        };
+        canvas.fill(row, token);
+        canvas.text(row.x + 1, y, label, token, row);
+        canvas.text_right(row.x + row.width - 1, y, right, Token::Popk, row);
+        canvas.hit(row, Target::Entry(label.clone()));
+    }
+}
+
+fn relation_picker(
+    canvas: &mut Canvas<'_>,
+    body: Rect,
+    typed: &str,
+    ticked: &[RelationKind],
+    cursor: usize,
+) {
+    let choices = relation_choices(typed);
+    let area = Rect {
+        x: body.x + body.width.saturating_sub(60) / 2,
+        y: body.y + 1,
+        width: 60.min(body.width),
+        height: (u16::try_from(choices.len()).unwrap_or(0) + 4).min(body.height),
+    };
+    popup_frame(canvas, area, "Relations");
+    canvas.text(
+        area.x + 2,
+        area.y + 1,
+        &format!("› {typed}█"),
+        Token::Popb,
+        area,
+    );
+    let entries: Vec<(String, String)> = choices
+        .iter()
+        .map(|kind| {
+            let tick = if ticked.contains(kind) { "[x]" } else { "[ ]" };
+            (format!("{tick} {}", kind.name()), String::new())
+        })
+        .collect();
+    popup_entries(canvas, area, &entries, cursor);
+}
+
+fn more_nodes(app: &App, canvas: &mut Canvas<'_>, body: Rect, hidden: &[SymbolId], cursor: usize) {
+    let area = Rect {
+        x: body.x + body.width.saturating_sub(56) / 2,
+        y: body.y + 1,
+        width: 56.min(body.width),
+        height: (u16::try_from(hidden.len())
+            .unwrap_or(u16::MAX)
+            .saturating_add(3))
+        .min(body.height),
+    };
+    popup_frame(canvas, area, &format!("{} more", hidden.len()));
+    let metric = app.lens().metric;
+    let entries: Vec<(String, String)> = hidden
+        .iter()
+        .map(|id| (id.to_string(), app.shown_value(id, metric)))
+        .collect();
+    popup_entries(
+        canvas,
+        Rect {
+            y: area.y.saturating_sub(1),
+            ..area
+        },
+        &entries,
+        cursor,
+    );
+}
+
+fn context_menu(app: &App, canvas: &mut Canvas<'_>, body: Rect, cursor: usize) {
+    let name = app
+        .selected()
+        .and_then(|id| app.symbol(&id).map(|symbol| symbol.name.clone()))
+        .unwrap_or_default();
+    let area = Rect {
+        x: body.x + 20.min(body.width / 4),
+        y: body.y + 3,
+        width: 38.min(body.width),
+        height: (u16::try_from(CONTEXT_MENU.len()).unwrap_or(0) + 3).min(body.height),
+    };
+    popup_frame(canvas, area, "");
+    canvas.text(area.x + 2, area.y + 1, &name, Token::Popb, area);
+    let entries: Vec<(String, String)> = CONTEXT_MENU
+        .iter()
+        .map(|(label, keys)| ((*label).to_owned(), (*keys).to_owned()))
+        .collect();
+    popup_entries(
+        canvas,
+        Rect {
+            y: area.y.saturating_sub(0),
+            ..area
+        },
+        &entries,
+        cursor,
+    );
+}
+
+/// The rows of a class box below its name: dividers, members and `+N more`.
+fn draw_box_rows<'a>(
+    canvas: &mut Canvas<'_>,
+    card: &Card,
+    rows: impl Iterator<Item = &'a BoxRow>,
+    mut y: u16,
+    selected: Option<&SymbolId>,
+    metric: MetricId,
+    style: (Token, (char, char, char)),
+) {
+    let (border, divider) = style;
+    let inside = inner(card.area);
+    for row in rows {
+        let line = Rect {
+            y,
+            height: 1,
+            ..inside
+        };
+        match row {
+            BoxRow::Divider => {
+                let (left, across, right) = divider;
+                let text = format!(
+                    "{left}{}{right}",
+                    across
+                        .to_string()
+                        .repeat(usize::from(card.area.width.saturating_sub(2)))
+                );
+                canvas.text(card.area.x, y, &text, border, card.area);
+            }
+            BoxRow::Member {
+                id,
+                text,
+                value,
+                alerted,
+            } => {
+                let mark = if *alerted { " !" } else { "" };
+                let pointer = if selected == Some(id) { "▸" } else { " " };
+                canvas.text(
+                    inside.x,
+                    y,
+                    &format!("{pointer}{text}{mark}"),
+                    Token::Fg,
+                    line,
+                );
+                let shown = value.map_or_else(
+                    || "n/a".to_owned(),
+                    |value| metric.descriptor().format(value),
+                );
+                canvas.text_right(inside.x + inside.width, y, &shown, Token::Fg, line);
+                if selected == Some(id) {
+                    canvas.paint(line, Token::Sel);
+                }
+                canvas.hit(line, Target::Symbol(id.clone()));
+            }
+            BoxRow::More(count) => {
+                canvas.text(
+                    inside.x + 1,
+                    y,
+                    &format!("+{count} more"),
+                    Token::Faint,
+                    line,
+                );
+            }
+            BoxRow::Stereotype(_) => {}
+        }
+        y += 1;
+    }
+}
+
+/// The members of the next row: as many as keep the worst ratio of sides from growing.
+fn best_row(next: &[usize], weight: &dyn Fn(usize) -> f64, scale: f64, side: f64) -> Vec<usize> {
+    let mut row: Vec<usize> = Vec::new();
+    let mut total = 0.0;
+    let mut worst = f64::INFINITY;
+    for member in next {
+        let trial = total + weight(*member);
+        let thickness = trial * scale / side;
+        let ratio = row
+            .iter()
+            .chain(std::iter::once(member))
+            .map(|one| {
+                let length = weight(*one) * scale / thickness;
+                (length / thickness).max(thickness / length)
+            })
+            .fold(0.0, f64::max);
+        if !row.is_empty() && ratio > worst {
+            break;
+        }
+        worst = ratio;
+        row.push(*member);
+        total = trial;
+    }
+    row
+}
+
+/// Places one row along the short side of what is left, and returns what is left after.
+fn place_row(
+    placed: &mut [Rect],
+    row: &[usize],
+    weight: &dyn Fn(usize) -> f64,
+    left: Rect,
+    share: f64,
+    wide: bool,
+    last: bool,
+) -> Rect {
+    let total: f64 = row.iter().map(|member| weight(*member)).sum();
+    let (across, along) = if wide {
+        (left.width, left.height)
+    } else {
+        (left.height, left.width)
+    };
+    let thickness = if last {
+        across
+    } else {
+        steps(share, across).max(1)
+    };
+    let mut offset = 0;
+    for (position, member) in row.iter().enumerate() {
+        let length = if position + 1 == row.len() {
+            along - offset
+        } else {
+            steps(weight(*member) / total.max(f64::MIN_POSITIVE), along).max(1)
+        };
+        let rect = if wide {
+            Rect::new(left.x, left.y + offset, thickness, length)
+        } else {
+            Rect::new(left.x + offset, left.y, length, thickness)
+        };
+        if let Some(slot) = placed.get_mut(*member) {
+            *slot = rect;
+        }
+        offset += length;
+    }
+    if wide {
+        Rect::new(
+            left.x + thickness,
+            left.y,
+            left.width.saturating_sub(thickness),
+            left.height,
+        )
+    } else {
+        Rect::new(
+            left.x,
+            left.y + thickness,
+            left.width,
+            left.height.saturating_sub(thickness),
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cells(rect: Rect) -> u32 {
+        u32::from(rect.width) * u32::from(rect.height)
+    }
+
+    #[test]
+    fn a_treemap_fills_the_area_and_larger_weighs_more() {
+        let area = Rect::new(0, 0, 60, 20);
+        let tiles = squarify(&[10.0, 40.0, 20.0, 30.0], area);
+        let total: u32 = tiles.iter().map(|tile| cells(*tile)).sum();
+        assert_eq!(total, cells(area));
+        let size = |index: usize| tiles.get(index).map_or(0, |tile| cells(*tile));
+        assert!(size(1) > size(3) && size(3) > size(2) && size(2) > size(0));
+        for tile in &tiles {
+            assert!(
+                tile.x + tile.width <= 60 && tile.y + tile.height <= 20,
+                "{tile:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn nothing_to_lay_out_is_nothing_drawn() {
+        assert_eq!(squarify(&[], Rect::new(0, 0, 10, 10)), Vec::new());
+    }
 }
