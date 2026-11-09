@@ -384,6 +384,36 @@ impl Session {
                 cyclops_domain::metric::MetricId::parse(rest)
                     .ok_or_else(|| format!("no column {rest}"))?,
             ),
+            "metric" => Target::Metric(
+                cyclops_domain::metric::MetricId::parse(&rest.replace(' ', "_"))
+                    .ok_or_else(|| format!("no metric {rest}"))?,
+            ),
+            "rule" => Target::Rule(
+                self.app
+                    .listed_rules()
+                    .iter()
+                    .position(|(_, rule)| rule.title() == rest)
+                    .ok_or_else(|| format!("no rule {rest}"))?,
+            ),
+            "problem" => Target::Problem(
+                self.app
+                    .analysis()
+                    .and_then(|analysis| {
+                        analysis.problems().iter().position(|problem| {
+                            problem.path().is_some_and(|path| path.as_str() == rest)
+                        })
+                    })
+                    .ok_or_else(|| format!("no problem {rest}"))?,
+            ),
+            "section" => Target::Section(
+                cyclops_tui::state::Section::ALL
+                    .into_iter()
+                    .find(|section| section.name() == rest)
+                    .ok_or_else(|| format!("no section {rest}"))?,
+            ),
+            "line" => Target::Line(rest.parse().map_err(|_| format!("not a line: {rest}"))?),
+            "popup" => Target::Popup,
+            "outside" => return self.outside_popup(),
             other => return Err(format!("unknown target: {other}")),
         };
         self.app
@@ -392,6 +422,27 @@ impl Session {
             .find(|(_, target)| *target == wanted)
             .map(|(area, _)| (area.x + area.width / 2, area.y + area.height / 2))
             .ok_or_else(|| format!("{target} is not on screen"))
+    }
+
+    /// A place on the screen outside the open popup: a bottom corner it does not cover.
+    fn outside_popup(&self) -> Result<(u16, u16), String> {
+        let popup = self
+            .app
+            .hits()
+            .iter()
+            .find(|(_, target)| *target == Target::Popup)
+            .map(|(area, _)| *area)
+            .ok_or_else(|| "there is no popup".to_owned())?;
+        let (columns, rows) = self.app.size();
+        let bottom = rows.saturating_sub(1);
+        [(0, bottom), (columns.saturating_sub(1), bottom), (0, 0)]
+            .into_iter()
+            .find(|(x, y)| {
+                let inside_x = *x >= popup.x && *x < popup.x + popup.width;
+                let inside_y = *y >= popup.y && *y < popup.y + popup.height;
+                !(inside_x && inside_y)
+            })
+            .ok_or_else(|| "the popup covers the screen".to_owned())
     }
 
     /// Does what the `keys` column says.

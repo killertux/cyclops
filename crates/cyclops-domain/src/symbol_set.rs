@@ -69,7 +69,12 @@ impl SymbolSet {
         parent: SymbolId,
         file: &RelativePath,
     ) -> SymbolId {
-        let id = self.ids.unique(id);
+        // A field gives way to a method of the same name, as a getter has.
+        let id = if fact.kind == SymbolKind::Field {
+            self.ids.unique_as(id, "field")
+        } else {
+            self.ids.unique(id)
+        };
         let symbol = Symbol::from_fact(fact, id.clone(), Some(parent), file);
         self.positions.insert(id.clone(), self.symbols.len());
         self.symbols.push(symbol);

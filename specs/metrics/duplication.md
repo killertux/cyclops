@@ -27,10 +27,10 @@ else. `web/` has a TypeScript version.
 Rust and TypeScript copies of the same logic are not reported together, as the first
 row shows.
 
-## Measuring a file
+## Measuring a file or a function
 
-`duplication?` is the percentage of the code lines of a file or module that are part
-of a copy.
+`duplication?` is the percentage of the code lines of a function, file or module that
+are part of a copy. A type is measured over all its lines, like a module.
 
 [//]: # "decisionTable Core"
 
@@ -42,6 +42,19 @@ of a copy.
 | None of it        | clones    | src/unique.rs  | 0.00         |
 | A TypeScript file | clones    | web/total.ts   | 100.00       |
 | A folder          | clones    | web            | 100.00       |
+
+[//]: # "decisionTable Core"
+
+| # situation           | workspace | subject                   | duplication? |
+| --------------------- | --------- | ------------------------- | ------------ |
+| A copied function     | clones    | clones::first::total      | 100.00       |
+| The copy in a file    | clones    | clones::partial::total    | 100.00       |
+| The rest of that file | clones    | clones::partial::describe | 0.00         |
+| A renamed copy        | clones    | clones::renamed::amount   | 100.00       |
+| No copies             | clones    | clones::unique::average   | 0.00         |
+| A TypeScript function | clones    | web/total::total          | 100.00       |
+
+The Overview and the ranking still rank duplication by file.
 
 ## Reading a group
 

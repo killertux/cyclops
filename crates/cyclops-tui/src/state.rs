@@ -244,6 +244,11 @@ pub enum Popup {
         hidden: Vec<SymbolId>,
         cursor: usize,
     },
+    /// The tiles a `+N small` tile of the map stands for.
+    SmallTiles {
+        tiles: Vec<SymbolId>,
+        cursor: usize,
+    },
     /// What can be done to the symbol under a right click.
     ContextMenu {
         cursor: usize,
@@ -261,6 +266,7 @@ impl Popup {
             Self::SortPicker { .. } => "sort picker",
             Self::RelationPicker { .. } => "relation picker",
             Self::MoreNodes { .. } => "more nodes",
+            Self::SmallTiles { .. } => "small tiles",
             Self::ContextMenu { .. } => "right-click menu",
         }
     }
@@ -389,6 +395,29 @@ pub enum Target {
     Entry(String),
     /// The divider between a view and the inspector.
     Divider,
+    /// A row of the Overview's metric list.
+    Metric(MetricId),
+    /// A rule of the Alerts list, by its place in the list.
+    Rule(usize),
+    /// A problem of Status, by its place in the list.
+    Problem(usize),
+    /// A section of the inspector.
+    Section(Section),
+    /// A line of the source in Why.
+    Line(u32),
+    /// The open popup, anywhere inside it.
+    Popup,
+    /// A list the wheel scrolls, with how far it can scroll.
+    List(Scroll, usize),
+}
+
+/// The lists the wheel scrolls, each on its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Scroll {
+    Tree,
+    Results,
+    Hits,
+    Popup,
 }
 
 /// A place on the trail.

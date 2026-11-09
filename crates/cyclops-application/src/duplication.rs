@@ -6,7 +6,7 @@ use cyclops_domain::facts::{FileFacts, Token};
 use cyclops_domain::metric::{Measurement, MetricId, Subject};
 use cyclops_domain::model::TestCode;
 use cyclops_domain::path::RelativePath;
-use cyclops_domain::symbol::SymbolKind;
+use cyclops_domain::symbol::{Symbol, SymbolKind};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// How many other places a window is compared with, so that very common code cannot make
@@ -278,6 +278,37 @@ impl Duplication {
                 total.1 += code;
             }
         }
+        let counted: BTreeSet<&RelativePath> =
+            input.counted_files().map(|file| &file.path).collect();
+        for symbol in input.model.symbols() {
+            if symbol.code_lines == 0 {
+                continue;
+            }
+            let copied = match symbol.kind {
+                SymbolKind::Function | SymbolKind::Method => self.copied_in(symbol, &counted),
+                SymbolKind::Struct | SymbolKind::Class | SymbolKind::Enum => {
+                    // A type is measured over all its lines, its methods' as well as its
+                    // own, wherever they are written.
+                    input
+                        .model
+                        .children(&symbol.id)
+                        .filter(|child| child.kind == SymbolKind::Method)
+                        .fold(self.copied_in(symbol, &counted), |sum, child| {
+                            match (sum, self.copied_in(child, &counted)) {
+                                (Some(sum), Some(more)) => Some(sum + more),
+                                (sum, more) => sum.or(more),
+                            }
+                        })
+                }
+                _ => None,
+            };
+            if let Some(copied) = copied {
+                totals.insert(
+                    Subject::Symbol(symbol.id.clone()),
+                    (copied.min(symbol.code_lines), symbol.code_lines),
+                );
+            }
+        }
         totals
             .into_iter()
             .filter(|(_, (_, code))| *code > 0)
@@ -287,6 +318,22 @@ impl Duplication {
                 value: f64::from(copied) * 100.0 / f64::from(code),
             })
             .collect()
+    }
+
+    /// How many lines of a symbol's own place are part of a copy, or nothing when its
+    /// file is not counted.
+    fn copied_in(&self, symbol: &Symbol, counted: &BTreeSet<&RelativePath>) -> Option<u32> {
+        let location = symbol.location.as_ref()?;
+        if !counted.contains(&location.file) {
+            return None;
+        }
+        let span = location.span;
+        let copied = self.lines.get(&location.file).map_or(0, |lines| {
+            lines
+                .range(span.start_line..=span.end_line.max(span.start_line))
+                .count()
+        });
+        Some(u32::try_from(copied).unwrap_or(u32::MAX))
     }
 }
 

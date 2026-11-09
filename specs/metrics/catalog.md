@@ -15,7 +15,7 @@ interface use these names. An interface may show `cycle_size` as `cycle size`.
 | `blank_lines`   | Blank lines                    | File           | [Size](size.md)                           |
 | `parameters`    | Function parameters            | Function       | [Size](size.md)                           |
 | `members`       | Fields and methods             | Type           | [Size](size.md)                           |
-| `duplication`   | Share of copied lines          | File           | [Duplication](duplication.md)             |
+| `duplication`   | Share of copied lines          | Function, file | [Duplication](duplication.md)             |
 | `lcom`          | Unrelated method groups        | Type           | [Cohesion](cohesion.md)                   |
 | `afferent`      | Modules depending on it        | Module         | [Coupling](coupling.md)                   |
 | `efferent`      | Modules it depends on          | Module         | [Coupling](coupling.md)                   |

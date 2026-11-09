@@ -78,6 +78,10 @@ pub(crate) fn link(facts: &[&FileFacts], source: &dyn FileSource) -> Linked {
     for file in &mut files {
         linker.members(file);
     }
+    // Fields come last, so that a method that shares a field's name keeps that name.
+    for file in &mut files {
+        linker.fields(file);
+    }
     for file in &files {
         linker.extensions(file);
         linker.references(file);
@@ -231,6 +235,7 @@ impl Linker {
         let facts = file.facts;
         for (index, fact) in facts.symbols.iter().enumerate() {
             if fact.owner.is_none()
+                && fact.kind != SymbolKind::Field
                 && let Some(parent) = Self::parent_of(file, fact.parent)
             {
                 self.add(file, index, fact, parent.child(&fact.name), parent);
@@ -243,7 +248,7 @@ impl Linker {
     fn members(&mut self, file: &mut Placed<'_>) {
         let facts = file.facts;
         for (index, fact) in facts.symbols.iter().enumerate() {
-            if file.ids.get(index).is_some_and(Option::is_some) {
+            if fact.kind == SymbolKind::Field || file.ids.get(index).is_some_and(Option::is_some) {
                 continue;
             }
             let Some(scope) = Self::parent_of(file, fact.parent) else {
@@ -262,6 +267,18 @@ impl Linker {
             } else {
                 let id = scope.child(&owner.join("::")).child(&fact.name);
                 self.add(file, index, fact, id, scope);
+            }
+        }
+    }
+
+    /// The fields of types, once every method has its place.
+    fn fields(&mut self, file: &mut Placed<'_>) {
+        let facts = file.facts;
+        for (index, fact) in facts.symbols.iter().enumerate() {
+            if fact.kind == SymbolKind::Field
+                && let Some(parent) = Self::parent_of(file, fact.parent)
+            {
+                self.add(file, index, fact, parent.child(&fact.name), parent);
             }
         }
     }
@@ -605,6 +622,23 @@ mod tests {
             .find(|symbol| symbol.id.as_str() == id)
             .and_then(|symbol| symbol.parent.as_ref())
             .map(SymbolId::as_str)
+    }
+
+    #[test]
+    fn a_getter_keeps_its_name_and_its_field_is_marked() {
+        let symbols = linked(&[(
+            "src/lib.rs",
+            "pub struct S { x: u8, y: u8 }\nimpl S { fn x(&self) -> u8 { self.x } }",
+        )]);
+        let kind = |id: &str| {
+            symbols
+                .iter()
+                .find(|symbol| symbol.id.as_str() == id)
+                .map(|symbol| symbol.kind)
+        };
+        assert_eq!(kind("p::S::x"), Some(SymbolKind::Method));
+        assert_eq!(kind("p::S::x#field"), Some(SymbolKind::Field));
+        assert_eq!(kind("p::S::y"), Some(SymbolKind::Field));
     }
 
     #[test]

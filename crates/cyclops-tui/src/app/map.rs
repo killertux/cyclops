@@ -38,13 +38,35 @@ pub struct MapGroup {
     pub area: Rect,
 }
 
-/// One tile, with the space it fills.
+/// One tile, with the space it fills. A `+N small` tile stands for the tiles folded
+/// into it, and its id is no symbol's.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapTile {
     pub id: SymbolId,
     pub name: String,
     pub lines: f64,
     pub area: Rect,
+    pub folded: Vec<SymbolId>,
+}
+
+/// The least room a tile needs to show its name and its value.
+const TILE_WIDTH: u16 = 6;
+const TILE_HEIGHT: u16 = 2;
+
+impl MapScene {
+    /// How many tiles the scene stands for, counting those folded away.
+    #[must_use]
+    pub fn tile_count(&self) -> usize {
+        self.tiles.iter().map(|tile| tile.folded.len().max(1)).sum()
+    }
+
+    /// The `+N small` tile with this id, if it is one.
+    #[must_use]
+    pub fn small(&self, id: &SymbolId) -> Option<&MapTile> {
+        self.tiles
+            .iter()
+            .find(|tile| &tile.id == id && !tile.folded.is_empty())
+    }
 }
 
 /// What the map knows of a tile before laying it out.
@@ -225,6 +247,9 @@ impl App {
             .collect();
         let languages = self.languages_by_module();
         for ((frame, members), slot) in packages.iter().zip(squarify(&weights, area)) {
+            if slot.width < 3 || slot.height < 3 {
+                continue;
+            }
             let title = self.frame_title(frame, members, &languages, slot.width);
             scene.frames.push(MapFrame {
                 id: frame.clone(),
@@ -466,10 +491,9 @@ impl App {
         let mut units: Vec<(Option<&SymbolId>, Vec<&Facts<'_>>)> = Vec::new();
         for tile in members {
             let group = tile.group.as_ref();
-            match units
-                .iter_mut()
-                .find(|(id, _)| group.is_some() && *id == group)
-            {
+            // Files with no group of their own are laid out together, so that the small
+            // ones fold into one tile.
+            match units.iter_mut().find(|(id, _)| *id == group) {
                 Some((_, tiles)) => tiles.push(tile),
                 None => units.push((group, vec![tile])),
             }
@@ -503,24 +527,113 @@ impl App {
     }
 }
 
-/// Lays tiles out in `area`, each leaving a column and a row free beside it.
+/// Lays tiles out in `area`, each leaving a column and a row free beside it. Tiles too
+/// small to show their name and value are folded into one `+N small` tile, along the
+/// bottom of the area, or its right side where it is low.
 fn lay_tiles<'a, T>(scene: &mut MapScene, tiles: &[T], area: Rect)
 where
     T: std::borrow::Borrow<Facts<'a>>,
 {
-    let sizes: Vec<f64> = tiles.iter().map(|tile| tile.borrow().lines).collect();
-    for (tile, slot) in tiles.iter().zip(squarify(&sizes, area)) {
-        let tile = tile.borrow();
+    // An area with no room, such as a package the screen had no place for, shows nothing.
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    let mut shown: Vec<&Facts<'a>> = tiles.iter().map(std::borrow::Borrow::borrow).collect();
+    let mut folded: Vec<&Facts<'a>> = Vec::new();
+    let (slots, band) = loop {
+        let (room, band) = if folded.is_empty() {
+            (area, None)
+        } else {
+            let (room, band) = fold_band(area);
+            (room, Some(band))
+        };
+        let weights: Vec<f64> = shown.iter().map(|tile| tile.lines).collect();
+        let slots: Vec<Rect> = squarify(&weights, room).into_iter().map(gap).collect();
+        let small: Vec<usize> = slots
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| slot.width < TILE_WIDTH || slot.height < TILE_HEIGHT)
+            .map(|(index, _)| index)
+            .collect();
+        if small.is_empty() {
+            break (slots, band);
+        }
+        for index in small.into_iter().rev() {
+            if index < shown.len() {
+                folded.push(shown.remove(index));
+            }
+        }
+    };
+    for (tile, area) in shown.iter().zip(&slots) {
         scene.tiles.push(MapTile {
             id: tile.symbol.id.clone(),
             name: tile.name.clone(),
             lines: tile.lines,
-            area: Rect {
-                width: slot.width.saturating_sub(1).max(1),
-                height: slot.height.saturating_sub(1).max(1),
-                ..slot
-            },
+            area: *area,
+            folded: Vec::new(),
         });
+    }
+    // With nothing left to show, the `+N small` tile takes the whole area.
+    let band = band.map(|band| if shown.is_empty() { area } else { band });
+    if let Some(band) = band {
+        let mut ids: Vec<SymbolId> = folded.iter().map(|tile| tile.symbol.id.clone()).collect();
+        ids.sort();
+        scene.tiles.push(MapTile {
+            id: SymbolId::new(&format!("+small {} {}", band.x, band.y)),
+            name: format!("+{} small", ids.len()),
+            lines: folded.iter().map(|tile| tile.lines).sum(),
+            area: gap(band),
+            folded: ids,
+        });
+    }
+}
+
+/// Splits an area into the room left for tiles and a band for the `+N small` tile: a row
+/// of tiles at the bottom, or a column on the right where the area is low, or the whole
+/// area where it has no room to share.
+fn fold_band(area: Rect) -> (Rect, Rect) {
+    let tall = TILE_HEIGHT + 1;
+    let wide = TILE_WIDTH * 2;
+    if area.height >= tall * 2 {
+        let room = Rect {
+            height: area.height - tall,
+            ..area
+        };
+        let band = Rect {
+            y: area.y + area.height - tall,
+            height: tall,
+            ..area
+        };
+        (room, band)
+    } else if area.width >= wide * 2 {
+        let room = Rect {
+            width: area.width - wide,
+            ..area
+        };
+        let band = Rect {
+            x: area.x + area.width - wide,
+            width: wide,
+            ..area
+        };
+        (room, band)
+    } else {
+        (
+            Rect {
+                width: 0,
+                height: 0,
+                ..area
+            },
+            area,
+        )
+    }
+}
+
+/// A tile's area in its slot, which leaves a column and a row free beside it.
+fn gap(slot: Rect) -> Rect {
+    Rect {
+        width: slot.width.saturating_sub(1).max(1),
+        height: slot.height.saturating_sub(1).max(1),
+        ..slot
     }
 }
 
@@ -567,6 +680,48 @@ fn distance(from: Rect, to: Rect, toward: Toward) -> Option<(u32, u32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tiles_too_small_to_read_fold_into_one() {
+        use cyclops_domain::symbol::CodeRole;
+        let symbol = |name: &str| {
+            Symbol::container(
+                SymbolId::new(name),
+                None,
+                name,
+                SymbolKind::Module,
+                CodeRole::Production,
+            )
+        };
+        let symbols: Vec<Symbol> = ["big", "t1", "t2", "t3"].into_iter().map(symbol).collect();
+        let facts: Vec<Facts<'_>> = symbols
+            .iter()
+            .zip([480.0, 1.0, 1.0, 1.0])
+            .map(|(symbol, lines)| Facts {
+                symbol,
+                name: symbol.name.clone(),
+                lines,
+                frame: None,
+                group: None,
+            })
+            .collect();
+        let mut scene = MapScene::default();
+        lay_tiles(&mut scene, &facts, Rect::new(0, 0, 78, 17));
+        let names: Vec<&str> = scene.tiles.iter().map(|tile| tile.name.as_str()).collect();
+        assert_eq!(names, ["big", "+3 small"], "{scene:?}");
+        assert_eq!(scene.tile_count(), 4);
+        let mut alone = MapScene::default();
+        lay_tiles(&mut alone, &facts[1..], Rect::new(0, 0, 4, 3));
+        let all = alone
+            .tiles
+            .first()
+            .map(|tile| (tile.name.as_str(), tile.area));
+        assert_eq!(all, Some(("+3 small", Rect::new(0, 0, 3, 2))));
+        let mut nowhere = MapScene::default();
+        lay_tiles(&mut nowhere, &facts, Rect::new(1, 1, 0, 0));
+        assert!(nowhere.tiles.is_empty(), "{nowhere:?}");
+        assert!(scene.tiles.iter().all(|tile| tile.area.width >= TILE_WIDTH));
+    }
 
     #[test]
     fn the_nearest_tile_that_way_is_next() {

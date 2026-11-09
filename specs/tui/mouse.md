@@ -28,6 +28,62 @@ A click selects, and a double click does what `Enter` does.
 | -------------------- | --------- | -------------------------------------------- | ---------------------------------------------------------------------------------- |
 | A double click opens | rust-shop | `<Space>e<double-click symbol shop::orders>` | shop, shop::orders, shop::orders::Order, shop::billing, shop::catalog, shop::notes |
 
+## Every list and popup
+
+Every row of every list and every entry of every popup answers the mouse. A click
+selects, and a double click does what `Enter` does. In a popup, a click on an entry
+chooses it, and a click outside closes the popup and does nothing else. The wheel
+scrolls the list or popup under it, one row at a time, and leaves the selection where
+it is.
+
+[//]: # "decisionTable Tui"
+
+| # situation      | workspace | steps                                       | keys                                                          | view?    | metric?     | focus?                        | section? |
+| ---------------- | --------- | ------------------------------------------- | ------------------------------------------------------------- | -------- | ----------- | ----------------------------- | -------- |
+| A metric         | rust-shop |                                             | `<click metric instability>`                                  | Overview | instability | shop                          | closed   |
+| Opening a metric | rust-shop |                                             | `<double-click metric instability>`                           | Explore  | instability | shop::orders                  | closed   |
+| The ranking      | rust-shop |                                             | `<double-click symbol shop::billing::Invoice::total>`         | Explore  | cyclomatic  | shop::billing::Invoice::total | closed   |
+| A hit            | rust-shop | `add alert cyclomatic function > 1 warning` | `<Space>a<double-click symbol shop::billing::Invoice::total>` | Explore  | cyclomatic  | shop::billing::Invoice::total | closed   |
+| A section        | rust-shop |                                             | `<Space>eK<click section Clones>`                             | Explore  | cyclomatic  | shop                          | Clones   |
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace | steps                                                                                              | keys                           | rules?                           | rows?                                                     |
+| ----------- | --------- | -------------------------------------------------------------------------------------------------- | ------------------------------ | -------------------------------- | --------------------------------------------------------- |
+| A rule      | rust-shop | `add alert cyclomatic function > 1 warning named Complex; add alert instability module >= 1 error` | `<Space>a<click rule Complex>` | instability module >= 1, Complex | shop::orders::Order::total, shop::billing::Invoice::total |
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace | steps             | keys                                        | view?  | opened?      |
+| ----------- | --------- | ----------------- | ------------------------------------------- | ------ | ------------ |
+| A problem   | broken    | `env EDITOR fake` | `<Space>s<double-click problem web/bad.ts>` | Status | web/bad.ts:1 |
+
+[//]: # "decisionTable Tui"
+
+| # situation   | workspace | keys                                     | section? | line? |
+| ------------- | --------- | ---------------------------------------- | -------- | ----- |
+| A line of Why | rust-shop | `<C-p>Order::total<CR>gd<click line 16>` | Why      | 16    |
+
+[//]: # "decisionTable Tui"
+
+| # situation         | workspace | keys                                                       | view?    | popup? | mode?  | metric?     | relations? | filter?       |
+| ------------------- | --------- | ---------------------------------------------------------- | -------- | ------ | ------ | ----------- | ---------- | ------------- |
+| The metric picker   | rust-shop | `M<click menu instability>`                                | Overview | none   | NORMAL | instability | all        | none          |
+| The relation picker | rust-shop | `<Space>dr<click menu imports>`                            | Diagram  | none   | NORMAL | cyclomatic  | imports    | none          |
+| A completion        | rust-shop | `<Space>ffcog<click menu cognitive> > 1<CR>`               | Find     | none   | NORMAL | cyclomatic  | all        | cognitive > 1 |
+| Not now             | rust-shop | `<Space>p<click menu not now>`                             | Overview | none   | NORMAL | cyclomatic  | all        | none          |
+| Outside a picker    | rust-shop | `M<click outside>`                                         | Overview | none   | NORMAL | cyclomatic  | all        | none          |
+| Outside, on a tab   | rust-shop | `M<click tab Diagram>`                                     | Overview | none   | NORMAL | cyclomatic  | all        | none          |
+| Outside the menu    | rust-shop | `<Space>e<right-click symbol shop::orders><click outside>` | Explore  | none   | NORMAL | cyclomatic  | all        | none          |
+| Outside help        | rust-shop | `?<click outside>`                                         | Overview | none   | NORMAL | cyclomatic  | all        | none          |
+
+[//]: # "decisionTable Tui"
+
+| # situation    | workspace | keys                                 | popup? | text        | includes? |
+| -------------- | --------- | ------------------------------------ | ------ | ----------- | --------- |
+| Help           | rust-shop | `<Space>e<Space>?`                   | help   | pick metric | yes       |
+| Scrolling help | rust-shop | `<Space>e<Space>?<wheel down popup>` | help   | pick metric | no        |
+
 ## The status line
 
 Each part of the status line can be clicked.

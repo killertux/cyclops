@@ -40,6 +40,15 @@ when there is nothing inside it.
 | Then up         | rust-shop | `<Space>ejhh` | shop      | shop    | yes       |
 | Open everything | rust-shop | `<Space>ezR`  | shop      | is_free | yes       |
 
+When two rows of one parent share a name, each shows its kind after it.
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace   | keys                 | text       | includes? | other text   | other includes? |
+| ----------- | ----------- | -------------------- | ---------- | --------- | ------------ | --------------- |
+| A getter    | rust-uneven | `<C-p>Big::size<CR>` | size field | yes       | size method  | yes             |
+| One name    | rust-shop   | `<Space>ejljl`       | total      | yes       | total method | no              |
+
 ## Marks
 
 A row shows `!` when it or anything inside it has a warning, `!!` when it has an

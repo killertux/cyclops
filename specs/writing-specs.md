@@ -83,23 +83,24 @@ Pages that need more inputs, such as `filter` or `focus`, describe them.
 Each character in `keys` is one key press, so `gd` is `g` and then `d`, and a space is
 the Space key. Keys with no character use Vim's notation.
 
-| Written as                              | Meaning                                              |
-| --------------------------------------- | ---------------------------------------------------- |
-| `<Space>` `<CR>` `<Esc>` `<Tab>` `<BS>` | Those keys.                                          |
-| `<Up>` `<Down>`                         | The arrow keys.                                      |
-| `<C-o>`                                 | Control and a key.                                   |
-| `<lt>`                                  | The `<` key.                                         |
-| `<click TARGET>`                        | A left click.                                        |
-| `<double-click TARGET>`                 | A double click.                                      |
-| `<right-click TARGET>`                  | A right click.                                       |
-| `<hover TARGET>`                        | The mouse resting over something.                    |
-| `<wheel up>` `<wheel down>`             | The mouse wheel.                                     |
-| `<ctrl-wheel up>` `<ctrl-wheel down>`   | The wheel with Control held.                         |
-| `<drag divider N>`                      | Dragging the pane divider N columns to the right.    |
-| `<wait MS>`                             | Doing nothing for that many milliseconds.            |
-| `<resize COLUMNSxROWS>`                 | The terminal changing size.                          |
-| `<step STEP>`                           | Taking a [step](#steps) while the interface is open. |
-| `<resume>`                              | Letting a paused analysis carry on.                  |
+| Written as                                | Meaning                                              |
+| ----------------------------------------- | ---------------------------------------------------- |
+| `<Space>` `<CR>` `<Esc>` `<Tab>` `<BS>`   | Those keys.                                          |
+| `<Up>` `<Down>`                           | The arrow keys.                                      |
+| `<C-o>`                                   | Control and a key.                                   |
+| `<lt>`                                    | The `<` key.                                         |
+| `<click TARGET>`                          | A left click.                                        |
+| `<double-click TARGET>`                   | A double click.                                      |
+| `<right-click TARGET>`                    | A right click.                                       |
+| `<hover TARGET>`                          | The mouse resting over something.                    |
+| `<wheel up>` `<wheel down>`               | The mouse wheel, over the main list.                 |
+| `<wheel up TARGET>` `<wheel down TARGET>` | The mouse wheel, over a target.                      |
+| `<ctrl-wheel up>` `<ctrl-wheel down>`     | The wheel with Control held.                         |
+| `<drag divider N>`                        | Dragging the pane divider N columns to the right.    |
+| `<wait MS>`                               | Doing nothing for that many milliseconds.            |
+| `<resize COLUMNSxROWS>`                   | The terminal changing size.                          |
+| `<step STEP>`                             | Taking a [step](#steps) while the interface is open. |
+| `<resume>`                                | Letting a paused analysis carry on.                  |
 
 A `TARGET` names what is under the mouse, never a position, so that tests survive
 layout changes.
@@ -111,8 +112,15 @@ layout changes.
 | `breadcrumb ID` | A part of the breadcrumb.                                                       |
 | `chip NAME`     | A part of the status line: `metric`, `filter`, `tests`, `alerts` or `problems`. |
 | `column NAME`   | A column heading.                                                               |
-| `menu LABEL`    | An entry in the open menu.                                                      |
-| `more`          | The `+N more` node of a diagram.                                                |
+| `menu LABEL`    | An entry in the open menu or popup, by what it says.                            |
+| `more`          | The `+N more` node of a diagram, or the `+N small` tile of a map.               |
+| `metric NAME`   | A row of the Overview's metric list.                                            |
+| `rule TEXT`     | A rule in the Alerts list, written as `rules?` writes it.                       |
+| `problem PATH`  | A row of Status' problems.                                                      |
+| `section NAME`  | A section of the inspector.                                                     |
+| `line N`        | A line of the source in Why.                                                    |
+| `popup`         | Inside the open popup.                                                          |
+| `outside`       | Anywhere outside the open popup.                                                |
 
 ### Steps
 
@@ -172,14 +180,14 @@ and asks `includes?`, which is `yes` or `no`. `nothing` as the text asks whether
 no text at all. A prefix says where to look, as in `stdout text` and `stdout includes?`,
 and a table that looks for two texts names the second one `other text`.
 
-| Prefix        | Where it looks                          |
-| ------------- | --------------------------------------- |
-| none          | The screen of the interface.            |
-| `stdout`      | What a command printed.                 |
-| `stderr`      | What a command printed as errors.       |
-| `config`      | `.cyclops/config.toml`.                 |
-| `user config` | Your own settings file.                 |
-| `exported`    | The file an export wrote.               |
+| Prefix        | Where it looks                    |
+| ------------- | --------------------------------- |
+| none          | The screen of the interface.      |
+| `stdout`      | What a command printed.           |
+| `stderr`      | What a command printed as errors. |
+| `config`      | `.cyclops/config.toml`.           |
+| `user config` | Your own settings file.           |
+| `exported`    | The file an export wrote.         |
 
 ### Tui expected values
 
@@ -258,6 +266,7 @@ running the specification does not run them as tests too.
 | [`rust-reexport`](../samples/rust-reexport)     | Rust re-exports.                            |
 | [`rust-chain`](../samples/rust-chain)           | A guess in the middle of a chain of calls.  |
 | [`rust-wide`](../samples/rust-wide)             | A module with many dependents.              |
+| [`rust-uneven`](../samples/rust-uneven)         | One large file, small ones, and a getter.   |
 | [`ts-resolution`](../samples/ts-resolution)     | TypeScript path aliases and barrel files.   |
 | [`clones`](../samples/clones)                   | Duplicated code.                            |
 | [`broken`](../samples/broken)                   | Files with syntax errors.                   |

@@ -36,6 +36,17 @@ to their type, whichever `impl` block they are in.
 | Inside a module     | rust     | `mod m { fn g() {} }`                                                | m::g   | function  | m       |
 | A nested function   | rust     | `fn f() { fn g() {} }`                                               | f::g   | function  | f       |
 
+A method and a field of one type may share a name, as a getter does. The method keeps
+the plain name, and the field is written with `#field` after it.
+
+[//]: # "decisionTable Snippet"
+
+| # situation   | language | code                                                         | symbol     | kind?  | parent? |
+| ------------- | -------- | ------------------------------------------------------------ | ---------- | ------ | ------- |
+| A getter      | rust     | `struct S { x: u8 } impl S { fn x(&self) -> u8 { self.x } }` | S::x       | method | S       |
+| Its field     | rust     | `struct S { x: u8 } impl S { fn x(&self) -> u8 { self.x } }` | S::x#field | field  | S       |
+| A field alone | rust     | `struct S { a: u8 }`                                         | S::a       | field  | S       |
+
 ## TypeScript and JavaScript
 
 A function stored in a variable is a function. A closure or an arrow function passed

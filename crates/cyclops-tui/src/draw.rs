@@ -2,13 +2,13 @@
 //! See `specs/tui/design/`.
 
 use crate::app::{App, MIN_COLUMNS, MIN_ROWS, Running, SIDE_BY_SIDE, hints, picked, space_menu};
-use crate::app::{CONTEXT_MENU, MapScene, MapTile, relation_choices};
+use crate::app::{CONTEXT_MENU, MapScene, MapTile, TreeRow, relation_choices};
 use crate::canvas::inner;
 use crate::canvas::{Canvas, fit, fit_start, width};
 use crate::editor::{FIELDS, RuleEditor};
 use crate::scene::{BoxRow, Card, Route, routes};
 use crate::state::{
-    OVERVIEW_METRICS, Pane, Popup, PromptKind, Section, Target, View, metric_label,
+    OVERVIEW_METRICS, Pane, Popup, PromptKind, Scroll, Section, Target, View, metric_label,
 };
 use crate::tokens::Token;
 use crate::treemap::steps;
@@ -720,9 +720,16 @@ fn structure(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
     let selected = app
         .focus()
         .and_then(|focus| rows.iter().position(|row| &row.symbol.id == focus));
-    let first = selected.map_or(0, |selected| {
+    let base = selected.map_or(0, |selected| {
         selected.saturating_sub(room.saturating_sub(1))
     });
+    let (first, further) = scroll_window(app, Scroll::Tree, base, rows.len(), room);
+    let list = Rect {
+        y: top,
+        height: u16::try_from(room).unwrap_or(u16::MAX),
+        ..inside
+    };
+    canvas.hit(list, Target::List(Scroll::Tree, further));
     for (index, row) in rows.iter().enumerate().skip(first).take(room) {
         let y = top + u16::try_from(index - first).unwrap_or_default();
         let line = Rect {
@@ -733,24 +740,11 @@ fn structure(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
         if Some(index) == selected {
             canvas.fill(line, Token::Sel);
         }
-        let indent = u16::try_from(row.depth * 2).unwrap_or(u16::MAX);
-        let arrow = match row.open {
-            Some(true) => "▾ ",
-            Some(false) => "▸ ",
-            None => "  ",
-        };
-        let token = if row.depth == 0 { Token::B } else { Token::Fg };
         let name_room = Rect {
             width: mark_column.saturating_sub(line.x + 1),
             ..line
         };
-        canvas.text(
-            inside.x + 1 + indent,
-            y,
-            &format!("{arrow}{}", row.symbol.name),
-            token,
-            name_room,
-        );
+        tree_name(analysis, canvas, row, name_room);
         if let Some(mark) = marks.get(&row.symbol.id) {
             let token = if mark.starts_with("!!") {
                 Token::H3
@@ -777,6 +771,48 @@ fn structure(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
         };
         selection_strip(app, analysis, canvas, bottom);
     }
+}
+
+/// The first row a list shows: where following the selection puts it, moved on by the
+/// wheel as far as the list goes. Also says how much further the wheel could move it.
+fn scroll_window(
+    app: &App,
+    scroll: Scroll,
+    base: usize,
+    len: usize,
+    room: usize,
+) -> (usize, usize) {
+    let most = len.saturating_sub(room).max(base);
+    let first = (base + app.scrolled(scroll)).min(most);
+    (first, most - base)
+}
+
+/// A row's name in the tree: indented by its depth, with an arrow when it opens, and
+/// with its kind when a sibling shares its name.
+fn tree_name(analysis: &ProjectAnalysis, canvas: &mut Canvas<'_>, row: &TreeRow<'_>, room: Rect) {
+    let indent = u16::try_from(row.depth * 2).unwrap_or(u16::MAX);
+    let arrow = match row.open {
+        Some(true) => "▾ ",
+        Some(false) => "▸ ",
+        None => "  ",
+    };
+    let token = if row.depth == 0 { Token::B } else { Token::Fg };
+    let name = format!("{arrow}{}", row.symbol.name);
+    let end = canvas.text(room.x + 1 + indent, room.y, &name, token, room);
+    if shares_its_name(analysis, row.symbol) {
+        canvas.text(end + 1, room.y, row.symbol.kind.name(), Token::Dim, room);
+    }
+}
+
+/// Whether another symbol of the same parent has this symbol's name, as a getter and its
+/// field do.
+fn shares_its_name(analysis: &ProjectAnalysis, symbol: &Symbol) -> bool {
+    symbol.parent.as_ref().is_some_and(|parent| {
+        analysis
+            .view()
+            .children(parent)
+            .any(|other| other.id != symbol.id && other.name == symbol.name)
+    })
 }
 
 /// The selection in a line or two, where there is no room for an inspector: its name, the
@@ -887,12 +923,17 @@ fn inspector(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
         );
         let line = format!("{}{place}", kind_name(app, &id));
         canvas.text(inside.x + 1, inside.y + 1, &line, Token::Dim, inside);
+        let start = inside.x + 1;
         let end = canvas.text(
-            inside.x + 1,
+            start,
             inside.y + 3,
             &format!(" {} ", open.name()),
             Token::On,
             inside,
+        );
+        canvas.hit(
+            Rect::new(start, inside.y + 3, end - start, 1),
+            Target::Section(open.step(true)),
         );
         let end = canvas.text(end + 1, inside.y + 3, "H L", Token::Acc, inside);
         canvas.text(end, inside.y + 3, " sections", Token::Dim, inside);
@@ -906,17 +947,23 @@ fn inspector(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
     }
     let mut x = inside.x + 1;
     for section in Section::ALL.into_iter().filter(|_| !narrow) {
-        if section == open {
-            x = canvas.text(
+        let start = x;
+        let end = if section == open {
+            canvas.text(
                 x,
                 inside.y + 3,
                 &format!(" {} ", section.name()),
                 Token::On,
                 inside,
-            ) + 2;
+            )
         } else {
-            x = canvas.text(x, inside.y + 3, section.name(), Token::Dim, inside) + 3;
-        }
+            canvas.text(x, inside.y + 3, section.name(), Token::Dim, inside)
+        };
+        canvas.hit(
+            Rect::new(start, inside.y + 3, end.saturating_sub(start), 1),
+            Target::Section(section),
+        );
+        x = end + if section == open { 2 } else { 3 };
     }
     let body = Rect {
         y: inside.y + 5,
@@ -1686,6 +1733,7 @@ fn overview_metrics(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool
         if *metric == app.lens().metric {
             canvas.fill(line, Token::Sel);
         }
+        canvas.hit(line, Target::Metric(*metric));
         canvas.text(inside.x + 1, y, metric_label(*metric), Token::Fg, line);
         if let Some(reason) = analysis.why_unavailable(*metric) {
             canvas.text(inside.x + 25, y, reason, Token::Dim, line);
@@ -2048,8 +2096,12 @@ fn map(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
         canvas.text(group.area.x + 1, group.area.y, &label, Token::B, group.area);
     }
     let selected = app.selected();
-    for tile in &scene.tiles {
-        map_tile(app, canvas, tile, &marks, selected.as_ref());
+    for (index, tile) in scene.tiles.iter().enumerate() {
+        if tile.folded.is_empty() {
+            map_tile(app, canvas, tile, &marks, selected.as_ref());
+        } else {
+            small_tile(canvas, tile, index, selected.as_ref());
+        }
     }
     map_legend(app, canvas, area, &scene);
 }
@@ -2093,6 +2145,19 @@ fn map_tile(
     canvas.hit(area, Target::Symbol(tile.id.clone()));
 }
 
+/// The `+N small` tile, which stands for the tiles too small to show.
+fn small_tile(canvas: &mut Canvas<'_>, tile: &MapTile, index: usize, selected: Option<&SymbolId>) {
+    let area = tile.area;
+    canvas.fill(area, Token::T0);
+    if selected == Some(&tile.id) {
+        let label = format!("▸ {} ", tile.name);
+        canvas.text(area.x + 1, area.y, &label, Token::On, area);
+    } else {
+        canvas.text(area.x + 1, area.y, &tile.name, Token::T0, area);
+    }
+    canvas.hit(area, Target::More(index));
+}
+
 /// The row below the map: what area and color say, how much a filter left, and the
 /// size of the selected tile.
 fn map_legend(app: &App, canvas: &mut Canvas<'_>, area: Rect, scene: &MapScene) {
@@ -2116,8 +2181,8 @@ fn map_legend(app: &App, canvas: &mut Canvas<'_>, area: Rect, scene: &MapScene) 
         end = canvas.text(end, y, &format!(" {label} "), token, row);
     }
     if app.lens().filter.is_some() {
-        let left = format!("{} of {} tiles", scene.tiles.len(), app.unfiltered_tiles());
-        canvas.text(end + 2, y, &left, Token::Dim, row);
+        let left = format!("{} of {} tiles", scene.tile_count(), app.unfiltered_tiles());
+        end = canvas.text(end + 2, y, &left, Token::Dim, row);
     }
     let selected = app.selected();
     if let Some(tile) = scene
@@ -2127,7 +2192,10 @@ fn map_legend(app: &App, canvas: &mut Canvas<'_>, area: Rect, scene: &MapScene) 
     {
         let lines = crate::state::shown(MetricId::Lines, tile.lines);
         let size = format!("{}: {lines} lines", tile.name);
-        canvas.text_right(area.x + area.width - 1, y, &size, Token::Faint, row);
+        let right = area.x + area.width - 1;
+        if right.saturating_sub(width(&size)) > end + 1 {
+            canvas.text_right(right, y, &size, Token::Faint, row);
+        }
     }
 }
 
@@ -2275,7 +2343,14 @@ fn find_results(app: &App, canvas: &mut Canvas<'_>, inside: Rect, sort: MetricId
         .and_then(|selected| found.iter().position(|symbol| &symbol.id == selected))
         .unwrap_or(0);
     let room = usize::from(inside.height.saturating_sub(10)).max(1);
-    let first = at.saturating_sub(room - 1);
+    let base = at.saturating_sub(room - 1);
+    let (first, further) = scroll_window(app, Scroll::Results, base, found.len(), room);
+    let list = Rect {
+        y: heading + 1,
+        height: u16::try_from(room).unwrap_or(u16::MAX),
+        ..inside
+    };
+    canvas.hit(list, Target::List(Scroll::Results, further));
     let marks = app.tree_marks();
     for (index, symbol) in found.iter().enumerate().skip(first).take(room) {
         let y = heading + 1 + u16::try_from(index - first).unwrap_or(u16::MAX);
@@ -2341,6 +2416,10 @@ fn completion_popup(app: &App, canvas: &mut Canvas<'_>, bar: Rect, typed: &str) 
     canvas.frame(area, Token::Line, ['╭', '╮', '╰', '╯', '─', '│']);
     for (row, (name, description)) in completions.iter().take(shown).enumerate() {
         let y = area.y + 1 + u16::try_from(row).unwrap_or(0);
+        canvas.hit(
+            Rect::new(area.x + 1, y, area.width.saturating_sub(2), 1),
+            Target::Entry(name.clone()),
+        );
         canvas.text(area.x + 2, y, name, Token::Fg, area);
         canvas.text(area.x + 17, y, description, Token::Dim, area);
     }
@@ -2420,7 +2499,14 @@ fn alerts_hits(app: &App, analysis: &ProjectAnalysis, canvas: &mut Canvas<'_>, h
     let all = app.alert_hits();
     // The spread and the rows around it take 18 rows; the hits have the rest.
     let room = usize::from(hits.height.saturating_sub(18)).max(1);
-    let first = app.selected_hit().saturating_sub(room - 1);
+    let base = app.selected_hit().saturating_sub(room - 1);
+    let (first, further) = scroll_window(app, Scroll::Hits, base, all.len(), room);
+    let list = Rect {
+        y: hits.y + 1,
+        height: u16::try_from(room).unwrap_or(u16::MAX),
+        ..hits
+    };
+    canvas.hit(list, Target::List(Scroll::Hits, further));
     for (row, alert) in all.iter().enumerate().skip(first).take(room) {
         let y = hits.y + 1 + u16::try_from(row - first).unwrap_or(u16::MAX);
         let line = Rect {
@@ -2451,6 +2537,9 @@ fn alerts_hits(app: &App, analysis: &ProjectAnalysis, canvas: &mut Canvas<'_>, h
         }
         if row == app.selected_hit() {
             canvas.paint(line, Token::Sel);
+        }
+        if let Subject::Symbol(id) = &alert.subject {
+            canvas.hit(line, Target::Symbol(id.clone()));
         }
     }
     let shown = room.min(all.len());
@@ -2592,12 +2681,14 @@ fn popups(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
             cursor,
         }) => relation_picker(canvas, body, typed, ticked, *cursor),
         Some(Popup::MoreNodes { hidden, cursor }) => more_nodes(app, canvas, body, hidden, *cursor),
+        Some(Popup::SmallTiles { tiles, cursor }) => small_tiles(app, canvas, body, tiles, *cursor),
         Some(Popup::ContextMenu { cursor }) => context_menu(app, canvas, body, *cursor),
         None => {}
     }
 }
 
 fn popup_frame(canvas: &mut Canvas<'_>, area: Rect, title: &str) {
+    canvas.hit(area, Target::Popup);
     canvas.fill(area, Token::Pop);
     canvas.frame(area, Token::Popk, ['╭', '╮', '╰', '╯', '─', '│']);
     if !title.is_empty() {
@@ -2681,10 +2772,17 @@ fn confirm_precise(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
     } else {
         format!("run {} now", ready.join(" and "))
     };
-    let end = canvas.text(x, area.y + 9, "y", Token::Popk, area);
-    let end = canvas.text(end + 1, area.y + 9, &run, Token::Pop, area);
-    let end = canvas.text(end + 4, area.y + 9, "n", Token::Popk, area);
-    canvas.text(end + 1, area.y + 9, "not now", Token::Pop, area);
+    let y = area.y + 9;
+    let end = canvas.text(x, y, "y", Token::Popk, area);
+    let end = canvas.text(end + 1, y, &run, Token::Pop, area);
+    canvas.hit(Rect::new(x, y, end - x, 1), Target::Entry(run));
+    let start = end + 4;
+    let end = canvas.text(start, y, "n", Token::Popk, area);
+    let end = canvas.text(end + 1, y, "not now", Token::Pop, area);
+    canvas.hit(
+        Rect::new(start, y, end - start, 1),
+        Target::Entry("not now".to_owned()),
+    );
 }
 
 fn metric_picker(canvas: &mut Canvas<'_>, body: Rect, typed: &str) {
@@ -2714,6 +2812,10 @@ fn picker(canvas: &mut Canvas<'_>, body: Rect, title: &str, typed: &str) {
     for (index, metric) in choices.iter().enumerate() {
         let y = area.y + 4 + u16::try_from(index).unwrap_or_default();
         let token = if index == 0 { Token::Pops } else { Token::Pop };
+        canvas.hit(
+            Rect::new(area.x + 1, y, area.width.saturating_sub(2), 1),
+            Target::Entry(metric_label(*metric).to_owned()),
+        );
         canvas.text(area.x + 2, y, metric_label(*metric), token, area);
         canvas.text(area.x + 18, y, metric.measures(), Token::Popd, area);
         if metric.descriptor().heat.is_none() {
@@ -2753,7 +2855,10 @@ fn help(app: &App, canvas: &mut Canvas<'_>, body: Rect, all: bool) {
     };
     popup_frame(canvas, area, "Help");
     canvas.text(area.x + 2, area.y + 1, &title, Token::Popb, area);
-    for (index, (key, meaning)) in entries.iter().enumerate() {
+    let room = usize::from(area.height.saturating_sub(4));
+    let (first, further) = scroll_window(app, Scroll::Popup, 0, entries.len(), room);
+    canvas.hit(area, Target::List(Scroll::Popup, further));
+    for (index, (key, meaning)) in entries.iter().skip(first).take(room).enumerate() {
         let y = area.y + 3 + u16::try_from(index).unwrap_or_default();
         canvas.text(area.x + 2, y, key, Token::Popk, area);
         canvas.text(area.x + 12, y, &fit(meaning, 40), Token::Pop, area);
@@ -3001,6 +3106,7 @@ fn why_view(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
         if number == current {
             canvas.paint(row, Token::Sel);
         }
+        canvas.hit(row, Target::Line(number));
     }
     why_reasons(app, canvas, right);
 }
@@ -3403,6 +3509,7 @@ fn status_problems(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
             canvas.fill(line, Token::Sel);
         }
         canvas.text(inside.x + 1, y, problem, Token::Fg, line);
+        canvas.hit(line, Target::Problem(row));
     }
     let y = inside.y + u16::try_from(problems.len()).unwrap_or(u16::MAX) + 1;
     for (offset, text) in [
@@ -3797,6 +3904,7 @@ fn alerts_rules(app: &App, analysis: &ProjectAnalysis, canvas: &mut Canvas<'_>, 
         if row == app.selected_rule() {
             canvas.paint(line, Token::Sel);
         }
+        canvas.hit(line, Target::Rule(row));
     }
     if let Some((_, rule)) = listed.get(app.selected_rule()) {
         let y = rules.y + 1 + u16::try_from(listed.len()).unwrap_or(u16::MAX);
@@ -4049,6 +4157,7 @@ fn relation_picker(
             Token::Pop
         };
         canvas.fill(row, token);
+        canvas.hit(row, Target::Entry(kind.name().to_owned()));
         let tick = if ticked.contains(kind) { "[x]" } else { "[ ]" };
         let line = format!("{tick} {} {}", relation_glyph(*kind), kind.name());
         canvas.text(area.x + 2, y, &line, token, row);
@@ -4177,6 +4286,53 @@ fn more_nodes(app: &App, canvas: &mut Canvas<'_>, body: Rect, hidden: &[SymbolId
                 row,
             );
         }
+        canvas.hit(row, Target::Entry(id.to_string()));
+    }
+}
+
+/// The tiles of a `+N small` tile, largest first.
+fn small_tiles(app: &App, canvas: &mut Canvas<'_>, body: Rect, tiles: &[SymbolId], cursor: usize) {
+    let height = u16::try_from(tiles.len())
+        .unwrap_or(u16::MAX)
+        .saturating_add(6);
+    let area = Rect {
+        x: body.x + body.width.saturating_sub(50) / 2,
+        y: body.y + 1,
+        width: 50.min(body.width),
+        height: height.min(body.height),
+    };
+    popup_frame(canvas, area, "");
+    let title = format!("{} small tiles", tiles.len());
+    canvas.text(area.x + 2, area.y + 1, &title, Token::Popb, area);
+    let note = "Too small to draw. Enter zooms into one.";
+    canvas.text(area.x + 2, area.y + 2, note, Token::Popd, area);
+    let metric = app.lens().metric;
+    let first = cursor.saturating_sub(usize::from(area.height.saturating_sub(7)));
+    for (index, id) in tiles.iter().enumerate().skip(first) {
+        let y = area.y + 4 + u16::try_from(index - first).unwrap_or(u16::MAX);
+        if y + 2 > area.y + area.height {
+            break;
+        }
+        let row = Rect {
+            x: area.x + 1,
+            y,
+            width: area.width.saturating_sub(2),
+            height: 1,
+        };
+        let token = if index == cursor {
+            Token::Pops
+        } else {
+            Token::Pop
+        };
+        canvas.fill(row, token);
+        canvas.text(area.x + 2, y, id.as_str(), token, row);
+        canvas.text_right(
+            area.x + area.width - 2,
+            y,
+            &app.shown_value(id, metric),
+            token,
+            row,
+        );
         canvas.hit(row, Target::Entry(id.to_string()));
     }
 }

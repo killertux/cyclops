@@ -6,7 +6,7 @@ use crate::input::{Input, Key, MouseKind};
 use crate::scene::{BoxRow, Scene, Setting, lay_out};
 use crate::state::{
     Effect, IndexerReport, Mode, OVERVIEW_METRICS, Pane, Place, Popup, Pose, Prompt, PromptKind,
-    Section, Startup, Target, Theme, ThemeChoice, View, metric_label,
+    Scroll, Section, Startup, Target, Theme, ThemeChoice, View, metric_label,
 };
 use cyclops_application::analysis::ProjectAnalysis;
 use cyclops_application::diagram::{DiagramRequest, DiagramView, Level};
@@ -266,8 +266,8 @@ pub struct App {
     hovering: Option<String>,
     /// Where the right-click menu was opened, so that it opens there.
     context_at: Option<(u16, u16)>,
-    /// How far a list is scrolled by the wheel.
-    scroll: usize,
+    /// How far the wheel has scrolled each list past where its selection puts it.
+    scrolls: HashMap<Scroll, usize>,
     /// Where `]c` and `[c` are among the cycles.
     cycle_at: Option<usize>,
     hits: Vec<(Rect, Target)>,
@@ -352,7 +352,7 @@ impl App {
             dragging: None,
             hovering: None,
             context_at: None,
-            scroll: 0,
+            scrolls: HashMap::new(),
             cycle_at: None,
             hits: Vec::new(),
             effects: vec![Effect::Analyze {
@@ -703,10 +703,10 @@ impl App {
         self.hovering.as_deref()
     }
 
-    /// How far the wheel scrolled the list.
+    /// How far the wheel scrolled a list past where its selection puts it.
     #[must_use]
-    pub const fn scrolled(&self) -> usize {
-        self.scroll
+    pub fn scrolled(&self, scroll: Scroll) -> usize {
+        self.scrolls.get(&scroll).copied().unwrap_or(0)
     }
 
     #[must_use]
@@ -1644,34 +1644,22 @@ impl App {
     }
 
     fn mouse(&mut self, kind: MouseKind, column: u16, row: u16) {
-        let target = self
+        // What is under the mouse, the topmost first.
+        let under: Vec<Target> = self
             .hits
             .iter()
             .rev()
-            .find(|(area, _)| {
+            .filter(|(area, _)| {
                 column >= area.x
                     && column < area.x + area.width
                     && row >= area.y
                     && row < area.y + area.height
             })
-            .map(|(_, target)| target.clone());
+            .map(|(_, target)| target.clone())
+            .collect();
+        let target = under.first().cloned();
         match kind {
-            MouseKind::Click => {}
-            MouseKind::DoubleClick => {
-                if let Some(Target::Symbol(id)) = target {
-                    self.select(id);
-                    self.enter();
-                }
-                return;
-            }
-            MouseKind::RightClick => {
-                if let Some(Target::Symbol(id)) = target {
-                    self.select(id);
-                    self.context_at = Some((column, row));
-                    self.popup = Some(Popup::ContextMenu { cursor: 0 });
-                }
-                return;
-            }
+            MouseKind::Click | MouseKind::DoubleClick | MouseKind::RightClick => {}
             MouseKind::Hover => {
                 self.hovering = match target {
                     Some(Target::Symbol(id)) => Some(format!("click selects {id}")),
@@ -1693,12 +1681,19 @@ impl App {
                 return;
             }
             MouseKind::WheelUp | MouseKind::WheelDown => {
-                let down = kind == MouseKind::WheelDown;
-                self.scroll = if down {
-                    self.scroll.saturating_add(1)
-                } else {
-                    self.scroll.saturating_sub(1)
-                };
+                let list = under.iter().find_map(|target| match target {
+                    Target::List(scroll, further) => Some((*scroll, *further)),
+                    _ => None,
+                });
+                if let Some((scroll, further)) = list {
+                    let now = self.scrolled(scroll).min(further);
+                    let next = if kind == MouseKind::WheelDown {
+                        (now + 1).min(further)
+                    } else {
+                        now.saturating_sub(1)
+                    };
+                    self.scrolls.insert(scroll, next);
+                }
                 return;
             }
             MouseKind::CtrlWheelUp | MouseKind::CtrlWheelDown => {
@@ -1713,12 +1708,47 @@ impl App {
                 return;
             }
         }
+        // An open popup has the mouse: its entries answer, and a click anywhere else only
+        // closes it.
+        if self.popup.is_some() {
+            if !under.contains(&Target::Popup) {
+                self.popup = None;
+                self.scrolls.remove(&Scroll::Popup);
+            } else if let Some(Target::Entry(entry)) = target {
+                self.choose_entry(&entry);
+            } else if let Some(Target::Menu(key)) = target {
+                self.popup = None;
+                self.space_action(key);
+            }
+            return;
+        }
         let Some(target) = target else {
             return;
         };
+        if kind == MouseKind::RightClick {
+            if let Target::Symbol(id) = target {
+                self.select(id);
+                self.context_at = Some((column, row));
+                self.popup = Some(Popup::ContextMenu { cursor: 0 });
+            }
+            return;
+        }
+        let row_like = matches!(
+            target,
+            Target::Symbol(_) | Target::Metric(_) | Target::Problem(_)
+        );
+        self.click(target, column);
+        if kind == MouseKind::DoubleClick && row_like {
+            self.enter();
+        }
+    }
+
+    /// What a click on a target does: it selects what is there, or does what it says.
+    fn click(&mut self, target: Target, column: u16) {
         match target {
             Target::Breadcrumb(id) => self.set_focus(Some(id)),
             Target::Chip(chip) => self.chip(chip),
+            Target::More(index) if self.view == View::Map => self.open_small(index),
             Target::More(column) => self.open_more(column),
             Target::Entry(entry) => self.choose_entry(&entry),
             Target::Divider => {
@@ -1733,8 +1763,57 @@ impl App {
                 self.popup = None;
                 self.switch_view(view);
             }
-            Target::Symbol(id) => self.select(id),
+            Target::Symbol(id) => self.click_symbol(id),
             Target::Column(metric) => self.sort_by(metric),
+            Target::Metric(metric) => {
+                self.show_pane(Pane::Metrics);
+                self.set_metric(metric);
+            }
+            Target::Rule(index) => {
+                self.show_pane(Pane::Rules);
+                self.alerts.rule = index;
+                self.alerts.hit = 0;
+            }
+            Target::Problem(index) => self.problem_at = Some(index),
+            Target::Section(section) => self.inspector = Some(section),
+            Target::Line(line) => self.why.line = line,
+            Target::Popup | Target::List(..) => {}
+        }
+    }
+
+    /// Selects a symbol, and gives the keyboard to the list it is in, so that `Enter`
+    /// then opens it.
+    fn click_symbol(&mut self, id: SymbolId) {
+        match self.view {
+            View::Overview => {
+                if let Some(at) = self
+                    .ranking()
+                    .iter()
+                    .position(|subject| subject == &Subject::Symbol(id.clone()))
+                {
+                    self.show_pane(Pane::Ranking);
+                    self.ranking_index = at;
+                }
+            }
+            View::Alerts => {
+                if let Some(at) = self
+                    .alert_hits()
+                    .iter()
+                    .position(|alert| alert.subject == Subject::Symbol(id.clone()))
+                {
+                    self.show_pane(Pane::Hits);
+                    self.alerts.hit = at;
+                }
+            }
+            _ => {}
+        }
+        self.select(id);
+    }
+
+    /// Gives the keyboard to a pane of the view, if the view has it.
+    fn show_pane(&mut self, pane: Pane) {
+        if let Some(at) = self.panes().iter().position(|one| *one == pane) {
+            self.pane = at;
         }
     }
 
@@ -1756,6 +1835,8 @@ impl App {
     }
 
     fn key(&mut self, key: Key) {
+        // A key brings every list back to its selection.
+        self.scrolls.clear();
         if self.prompt.is_some() {
             self.prompt_key(key);
             return;
@@ -2266,18 +2347,98 @@ impl App {
         self.popup = Some(Popup::MoreNodes { hidden, cursor: 0 });
     }
 
+    /// Lists the tiles of the map's `+N small` tile at this place in the scene, largest
+    /// first.
+    fn open_small(&mut self, index: usize) {
+        let scene = self.map_scene(self.map_area());
+        let Some(tile) = scene
+            .tiles
+            .get(index)
+            .filter(|tile| !tile.folded.is_empty())
+        else {
+            return;
+        };
+        let mut tiles = tile.folded.clone();
+        tiles.sort_by(|a, b| {
+            self.tile_lines(b)
+                .total_cmp(&self.tile_lines(a))
+                .then_with(|| a.cmp(b))
+        });
+        self.popup = Some(Popup::SmallTiles { tiles, cursor: 0 });
+    }
+
+    /// Zooms the map into a tile, when it has anything inside.
+    fn zoom_into(&mut self, tile: SymbolId) {
+        let has_inside = self
+            .analysis
+            .as_ref()
+            .is_some_and(|analysis| analysis.view().children(&tile).next().is_some());
+        if has_inside {
+            self.map_selected = None;
+            self.jump(Place {
+                view: View::Map,
+                focus: Some(tile),
+                section: self.inspector,
+            });
+        }
+    }
+
     /// A node from a `+N more` card takes the last place of its column, selected.
     fn promote(&mut self, id: SymbolId) {
         self.diagram.promoted = Some(id.clone());
         self.diagram.selected = Some(id);
     }
 
-    /// Does what an entry of the open popup says.
+    /// Does what an entry of the open popup says, or takes a completion of the filter
+    /// being written.
     fn choose_entry(&mut self, entry: &str) {
+        if self.popup.is_none() {
+            if let Some(prompt) = self.prompt.as_mut()
+                && prompt.kind == PromptKind::Filter
+            {
+                prompt.text = completed(&prompt.text, entry);
+                prompt.error = None;
+                self.check_live();
+            }
+            return;
+        }
+        let metric = |label: &str| {
+            MetricId::ALL
+                .into_iter()
+                .find(|metric| metric_label(*metric) == label)
+        };
         match self.popup.take() {
+            Some(Popup::MetricPicker { .. }) => {
+                if let Some(metric) = metric(entry) {
+                    self.set_metric(metric);
+                }
+            }
+            Some(Popup::SortPicker { .. }) => {
+                if let Some(metric) = metric(entry) {
+                    self.sort_by(metric);
+                }
+            }
+            Some(Popup::RelationPicker { .. }) => {
+                if let Some(kind) = RelationKind::ALL
+                    .into_iter()
+                    .find(|kind| kind.name() == entry)
+                {
+                    self.diagram.relations = vec![kind];
+                }
+            }
+            Some(Popup::ConfirmPrecise) => {
+                if entry != "not now" {
+                    self.analyze(true);
+                }
+            }
             Some(Popup::MoreNodes { hidden, .. }) => {
                 if let Some(id) = hidden.into_iter().find(|id| id.as_str() == entry) {
                     self.promote(id);
+                }
+            }
+            Some(Popup::SmallTiles { tiles, .. }) => {
+                if let Some(id) = tiles.into_iter().find(|id| id.as_str() == entry) {
+                    self.zoom_into(id);
                 }
             }
             Some(Popup::ContextMenu { .. }) => self.context_action(entry),
@@ -2660,27 +2821,28 @@ impl App {
                 let Some(selected) = self.map_selected.clone() else {
                     return;
                 };
-                let has_inside = self
-                    .analysis
-                    .as_ref()
-                    .is_some_and(|analysis| analysis.view().children(&selected).next().is_some());
-                if has_inside {
-                    self.map_selected = None;
-                    self.jump(Place {
-                        view: View::Map,
-                        focus: Some(selected),
-                        section: self.inspector,
-                    });
-                }
-            }
-            View::Overview => {
-                if self.pane() == Some(Pane::Ranking)
-                    && let Some(Subject::Symbol(id)) =
-                        self.ranking().get(self.ranking_index).cloned()
+                let scene = self.map_scene(self.map_area());
+                if let Some(index) = scene
+                    .tiles
+                    .iter()
+                    .position(|tile| tile.id == selected && !tile.folded.is_empty())
                 {
-                    self.jump_to_symbol(id, None);
+                    self.open_small(index);
+                } else {
+                    self.zoom_into(selected);
                 }
             }
+            View::Overview => match self.pane() {
+                Some(Pane::Ranking) => {
+                    if let Some(Subject::Symbol(id)) =
+                        self.ranking().get(self.ranking_index).cloned()
+                    {
+                        self.jump_to_symbol(id, None);
+                    }
+                }
+                Some(Pane::Metrics) => self.open_worst(),
+                _ => {}
+            },
             View::Find => {
                 if let Some(selected) = self.selected() {
                     self.jump(Place {
@@ -2699,6 +2861,30 @@ impl App {
                 }
             }
             View::Status => self.open_problem(),
+        }
+    }
+
+    /// Opens the worst symbol by the lens' metric, the first of them when several tie. A
+    /// file opens as its module.
+    fn open_worst(&mut self) {
+        let metric = self.lens().metric;
+        let Some(analysis) = &self.analysis else {
+            return;
+        };
+        let first = analysis
+            .worst(metric)
+            .and_then(|worst| worst.subjects.into_iter().next());
+        let id = match first {
+            Some(Subject::Symbol(id)) => Some(id),
+            Some(Subject::File(path)) => analysis
+                .files()
+                .iter()
+                .find(|file| file.path == path)
+                .and_then(|file| file.module.clone()),
+            None => None,
+        };
+        if let Some(id) = id {
+            self.jump_to_symbol(id, None);
         }
     }
 
@@ -2808,6 +2994,7 @@ impl App {
                 cursor,
             } => self.relation_picker_key(key, typed, ticked, cursor),
             Popup::MoreNodes { hidden, cursor } => self.more_nodes_key(key, hidden, cursor),
+            Popup::SmallTiles { tiles, cursor } => self.small_tiles_key(key, tiles, cursor),
             Popup::ContextMenu { cursor } => self.context_menu_key(key, cursor),
             Popup::ConfirmPrecise => {
                 if matches!(key, Key::Char('y' | 'Y')) {
@@ -2955,6 +3142,26 @@ impl App {
         }
     }
 
+    fn small_tiles_key(&mut self, key: Key, tiles: Vec<SymbolId>, cursor: usize) {
+        match key {
+            Key::Esc | Key::Char('q') => {}
+            Key::Enter => {
+                if let Some(id) = tiles.get(cursor).cloned() {
+                    self.zoom_into(id);
+                }
+            }
+            Key::Char('j') | Key::Down => {
+                let cursor = moved(cursor, 1, tiles.len());
+                self.popup = Some(Popup::SmallTiles { tiles, cursor });
+            }
+            Key::Char('k') | Key::Up => {
+                let cursor = cursor.saturating_sub(1);
+                self.popup = Some(Popup::SmallTiles { tiles, cursor });
+            }
+            _ => self.popup = Some(Popup::SmallTiles { tiles, cursor }),
+        }
+    }
+
     fn context_menu_key(&mut self, key: Key, cursor: usize) {
         match key {
             Key::Esc | Key::Char('q') => {}
@@ -3033,17 +3240,7 @@ impl App {
             }
             Key::Tab if prompt.kind == PromptKind::Filter => {
                 if let Some((word, _)) = completions(&prompt.text).first() {
-                    let kept = prompt
-                        .text
-                        .rfind(char::is_whitespace)
-                        .map_or("", |space| prompt.text.get(..=space).unwrap_or_default())
-                        .to_owned();
-                    let kept = if prompt.text.ends_with(char::is_whitespace) {
-                        prompt.text.clone()
-                    } else {
-                        kept
-                    };
-                    prompt.text = format!("{kept}{word}");
+                    prompt.text = completed(&prompt.text, word);
                 }
                 self.prompt = Some(prompt);
                 self.check_live();
@@ -3337,6 +3534,17 @@ pub const CONTEXT_MENU: [(&str, &str); 8] = [
 ];
 
 /// Moves an index by some steps, staying within `count`.
+/// A filter with its last word, the one being written, replaced by a completion.
+fn completed(text: &str, word: &str) -> String {
+    let kept = if text.ends_with(char::is_whitespace) {
+        text
+    } else {
+        text.rfind(char::is_whitespace)
+            .map_or("", |space| text.get(..=space).unwrap_or_default())
+    };
+    format!("{kept}{word}")
+}
+
 fn moved(here: usize, by: isize, count: usize) -> usize {
     if count == 0 {
         return 0;

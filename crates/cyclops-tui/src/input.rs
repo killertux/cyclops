@@ -124,6 +124,11 @@ fn named(name: &str) -> Result<Gesture, String> {
         "double-click" => Ok(mouse(MouseKind::DoubleClick, rest)),
         "right-click" => Ok(mouse(MouseKind::RightClick, rest)),
         "hover" => Ok(mouse(MouseKind::Hover, rest)),
+        "wheel" => match rest.split_once(' ') {
+            Some(("up", target)) => Ok(mouse(MouseKind::WheelUp, target)),
+            Some(("down", target)) => Ok(mouse(MouseKind::WheelDown, target)),
+            _ => Err(format!("not a wheel: {rest}")),
+        },
         "drag" => {
             let (target, columns) = rest
                 .rsplit_once(' ')

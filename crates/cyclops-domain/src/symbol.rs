@@ -53,6 +53,15 @@ impl SymbolIds {
             SymbolId(format!("{id}#{count}"))
         }
     }
+
+    /// The id itself if it is free, or else the id marked with `what` it is.
+    pub fn unique_as(&mut self, id: SymbolId, what: &str) -> SymbolId {
+        if self.seen.contains_key(&id) {
+            self.unique(SymbolId(format!("{id}#{what}")))
+        } else {
+            self.unique(id)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

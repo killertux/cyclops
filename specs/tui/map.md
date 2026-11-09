@@ -53,6 +53,22 @@ Larger tiles have larger areas. `largest?` is the tile with the most lines.
 | Folders     | ts-resolution | `<Space>m` | src/app, src/barrel, src/barrel/thing, src/lib/helper   | src, src/barrel, src/lib |
 | Flat        | rust-shop     | `<Space>m` | shop::billing, shop::catalog, shop::notes, shop::orders | none                     |
 
+## Small tiles
+
+A tile too small to show its name and value is folded, with the others like it, into
+one `+N small` tile. `Enter` or a click on it lists them in a popup, and choosing one
+zooms into it. [`rust-uneven`](../../samples/rust-uneven) has one large file and eight
+one-line files.
+
+[//]: # "decisionTable Tui"
+
+| # situation  | workspace   | size  | keys                                           | popup?      | focus?      | text        | includes? |
+| ------------ | ----------- | ----- | ---------------------------------------------- | ----------- | ----------- | ----------- | --------- |
+| Folded       | rust-uneven | 80x24 | `<Space>m`                                     | none        | uneven      | +8 small    | yes       |
+| Listing them | rust-uneven | 80x24 | `<Space>m<click more>`                         | small tiles | uneven      | uneven::t08 | yes       |
+| Choosing one | rust-uneven | 80x24 | `<Space>m<click more><click menu uneven::t08>` | none        | uneven::t08 | Map of t08  | yes       |
+| Room for all | rust-uneven | 80x24 | `fpath ~ "src/t*"<CR><Space>m`                 | none        | uneven      | small       | no        |
+
 ## Color
 
 `tile value?` reads the value on the `subject` tile. A tile with no value has no color

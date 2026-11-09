@@ -37,6 +37,20 @@ Moving through the list changes the metric of the lens. The rest of the
 | A cycle       | rust-cycles | `Mcycle<CR>`       | cycle size  | cycles::c, cycles::d, cycles::e | 3      |
 | No cycles     | rust-shop   | `Mcycle<CR>`       | cycle size  | none                            | n/a    |
 
+`Enter` on a metric opens its worst symbol in Explore, with that metric in the lens.
+When several tie, it opens the first of them. A metric with no worst symbol stays on
+the Overview.
+
+[//]: # "decisionTable Tui"
+
+| # situation     | workspace   | keys                   | view?    | focus?                     | metric?     |
+| --------------- | ----------- | ---------------------- | -------- | -------------------------- | ----------- |
+| The worst       | rust-shop   | `<CR>`                 | Explore  | shop::orders::Order::total | cyclomatic  |
+| Another metric  | rust-shop   | `jjj<CR>`              | Explore  | shop::orders::Order::total | lines       |
+| A module        | rust-shop   | `Minstability<CR><CR>` | Explore  | shop::orders               | instability |
+| A tie           | rust-cycles | `Mcycle<CR><CR>`       | Explore  | cycles::c                  | cycle size  |
+| Nothing to open | rust-shop   | `Mcycle<CR><CR>`       | Overview | shop                       | cycle size  |
+
 A metric that cannot be worked out stays in the list and says why.
 
 [//]: # "decisionTable Tui"
