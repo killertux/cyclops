@@ -636,7 +636,7 @@ fn scope_of(symbol: &Symbol) -> Option<Scope> {
     match symbol.kind {
         SymbolKind::Function | SymbolKind::Method => Some(Scope::Function),
         SymbolKind::Module => Some(Scope::Module),
-        SymbolKind::Package => Some(Scope::Project),
+        SymbolKind::Project | SymbolKind::Package => Some(Scope::Project),
         kind if kind.is_type() => Some(Scope::Type),
         _ => None,
     }
@@ -1964,13 +1964,17 @@ fn diagram(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
     };
     let title = match (drawing.level, focus_name.1) {
         (Level::Module, SymbolKind::Package) => format!("Modules of {}", focus_name.0),
-        (_, kind) if drawing.depth == 0 && kind != SymbolKind::Package => {
+        (Level::Package, SymbolKind::Project) => format!("Packages of {}", focus_name.0),
+        (_, kind)
+            if drawing.depth == 0 && !matches!(kind, SymbolKind::Package | SymbolKind::Project) =>
+        {
             format!("Inside {}", focus_name.0)
         }
         _ => format!("Neighbors of {}", focus_name.0),
     };
     let inside = canvas.pane(area, &title, active);
     let level = match drawing.level {
+        Level::Project => "project",
         Level::Package => "package",
         Level::Module => "module",
         Level::Type => "type",

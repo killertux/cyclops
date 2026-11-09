@@ -29,6 +29,15 @@ each branch. `rows?` lists the rows in order.
 | A fold         | rust-shop | `<Space>ejzaza`            | shop, shop::orders, shop::billing, shop::catalog, shop::notes                                                                                                           |
 | Closing all    | rust-shop | `<Space>ezM`               | shop                                                                                                                                                                    |
 
+A project of several packages is the one row at the top, with its packages inside.
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace   | keys         | rows?                                             |
+| ----------- | ----------- | ------------ | ------------------------------------------------- |
+| A workspace | rust-crates | `<Space>e`   | rust-crates, c01, c02, c03, c04, c05, c06, engine |
+| Closing it  | rust-crates | `<Space>ezM` | rust-crates                                       |
+
 `h` on a closed row moves to its parent. `zR` opens everything, and a row has no arrow
 when there is nothing inside it.
 

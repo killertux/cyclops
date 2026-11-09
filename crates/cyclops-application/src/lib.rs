@@ -11,5 +11,6 @@ pub mod history;
 pub mod pipeline;
 pub mod ports;
 pub mod precise;
+pub mod project;
 pub mod queries;
 pub mod rollups;

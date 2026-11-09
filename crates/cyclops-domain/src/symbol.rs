@@ -66,6 +66,8 @@ impl SymbolIds {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SymbolKind {
+    /// A project of several packages, which holds them.
+    Project,
     Package,
     Module,
     Struct,
@@ -84,6 +86,7 @@ impl SymbolKind {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
+            Self::Project => "project",
             Self::Package => "package",
             Self::Module => "module",
             Self::Struct => "struct",

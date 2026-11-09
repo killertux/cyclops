@@ -1986,6 +1986,7 @@ impl Tui {
                     || NONE.into(),
                     |drawing| {
                         match drawing.level {
+                            Level::Project => "project",
                             Level::Package => "package",
                             Level::Module => "module",
                             Level::Type => "type",

@@ -519,15 +519,16 @@ impl ProjectAnalysis {
             if let Some(module) = view.module_of(id) {
                 modules.insert(module.id.clone());
             }
-            let mut top = view.symbol(id);
-            while let Some(parent) = top
-                .and_then(|symbol| symbol.parent.as_ref())
-                .and_then(|parent| view.symbol(parent))
-            {
-                top = Some(parent);
-            }
-            if let Some(top) = top.filter(|top| top.kind == SymbolKind::Package) {
-                packages.insert(top.id.clone());
+            let mut current = view.symbol(id);
+            while let Some(symbol) = current {
+                if symbol.kind == SymbolKind::Package {
+                    packages.insert(symbol.id.clone());
+                    break;
+                }
+                current = symbol
+                    .parent
+                    .as_ref()
+                    .and_then(|parent| view.symbol(parent));
             }
         }
         let count = |kind: SymbolKind, located: bool| {
@@ -551,7 +552,9 @@ impl ProjectAnalysis {
             return Impact::default();
         };
         let kinds: &[RelationKind] = match symbol.kind {
-            SymbolKind::Module | SymbolKind::Package => &[RelationKind::Imports],
+            SymbolKind::Module | SymbolKind::Package | SymbolKind::Project => {
+                &[RelationKind::Imports]
+            }
             SymbolKind::Function | SymbolKind::Method => &[RelationKind::Calls],
             _ => &[
                 RelationKind::Uses,

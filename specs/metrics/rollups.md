@@ -29,3 +29,11 @@ The exception is a file, where `cyclomatic` is the sum of its functions, as
 | A type      | ts-shop   | src/orders::Order          | 3           | 3          | 15     | 1     |
 | A module    | ts-shop   | src/orders                 | 3           | 3          | 17     | n/a   |
 | A package   | ts-shop   | shop                       | 3           | 3          | 43     | n/a   |
+
+A project of several packages rolls up over all of them.
+
+[//]: # "decisionTable Core"
+
+| # situation | workspace   | subject     | cyclomatic? | cognitive? | lines? | lcom? |
+| ----------- | ----------- | ----------- | ----------- | ---------- | ------ | ----- |
+| A project   | rust-crates | rust-crates | 2           | 2          | 313    | n/a   |

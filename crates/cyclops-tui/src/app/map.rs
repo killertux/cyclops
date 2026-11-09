@@ -315,25 +315,23 @@ impl App {
             .or_else(|| Some(focus.clone()))
     }
 
-    /// The packages the map is drawn for: every package at the top of the project, or the
-    /// holder alone below it.
+    /// The packages the map is drawn for: every package of a project, every package at
+    /// the top, or the holder alone below them.
     fn map_scope(&self, holder: &SymbolId) -> Vec<SymbolId> {
         let Some(analysis) = &self.analysis else {
             return Vec::new();
         };
-        let at_top = analysis
-            .view()
-            .symbol(holder)
-            .is_some_and(|symbol| symbol.parent.is_none());
-        if at_top {
-            analysis
-                .roots_by(MetricId::Lines)
-                .iter()
-                .map(|symbol| symbol.id.clone())
-                .collect()
+        let Some(symbol) = analysis.view().symbol(holder) else {
+            return vec![holder.clone()];
+        };
+        let tops = if symbol.kind == SymbolKind::Project {
+            analysis.children_by(holder, MetricId::Lines)
+        } else if symbol.parent.is_none() {
+            analysis.roots_by(MetricId::Lines)
         } else {
-            vec![holder.clone()]
-        }
+            return vec![holder.clone()];
+        };
+        tops.iter().map(|symbol| symbol.id.clone()).collect()
     }
 
     /// The modules of the files inside the holder. A file that is the holder itself is

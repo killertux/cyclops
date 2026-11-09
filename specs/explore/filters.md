@@ -48,6 +48,12 @@ first row. `kind` narrows the search.
 | Part of a cycle | rust-cycles |                          | `kind = module and in_cycle = true`      | cycles::a, cycles::b, cycles::c, cycles::d, cycles::e                                                        |
 | Test code       | rust-shop   | `set tests.include true` | `kind = function and role = test`        | shop::notes::tests::says_hello, tests/orders::starts_empty                                                   |
 
+[//]: # "decisionTable Core"
+
+| # situation | workspace   | steps | filter           | results?    |
+| ----------- | ----------- | ----- | ---------------- | ----------- |
+| A project   | rust-crates |       | `kind = project` | rust-crates |
+
 ## Combining
 
 `and`, `or` and `not` combine conditions, and parentheses group them. `not` binds

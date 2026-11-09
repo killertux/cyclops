@@ -7,7 +7,10 @@ use cyclops_domain::symbol::{SymbolId, SymbolKind};
 use std::collections::{BTreeMap, HashSet};
 
 fn is_container(kind: SymbolKind) -> bool {
-    matches!(kind, SymbolKind::Module | SymbolKind::Package)
+    matches!(
+        kind,
+        SymbolKind::Module | SymbolKind::Package | SymbolKind::Project
+    )
 }
 
 /// The rolled up values, as they build up.

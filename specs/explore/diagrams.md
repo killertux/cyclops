@@ -62,6 +62,12 @@ A focus of a higher level than `level` shows what is inside it.
 | Into a module  | rust-shop | type   | shop::orders        | 0     | shop::orders::Order                                                                 |
 | Into a type    | rust-shop | member | shop::orders::Order | 0     | shop::orders::Order::add, shop::orders::Order::invoices, shop::orders::Order::total |
 
+[//]: # "decisionTable Core"
+
+| # situation    | workspace   | level   | focus       | depth | nodes?                               |
+| -------------- | ----------- | ------- | ----------- | ----- | ------------------------------------ |
+| Into a project | rust-crates | package | rust-crates | 0     | c01, c02, c03, c04, c05, c06, engine |
+
 ## Metrics on a diagram
 
 `overlay value?` reads the `overlay` metric on the `subject` node. Any metric can be

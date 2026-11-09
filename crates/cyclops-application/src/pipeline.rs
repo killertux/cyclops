@@ -10,6 +10,7 @@ use crate::ports::{
     PartialFunction, Progress, SourceError, SourceFile, Step, StepReport, StoredIndex,
 };
 use crate::precise::{self, CurrentFile, Precise};
+use crate::project::add_project;
 use crate::rollups::roll_up;
 use cyclops_domain::alert::AlertRule;
 use cyclops_domain::facts::FileFacts;
@@ -712,6 +713,7 @@ impl AnalysisService {
                 files.file_modules.extend(linked.file_modules);
             }
         }
+        add_project(&mut symbols, &source.project_name());
         (symbols, relations, files)
     }
 }

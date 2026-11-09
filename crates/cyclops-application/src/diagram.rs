@@ -12,6 +12,8 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 /// The level a diagram shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
+    /// Only the project itself, which a diagram never draws as a node.
+    Project,
     Package,
     Module,
     Type,
@@ -33,6 +35,7 @@ impl Level {
     #[must_use]
     pub const fn of(kind: SymbolKind) -> Self {
         match kind {
+            SymbolKind::Project => Self::Project,
             SymbolKind::Package => Self::Package,
             SymbolKind::Module => Self::Module,
             SymbolKind::Struct

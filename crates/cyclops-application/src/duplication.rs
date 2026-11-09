@@ -267,7 +267,10 @@ impl Duplication {
                 let Some(symbol) = input.model.symbol(&id) else {
                     break;
                 };
-                if matches!(symbol.kind, SymbolKind::Module | SymbolKind::Package) {
+                if matches!(
+                    symbol.kind,
+                    SymbolKind::Module | SymbolKind::Package | SymbolKind::Project
+                ) {
                     subjects.push(Subject::Symbol(id.clone()));
                 }
                 current.clone_from(&symbol.parent);

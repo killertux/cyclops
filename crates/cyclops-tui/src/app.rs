@@ -1093,6 +1093,7 @@ impl App {
             .and_then(|id| self.symbol(id))
             .map_or(SymbolKind::Package, |symbol| symbol.kind);
         match Level::of(kind) {
+            Level::Project => Level::Package,
             Level::Package => Level::Module,
             Level::Member => Level::Type,
             other => other,
@@ -2801,6 +2802,7 @@ impl App {
                     return;
                 }
                 let lower = match self.diagram.level.unwrap_or_else(|| self.natural_level()) {
+                    Level::Project => Level::Package,
                     Level::Package => Level::Module,
                     Level::Module => Level::Type,
                     Level::Type | Level::Member => Level::Member,
@@ -3498,7 +3500,9 @@ const fn scope_of_kind(kind: SymbolKind) -> Option<Scope> {
         | SymbolKind::Enum
         | SymbolKind::Interface
         | SymbolKind::Alias => Some(Scope::Type),
-        SymbolKind::Package | SymbolKind::Field | SymbolKind::Constant => None,
+        SymbolKind::Project | SymbolKind::Package | SymbolKind::Field | SymbolKind::Constant => {
+            None
+        }
     }
 }
 

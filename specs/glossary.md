@@ -3,7 +3,8 @@
 Back to the [specification index](README.md).
 
 **Project.** The folder Cyclops analyzes. Its settings and cache live in `.cyclops/`.
-See [Initializing a project](project/initializing.md).
+When it holds several packages, it is also the symbol above them. See
+[Initializing a project](project/initializing.md).
 
 **Package.** A unit of distribution: a Cargo package, or a folder with a
 `package.json`.

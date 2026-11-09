@@ -7,6 +7,7 @@ filters and diagrams work the same way for all of them.
 
 | Level   | Kinds                                           |
 | ------- | ----------------------------------------------- |
+| Project | `project`                                       |
 | Package | `package`                                       |
 | Module  | `module`                                        |
 | Type    | `struct`, `class`, `enum`, `interface`, `alias` |
@@ -97,9 +98,11 @@ along is not a symbol, and counts as part of the function around it.
 
 ## The hierarchy
 
-Every symbol sits inside another, from the package down. A package has no parent. In
-TypeScript and JavaScript a file is a module, and a folder is the module that holds
-them. An `index` file is the module of its folder.
+Every symbol sits inside another, from the top down. A project of several packages is
+a symbol of its own, named after its folder, and holds them. A project of one package
+is that package, which then has no parent. In TypeScript and JavaScript a file is a
+module, and a folder is the module that holds them. An `index` file is the module of
+its folder.
 
 [//]: # "decisionTable Core"
 
@@ -126,3 +129,19 @@ Children are listed in alphabetical order.
 | A module    | rust-shop | shop::orders          | shop::orders::Order                                                                 |
 | A type      | rust-shop | shop::orders::Order   | shop::orders::Order::add, shop::orders::Order::invoices, shop::orders::Order::total |
 | No children | rust-shop | shop::notes::greeting | none                                                                                |
+
+A workspace of several packages has its project above them.
+
+[//]: # "decisionTable Core"
+
+| # situation      | workspace   | subject     | kind?   | parent?     |
+| ---------------- | ----------- | ----------- | ------- | ----------- |
+| A workspace      | rust-crates | rust-crates | project | none        |
+| A package in it  | rust-crates | engine      | package | rust-crates |
+| A module in that | rust-crates | engine::big | module  | engine      |
+
+[//]: # "decisionTable Core"
+
+| # situation | workspace   | subject     | children?                            |
+| ----------- | ----------- | ----------- | ------------------------------------ |
+| A project   | rust-crates | rust-crates | c01, c02, c03, c04, c05, c06, engine |

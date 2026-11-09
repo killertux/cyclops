@@ -10,8 +10,8 @@ from the focus, with what depends on it on one side and what it depends on on th
 
 ## What it shows
 
-The focus decides the level. A project shows its modules, a module shows its neighbors,
-and `Enter` drills in. On a type, `Enter` expands its [class box](#class-boxes) instead.
+The focus decides the level. A project shows its modules, or its packages when it has
+several. A module shows its neighbors, and `Enter` drills in. On a type, `Enter` expands its [class box](#class-boxes) instead.
 Drilling in shows what is inside at depth 0, `>` then adds its
 neighbors, and `-` goes back up to the depth you had. `nodes?` lists what is shown.
 
@@ -27,6 +27,12 @@ neighbors, and `-` goes back up to the depth you had. `nodes?` lists what is sho
 | A type         | rust-shop | `<C-p>Order<CR><Space>d<CR>`          | type   | 1      | shop::billing::Invoice, shop::catalog::Item, shop::orders::Order |
 | Back up        | rust-shop | `<Space>ej<Space>d<CR>-`              | module | 1      | shop::billing, shop::catalog, shop::orders                       |
 | Then neighbors | rust-shop | `<Space>ej<Space>d<CR>rcomposes<CR>>` | type   | 1      | shop::billing::Invoice, shop::orders::Order                      |
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace   | keys       | level?  | depth? | nodes?                               |
+| ----------- | ----------- | ---------- | ------- | ------ | ------------------------------------ |
+| A workspace | rust-crates | `<Space>d` | package | 1      | c01, c02, c03, c04, c05, c06, engine |
 
 `<` and `>` change the depth, and it never goes below 0.
 

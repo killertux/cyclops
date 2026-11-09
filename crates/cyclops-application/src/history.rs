@@ -142,7 +142,10 @@ pub fn measure(
                 let Some(symbol) = input.model.symbol(&id) else {
                     break;
                 };
-                if matches!(symbol.kind, SymbolKind::Module | SymbolKind::Package) {
+                if matches!(
+                    symbol.kind,
+                    SymbolKind::Module | SymbolKind::Package | SymbolKind::Project
+                ) {
                     let slot = highest
                         .entry((Subject::Symbol(id.clone()), metric))
                         .or_insert(0.0);

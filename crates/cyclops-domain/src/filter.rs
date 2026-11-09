@@ -171,7 +171,8 @@ fn tokens(text: &str) -> Result<Vec<String>, FilterError> {
 }
 
 /// Every kind a filter can name.
-const KINDS: [SymbolKind; 11] = [
+const KINDS: [SymbolKind; 12] = [
+    SymbolKind::Project,
     SymbolKind::Package,
     SymbolKind::Module,
     SymbolKind::Struct,
@@ -262,21 +263,7 @@ pub fn completions(written: &str) -> Vec<(String, String)> {
 }
 
 fn kind(name: &str) -> Option<SymbolKind> {
-    [
-        SymbolKind::Package,
-        SymbolKind::Module,
-        SymbolKind::Struct,
-        SymbolKind::Class,
-        SymbolKind::Enum,
-        SymbolKind::Interface,
-        SymbolKind::Alias,
-        SymbolKind::Function,
-        SymbolKind::Method,
-        SymbolKind::Field,
-        SymbolKind::Constant,
-    ]
-    .into_iter()
-    .find(|kind| kind.name() == name)
+    KINDS.into_iter().find(|kind| kind.name() == name)
 }
 
 struct Parser {

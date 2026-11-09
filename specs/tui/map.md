@@ -26,6 +26,21 @@ Zooming moves the focus. `hjkl` move to the nearest tile in that direction.
 | Zooming out | rust-shop | `<Space>m/orders<CR><CR>-` | shop         | shop::billing, shop::catalog, shop::notes, shop::orders |
 | The top     | rust-shop | `<Space>m-`                | shop         | shop::billing, shop::catalog, shop::notes, shop::orders |
 
+Zooming into a package of a workspace shows that package alone, and `-` goes back to
+the project.
+
+[//]: # "decisionTable Tui"
+
+| # situation    | workspace   | keys                      | focus? | tiles?      |
+| -------------- | ----------- | ------------------------- | ------ | ----------- |
+| Into a package | rust-crates | `<C-p>engine<CR><Space>m` | engine | engine::big |
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace   | keys                       | focus?      |
+| ----------- | ----------- | -------------------------- | ----------- |
+| Out again   | rust-crates | `<C-p>engine<CR><Space>m-` | rust-crates |
+
 The focus decides what the map shows, so a focus deep in the tree starts deep in the map.
 A focus with nothing inside it shows its parent, with its own tile selected.
 

@@ -24,6 +24,14 @@ The interface opens on Overview, with the focus on the project. The metric start
 | Nothing to analyze | docs-only |                          | Overview | NORMAL | none   | cyclomatic | none    | off    | No source files found.                  | yes       |
 | Bad settings       | rust-shop | `break config`           | Overview | NORMAL | none   | cyclomatic | none    | off    | .cyclops/config.toml is not valid TOML. | yes       |
 
+A project of several packages is named after its folder.
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace   | view?    | focus?      | text        | includes? |
+| ----------- | ----------- | -------- | ----------- | ----------- | --------- |
+| A workspace | rust-crates | Overview | rust-crates | rust-crates | yes       |
+
 ## Views
 
 `Space` and a letter goes to a view. `gt` and `gT` go to the next and the previous one,

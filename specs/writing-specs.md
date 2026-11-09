@@ -255,23 +255,24 @@ is a file.
 The workspaces live in [`samples/`](../samples), outside this folder so that
 running the specification does not run them as tests too.
 
-| Workspace                                       | Used for                                    |
-| ----------------------------------------------- | ------------------------------------------- |
-| [`rust-shop`](../samples/rust-shop)             | The main Rust project.                      |
-| [`ts-shop`](../samples/ts-shop)                 | The same project in TypeScript.             |
-| [`js-shop`](../samples/js-shop)                 | A similar project in JavaScript.            |
-| [`rust-cycles`](../samples/rust-cycles)         | Dependency cycles in Rust.                  |
-| [`ts-cycles`](../samples/ts-cycles)             | Dependency cycles in TypeScript.            |
-| [`rust-split-impl`](../samples/rust-split-impl) | A type with `impl` blocks in several files. |
-| [`rust-reexport`](../samples/rust-reexport)     | Rust re-exports.                            |
-| [`rust-chain`](../samples/rust-chain)           | A guess in the middle of a chain of calls.  |
-| [`rust-wide`](../samples/rust-wide)             | A module with many dependents.              |
-| [`rust-uneven`](../samples/rust-uneven)         | One large file, small ones, and a getter.   |
-| [`ts-resolution`](../samples/ts-resolution)     | TypeScript path aliases and barrel files.   |
-| [`clones`](../samples/clones)                   | Duplicated code.                            |
-| [`broken`](../samples/broken)                   | Files with syntax errors.                   |
-| [`mixed`](../samples/mixed)                     | One file of every kind Cyclops recognizes.  |
-| [`docs-only`](../samples/docs-only)             | A project with no source code.              |
+| Workspace                                       | Used for                                           |
+| ----------------------------------------------- | -------------------------------------------------- |
+| [`rust-shop`](../samples/rust-shop)             | The main Rust project.                             |
+| [`ts-shop`](../samples/ts-shop)                 | The same project in TypeScript.                    |
+| [`js-shop`](../samples/js-shop)                 | A similar project in JavaScript.                   |
+| [`rust-cycles`](../samples/rust-cycles)         | Dependency cycles in Rust.                         |
+| [`ts-cycles`](../samples/ts-cycles)             | Dependency cycles in TypeScript.                   |
+| [`rust-split-impl`](../samples/rust-split-impl) | A type with `impl` blocks in several files.        |
+| [`rust-reexport`](../samples/rust-reexport)     | Rust re-exports.                                   |
+| [`rust-chain`](../samples/rust-chain)           | A guess in the middle of a chain of calls.         |
+| [`rust-wide`](../samples/rust-wide)             | A module with many dependents.                     |
+| [`rust-uneven`](../samples/rust-uneven)         | One large file, small ones, and a getter.          |
+| [`rust-crates`](../samples/rust-crates)         | A workspace of one large crate and six small ones. |
+| [`ts-resolution`](../samples/ts-resolution)     | TypeScript path aliases and barrel files.          |
+| [`clones`](../samples/clones)                   | Duplicated code.                                   |
+| [`broken`](../samples/broken)                   | Files with syntax errors.                          |
+| [`mixed`](../samples/mixed)                     | One file of every kind Cyclops recognizes.         |
+| [`docs-only`](../samples/docs-only)             | A project with no source code.                     |
 
 The three shop projects share one dependency graph, which many pages rely on:
 
