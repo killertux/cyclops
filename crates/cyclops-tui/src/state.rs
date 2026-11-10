@@ -244,10 +244,12 @@ pub enum Popup {
         hidden: Vec<SymbolId>,
         cursor: usize,
     },
-    /// The tiles a `+N small` tile of the map stands for.
+    /// The tiles a `+N small` tile of the map stands for, or the packages a
+    /// `+N small packages` tile does.
     SmallTiles {
         tiles: Vec<SymbolId>,
         cursor: usize,
+        packages: bool,
     },
     /// What can be done to the symbol under a right click.
     ContextMenu {
@@ -266,6 +268,7 @@ impl Popup {
             Self::SortPicker { .. } => "sort picker",
             Self::RelationPicker { .. } => "relation picker",
             Self::MoreNodes { .. } => "more nodes",
+            Self::SmallTiles { packages: true, .. } => "small packages",
             Self::SmallTiles { .. } => "small tiles",
             Self::ContextMenu { .. } => "right-click menu",
         }

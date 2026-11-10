@@ -2365,7 +2365,15 @@ impl App {
                 .total_cmp(&self.tile_lines(a))
                 .then_with(|| a.cmp(b))
         });
-        self.popup = Some(Popup::SmallTiles { tiles, cursor: 0 });
+        let packages = tiles.iter().all(|id| {
+            self.symbol(id)
+                .is_some_and(|symbol| symbol.kind == SymbolKind::Package)
+        });
+        self.popup = Some(Popup::SmallTiles {
+            tiles,
+            cursor: 0,
+            packages,
+        });
     }
 
     /// Zooms the map into a tile, when it has anything inside.
@@ -2996,7 +3004,11 @@ impl App {
                 cursor,
             } => self.relation_picker_key(key, typed, ticked, cursor),
             Popup::MoreNodes { hidden, cursor } => self.more_nodes_key(key, hidden, cursor),
-            Popup::SmallTiles { tiles, cursor } => self.small_tiles_key(key, tiles, cursor),
+            Popup::SmallTiles {
+                tiles,
+                cursor,
+                packages,
+            } => self.small_tiles_key(key, tiles, cursor, packages),
             Popup::ContextMenu { cursor } => self.context_menu_key(key, cursor),
             Popup::ConfirmPrecise => {
                 if matches!(key, Key::Char('y' | 'Y')) {
@@ -3144,7 +3156,7 @@ impl App {
         }
     }
 
-    fn small_tiles_key(&mut self, key: Key, tiles: Vec<SymbolId>, cursor: usize) {
+    fn small_tiles_key(&mut self, key: Key, tiles: Vec<SymbolId>, cursor: usize, packages: bool) {
         match key {
             Key::Esc | Key::Char('q') => {}
             Key::Enter => {
@@ -3154,13 +3166,27 @@ impl App {
             }
             Key::Char('j') | Key::Down => {
                 let cursor = moved(cursor, 1, tiles.len());
-                self.popup = Some(Popup::SmallTiles { tiles, cursor });
+                self.popup = Some(Popup::SmallTiles {
+                    tiles,
+                    cursor,
+                    packages,
+                });
             }
             Key::Char('k') | Key::Up => {
                 let cursor = cursor.saturating_sub(1);
-                self.popup = Some(Popup::SmallTiles { tiles, cursor });
+                self.popup = Some(Popup::SmallTiles {
+                    tiles,
+                    cursor,
+                    packages,
+                });
             }
-            _ => self.popup = Some(Popup::SmallTiles { tiles, cursor }),
+            _ => {
+                self.popup = Some(Popup::SmallTiles {
+                    tiles,
+                    cursor,
+                    packages,
+                });
+            }
         }
     }
 

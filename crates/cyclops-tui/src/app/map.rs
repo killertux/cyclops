@@ -69,6 +69,14 @@ impl MapScene {
     }
 }
 
+/// The packages' frames, laid out: a slot for each package left, and the band of the
+/// `+N small packages` tile with the packages folded into it and their lines.
+struct FoldedPackages {
+    slots: Vec<Rect>,
+    band: Option<Rect>,
+    folded: Vec<(SymbolId, f64)>,
+}
+
 /// What the map knows of a tile before laying it out.
 struct Facts<'a> {
     symbol: &'a Symbol,
@@ -110,7 +118,13 @@ impl App {
         self.facts()
             .iter()
             .find(|facts| &facts.symbol.id == id)
-            .map_or(1.0, |facts| facts.lines)
+            .map(|facts| facts.lines)
+            .or_else(|| {
+                self.analysis.as_ref().and_then(|analysis| {
+                    analysis.value(&Subject::Symbol(id.clone()), MetricId::Lines)
+                })
+            })
+            .unwrap_or(1.0)
     }
 
     /// The tile with the most lines.
@@ -246,7 +260,15 @@ impl App {
             .map(|(_, members)| members.iter().map(|tile| tile.lines).sum())
             .collect();
         let languages = self.languages_by_module();
-        for ((frame, members), slot) in packages.iter().zip(squarify(&weights, area)) {
+        let FoldedPackages {
+            slots,
+            band,
+            folded,
+        } = fold_packages(&mut packages, weights, area, |id| {
+            self.symbol(id)
+                .map_or(0, |symbol| symbol.name.chars().count())
+        });
+        for ((frame, members), slot) in packages.iter().zip(slots) {
             if slot.width < 3 || slot.height < 3 {
                 continue;
             }
@@ -257,6 +279,18 @@ impl App {
                 title,
             });
             self.lay_frame(&mut scene, members, inner(slot));
+        }
+        if let Some(band) = band {
+            let lines = folded.iter().map(|(_, lines)| lines).sum();
+            let mut ids: Vec<SymbolId> = folded.into_iter().map(|(id, _)| id).collect();
+            ids.sort();
+            scene.tiles.push(MapTile {
+                id: SymbolId::new(&format!("+packages {} {}", band.x, band.y)),
+                name: format!("+{} small packages", ids.len()),
+                lines,
+                area: gap(band),
+                folded: ids,
+            });
         }
         scene
     }
@@ -586,6 +620,56 @@ where
     }
 }
 
+/// Lays the packages' frames out in `area`. A frame with no room for its title and one
+/// tile is folded, with the others like it, into a band along the bottom. Gives the
+/// frames of the packages left, the band, and the packages folded with their lines.
+fn fold_packages<T>(
+    packages: &mut Vec<(SymbolId, T)>,
+    mut weights: Vec<f64>,
+    area: Rect,
+    name: impl Fn(&SymbolId) -> usize,
+) -> FoldedPackages {
+    let mut folded: Vec<(SymbolId, f64)> = Vec::new();
+    loop {
+        let (room, band) = if folded.is_empty() {
+            (area, None)
+        } else {
+            let (room, band) = fold_band(area);
+            (room, Some(band))
+        };
+        let slots = squarify(&weights, room);
+        let small: Vec<usize> = slots
+            .iter()
+            .zip(packages.iter())
+            .enumerate()
+            .filter(|(_, (slot, (id, _)))| !frame_fits(name(id), **slot))
+            .map(|(index, _)| index)
+            .collect();
+        if small.is_empty() {
+            // With nothing left to frame, the folded packages take the whole area.
+            let band = band.map(|band| if packages.is_empty() { area } else { band });
+            return FoldedPackages {
+                slots,
+                band,
+                folded,
+            };
+        }
+        for index in small.into_iter().rev() {
+            if index < packages.len() {
+                let (id, _) = packages.remove(index);
+                let lines = weights.remove(index);
+                folded.push((id, lines));
+            }
+        }
+    }
+}
+
+/// Whether a package's frame has room for its title, a name this long, and one tile.
+fn frame_fits(name: usize, slot: Rect) -> bool {
+    let title = u16::try_from(name).unwrap_or(u16::MAX).saturating_add(6);
+    slot.width >= title.max(TILE_WIDTH + 3) && slot.height >= TILE_HEIGHT + 3
+}
+
 /// Splits an area into the room left for tiles and a band for the `+N small` tile: a row
 /// of tiles at the bottom, or a column on the right where the area is low, or the whole
 /// area where it has no room to share.
@@ -719,6 +803,31 @@ mod tests {
         lay_tiles(&mut nowhere, &facts, Rect::new(1, 1, 0, 0));
         assert!(nowhere.tiles.is_empty(), "{nowhere:?}");
         assert!(scene.tiles.iter().all(|tile| tile.area.width >= TILE_WIDTH));
+    }
+
+    #[test]
+    fn packages_with_no_room_for_a_frame_fold_into_one() {
+        let ids = ["engine", "c01", "c02", "c03"].map(SymbolId::new);
+        let mut packages: Vec<(SymbolId, ())> = ids.iter().map(|id| (id.clone(), ())).collect();
+        let area = Rect::new(0, 2, 80, 17);
+        let folded = fold_packages(&mut packages, vec![300.0, 2.0, 2.0, 2.0], area, |id| {
+            id.as_str().len()
+        });
+        let left: Vec<&str> = packages.iter().map(|(id, ())| id.as_str()).collect();
+        assert_eq!(left, ["engine"]);
+        let mut names: Vec<&str> = folded.folded.iter().map(|(id, _)| id.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["c01", "c02", "c03"]);
+        assert_eq!(folded.band, Some(Rect::new(0, 16, 80, 3)));
+        assert!(folded.slots.iter().all(|slot| slot.y + slot.height <= 16));
+        let mut alone: Vec<(SymbolId, ())> = vec![(SymbolId::new("c01"), ())];
+        let tiny = Rect::new(0, 0, 6, 3);
+        let all = fold_packages(&mut alone, vec![2.0], tiny, |id| id.as_str().len());
+        assert_eq!(alone.len(), 0, "{alone:?}");
+        assert_eq!(all.band, Some(tiny));
+        assert!(frame_fits(3, Rect::new(0, 0, 9, 5)));
+        assert!(!frame_fits(3, Rect::new(0, 0, 8, 5)));
+        assert!(!frame_fits(3, Rect::new(0, 0, 9, 4)));
     }
 
     #[test]

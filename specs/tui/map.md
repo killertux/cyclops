@@ -84,6 +84,26 @@ one-line files.
 | Choosing one | rust-uneven | 80x24 | `<Space>m<click more><click menu uneven::t08>` | none        | uneven::t08 | Map of t08  | yes       |
 | Room for all | rust-uneven | 80x24 | `fpath ~ "src/t*"<CR><Space>m`                 | none        | uneven      | small       | no        |
 
+The same goes for packages. A package whose frame has no room for its title and one
+tile is folded, with the others like it, into one `+N small packages` tile along the
+bottom of the map. `Enter` or a click on it lists them in a popup, and choosing one
+zooms into it. [`rust-crates`](../../samples/rust-crates) is a workspace with one large
+crate and six small ones.
+
+[//]: # "decisionTable Tui"
+
+| # situation  | workspace   | size  | keys                               | popup?         | text              | includes? |
+| ------------ | ----------- | ----- | ---------------------------------- | -------------- | ----------------- | --------- |
+| Folded       | rust-crates | 80x24 | `<Space>m`                         | none           | +6 small packages | yes       |
+| Listing them | rust-crates | 80x24 | `<Space>m<click more>`             | small packages | c06               | yes       |
+| Room for all | rust-crates | 80x24 | `fpath ~ "crates/c0*"<CR><Space>m` | none           | small             | no        |
+
+[//]: # "decisionTable Tui"
+
+| # situation  | workspace   | size  | keys                                   | focus? | text      | includes? |
+| ------------ | ----------- | ----- | -------------------------------------- | ------ | --------- | --------- |
+| Choosing one | rust-crates | 80x24 | `<Space>m<click more><click menu c06>` | c06    | c06  rust | yes       |
+
 ## Color
 
 `tile value?` reads the value on the `subject` tile. A tile with no value has no color

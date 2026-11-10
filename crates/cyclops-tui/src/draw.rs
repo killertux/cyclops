@@ -2685,7 +2685,11 @@ fn popups(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
             cursor,
         }) => relation_picker(canvas, body, typed, ticked, *cursor),
         Some(Popup::MoreNodes { hidden, cursor }) => more_nodes(app, canvas, body, hidden, *cursor),
-        Some(Popup::SmallTiles { tiles, cursor }) => small_tiles(app, canvas, body, tiles, *cursor),
+        Some(Popup::SmallTiles {
+            tiles,
+            cursor,
+            packages,
+        }) => small_tiles(app, canvas, body, tiles, *cursor, *packages),
         Some(Popup::ContextMenu { cursor }) => context_menu(app, canvas, body, *cursor),
         None => {}
     }
@@ -4295,7 +4299,14 @@ fn more_nodes(app: &App, canvas: &mut Canvas<'_>, body: Rect, hidden: &[SymbolId
 }
 
 /// The tiles of a `+N small` tile, largest first.
-fn small_tiles(app: &App, canvas: &mut Canvas<'_>, body: Rect, tiles: &[SymbolId], cursor: usize) {
+fn small_tiles(
+    app: &App,
+    canvas: &mut Canvas<'_>,
+    body: Rect,
+    tiles: &[SymbolId],
+    cursor: usize,
+    packages: bool,
+) {
     let height = u16::try_from(tiles.len())
         .unwrap_or(u16::MAX)
         .saturating_add(6);
@@ -4306,7 +4317,8 @@ fn small_tiles(app: &App, canvas: &mut Canvas<'_>, body: Rect, tiles: &[SymbolId
         height: height.min(body.height),
     };
     popup_frame(canvas, area, "");
-    let title = format!("{} small tiles", tiles.len());
+    let what = if packages { "packages" } else { "tiles" };
+    let title = format!("{} small {what}", tiles.len());
     canvas.text(area.x + 2, area.y + 1, &title, Token::Popb, area);
     let note = "Too small to draw. Enter zooms into one.";
     canvas.text(area.x + 2, area.y + 2, note, Token::Popd, area);
