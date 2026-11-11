@@ -417,6 +417,7 @@ pub enum Target {
 /// The lists the wheel scrolls, each on its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Scroll {
+    Metrics,
     Tree,
     Results,
     Hits,

@@ -1148,6 +1148,23 @@ fn asking_before_indexing_has_the_design_place() {
 }
 
 #[test]
+fn the_metrics_list_follows_its_selection_in_a_short_terminal() {
+    // At 24 rows the Metrics pane has room for fewer rows than there are metrics.
+    let mut app = opened_at(shop().build(), "G", (120, 24));
+    assert_eq!(app.lens().metric, MetricId::Hotspot);
+    let screen = screen_text(&render(&mut app));
+    let metrics: Vec<&str> = screen
+        .lines()
+        .filter_map(|line| line.split('│').nth(3))
+        .map(str::trim_start)
+        .collect();
+    assert!(
+        metrics.iter().any(|row| row.starts_with("hotspot")),
+        "{screen}"
+    );
+}
+
+#[test]
 fn a_small_terminal_matches_the_design() {
     let mut app = opened_at(
         shop().build(),

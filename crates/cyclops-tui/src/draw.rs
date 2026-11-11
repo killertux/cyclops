@@ -1721,11 +1721,23 @@ fn overview_metrics(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool
     canvas.text(inside.x + 15, inside.y, "spread", Token::Faint, inside);
     canvas.text(inside.x + 25, inside.y, "highest", Token::Faint, inside);
     canvas.text_right(value_end, inside.y, "value", Token::Faint, inside);
-    for (index, metric) in OVERVIEW_METRICS.iter().enumerate() {
-        let y = inside.y + 1 + u16::try_from(index).unwrap_or_default();
-        if y >= inside.y + inside.height {
-            break;
-        }
+    // Below the heading, the list follows the current metric when it has no room for all.
+    let room = usize::from(inside.height.saturating_sub(1));
+    let selected = OVERVIEW_METRICS
+        .iter()
+        .position(|metric| *metric == app.lens().metric);
+    let base = selected.map_or(0, |selected| {
+        selected.saturating_sub(room.saturating_sub(1))
+    });
+    let (first, further) = scroll_window(app, Scroll::Metrics, base, OVERVIEW_METRICS.len(), room);
+    let list = Rect {
+        y: inside.y + 1,
+        height: u16::try_from(room).unwrap_or(u16::MAX),
+        ..inside
+    };
+    canvas.hit(list, Target::List(Scroll::Metrics, further));
+    for (index, metric) in OVERVIEW_METRICS.iter().enumerate().skip(first).take(room) {
+        let y = inside.y + 1 + u16::try_from(index - first).unwrap_or_default();
         let line = Rect {
             y,
             height: 1,
