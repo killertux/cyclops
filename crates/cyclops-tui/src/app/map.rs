@@ -4,6 +4,7 @@
 
 use super::{App, SIDE_BY_SIDE, parent_of};
 use crate::canvas::inner;
+use crate::state::counted;
 use crate::treemap::squarify;
 use cyclops_domain::metric::{MetricId, Subject};
 use cyclops_domain::symbol::{Symbol, SymbolId, SymbolKind};
@@ -513,14 +514,7 @@ impl App {
             .into_iter()
             .max_by_key(|(_, total)| *total)
             .map(|(language, _)| language);
-        // The title gives up the language, then the lines, rather than be cut short.
-        let room = usize::from(width.saturating_sub(6));
-        let short = format!("{name}  {lines}");
-        match language {
-            Some(language) if width >= 40 => format!("{name}  {language}  {lines} lines"),
-            _ if short.chars().count() <= room => short,
-            _ => name,
-        }
+        frame_text(&name, language, &lines, width)
     }
 
     /// What a frame holds: groups with their tiles, and tiles of their own.
@@ -670,6 +664,20 @@ fn fold_packages<T>(
 }
 
 /// Whether a package's frame has room for its title, a name this long, and one tile.
+/// A frame's title from its parts. It gives up the language, then the lines, rather
+/// than be cut short.
+fn frame_text(name: &str, language: Option<&str>, lines: &str, width: u16) -> String {
+    let room = usize::from(width.saturating_sub(6));
+    let short = format!("{name}  {lines}");
+    match language {
+        Some(language) if width >= 40 => {
+            format!("{name}  {language}  {}", counted(lines, "line"))
+        }
+        _ if short.chars().count() <= room => short,
+        _ => name.to_owned(),
+    }
+}
+
 fn frame_fits(name: usize, slot: Rect) -> bool {
     let title = u16::try_from(name).unwrap_or(u16::MAX).saturating_add(6);
     slot.width >= title.max(TILE_WIDTH + 3) && slot.height >= TILE_HEIGHT + 3
@@ -808,6 +816,18 @@ mod tests {
         lay_tiles(&mut nowhere, &facts, Rect::new(1, 1, 0, 0));
         assert!(nowhere.tiles.is_empty(), "{nowhere:?}");
         assert!(scene.tiles.iter().all(|tile| tile.area.width >= TILE_WIDTH));
+    }
+
+    #[test]
+    fn a_frame_of_one_line_says_line() {
+        assert_eq!(
+            frame_text("c06", Some("rust"), "1", 80),
+            "c06  rust  1 line"
+        );
+        assert_eq!(
+            frame_text("engine", Some("rust"), "301", 80),
+            "engine  rust  301 lines"
+        );
     }
 
     #[test]

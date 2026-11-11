@@ -8,7 +8,7 @@ use crate::canvas::{Canvas, fit, fit_start, width};
 use crate::editor::{FIELDS, RuleEditor};
 use crate::scene::{BoxRow, Card, Route, routes};
 use crate::state::{
-    OVERVIEW_METRICS, Pane, Popup, PromptKind, Scroll, Section, Target, View, metric_label,
+    OVERVIEW_METRICS, Pane, Popup, PromptKind, Scroll, Section, Target, View, counted, metric_label,
 };
 use crate::tokens::Token;
 use crate::treemap::steps;
@@ -116,9 +116,9 @@ fn tab_bar(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
                 .map(|symbol| root_name(app, symbol))
                 .unwrap_or_default();
             format!(
-                "{project} · {} files · {} lines",
-                grouped(files),
-                grouped(usize::try_from(lines).unwrap_or_default())
+                "{project} · {} · {}",
+                counted(&grouped(files), "file"),
+                counted(&grouped(usize::try_from(lines).unwrap_or_default()), "line")
             )
         }
         None if app.analyzing() => "first run".to_owned(),
@@ -916,7 +916,10 @@ fn inspector(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
                 analysis
                     .value(&Subject::Symbol(symbol.id.clone()), MetricId::Lines)
                     .map_or_else(String::new, |lines| {
-                        format!(" · {} lines", crate::state::shown(MetricId::Lines, lines))
+                        format!(
+                            " · {}",
+                            counted(&crate::state::shown(MetricId::Lines, lines), "line")
+                        )
                     })
             },
             |location| format!(" · {}:{}", location.file, location.span.start_line),
@@ -2207,8 +2210,8 @@ fn map_legend(app: &App, canvas: &mut Canvas<'_>, area: Rect, scene: &MapScene) 
         .iter()
         .find(|tile| Some(&tile.id) == selected.as_ref())
     {
-        let lines = crate::state::shown(MetricId::Lines, tile.lines);
-        let size = format!("{}: {lines} lines", tile.name);
+        let lines = counted(&crate::state::shown(MetricId::Lines, tile.lines), "line");
+        let size = format!("{}: {lines}", tile.name);
         let right = area.x + area.width - 1;
         if right.saturating_sub(width(&size)) > end + 1 {
             canvas.text_right(right, y, &size, Token::Faint, row);

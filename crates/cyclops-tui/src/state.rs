@@ -492,6 +492,17 @@ pub const fn metric_label(metric: MetricId) -> &'static str {
     }
 }
 
+/// A count and what it counts, as people say it: `1 line`, `2 lines`. `count` is the
+/// number as shown, so `1,000` is plural too.
+#[must_use]
+pub fn counted(count: &str, noun: &str) -> String {
+    if count == "1" {
+        format!("{count} {noun}")
+    } else {
+        format!("{count} {noun}s")
+    }
+}
+
 /// A value as the interface shows it: a share of copies as a percent, a count with commas
 /// between thousands, and any other ratio with two decimals.
 #[must_use]
