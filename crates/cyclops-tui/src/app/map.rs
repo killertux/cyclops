@@ -300,8 +300,8 @@ impl App {
     /// cell is about twice as tall as it is wide.
     pub(super) fn map_move(&mut self, toward: Toward) {
         let scene = self.map_scene(self.map_area());
-        let here = self
-            .map_selected
+        let selected = self.selected();
+        let here = selected
             .as_ref()
             .and_then(|selected| scene.tiles.iter().find(|tile| &tile.id == selected));
         let Some(here) = here else {
@@ -328,7 +328,12 @@ impl App {
         };
         let files = self.map_files(&holder);
         if files.is_empty() {
-            analysis.view().children(&holder).collect()
+            let depth = self.depth();
+            analysis
+                .view()
+                .children(&holder)
+                .filter(|child| depth.shows(child))
+                .collect()
         } else {
             files
         }
@@ -338,7 +343,7 @@ impl App {
     pub(super) fn map_holder(&self) -> Option<SymbolId> {
         let analysis = self.analysis.as_ref()?;
         let focus = self.focus.as_ref()?;
-        if analysis.view().children(focus).next().is_some() {
+        if self.shows_inside(focus) {
             return Some(focus.clone());
         }
         analysis

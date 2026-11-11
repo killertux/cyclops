@@ -232,6 +232,7 @@ as `rows?`, are in that order rather than alphabetical.
 | `count?`           | How many rows the list has.                            |
 | `gutter?`          | The lines of the source with points, and those points. |
 | `line?`            | The current line of the source.                        |
+| `top?`             | The first line of the source in view.                  |
 | `mascot?`          | The pose of the mascot.                                |
 | `indexers run?`    | `yes` if the indexers ran.                             |
 | `created?`         | A file that now exists, or `none`.                     |

@@ -2,7 +2,7 @@
 //! See `specs/tui/design/`.
 
 use crate::app::{App, MIN_COLUMNS, MIN_ROWS, Running, SIDE_BY_SIDE, hints, picked, space_menu};
-use crate::app::{CONTEXT_MENU, MapScene, MapTile, TreeRow, relation_choices};
+use crate::app::{CONTEXT_MENU, MapScene, MapTile, TreeRow, relation_choices, shows_source};
 use crate::canvas::inner;
 use crate::canvas::{Canvas, fit, fit_start, width};
 use crate::editor::{FIELDS, RuleEditor};
@@ -1237,6 +1237,7 @@ fn inspector_why(
         | MetricId::Abstractness
         | MetricId::Distance => &[("gr", "impact")],
         MetricId::CycleSize => &[("]c", "next cycle")],
+        metric if shows_source(metric) => &[("gd", "opens the source")],
         _ => &[],
     };
     let mut x = body.x + 1;
@@ -3084,14 +3085,7 @@ fn why_view(app: &App, canvas: &mut Canvas<'_>, body: Rect) {
     let inside = canvas.pane(left, &title, app.pane() != Some(Pane::Inspector));
     let points: HashMap<u32, u32> = app.gutter().into_iter().collect();
     let current = app.why_line();
-    let room = u32::from(inside.height);
-    // The function starts at the top, until the current line would leave the pane.
-    let start = app.why_start().unwrap_or(current).max(1);
-    let first = if current < start + room.saturating_sub(2) {
-        start
-    } else {
-        current.saturating_sub(room / 2).max(1)
-    };
+    let first = app.why_top();
     for (offset, line) in text
         .lines()
         .skip(usize::try_from(first - 1).unwrap_or(0))

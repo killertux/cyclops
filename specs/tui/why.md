@@ -10,8 +10,15 @@ shows [explanations](../explore/explanations.md) from the core.
 
 ## The source
 
-The gutter shows the cognitive points each line added. `n` and `N` step through the
-lines that have points, and `line?` is the current line.
+`gd` opens the whole file, with the function in the middle of the view. There are as
+many lines above the function as below it, and the odd one goes below. Near the start
+or end of the file, the view stops at the edge. A short file shows whole, and a
+function taller than the view starts at the top. `top?` is the first line in view.
+
+The current line starts on the function's first line. `line?` is the current line.
+
+The gutter shows the cognitive points of every line in the file. `n` and `N` step
+through those lines and wrap around. The reasons stay on the function that was opened.
 
 [//]: # "import Spec.Fixtures"
 [//]: # "decisionTable Tui"
@@ -25,8 +32,52 @@ lines that have points, and `line?` is the current line.
 | Back          | rust-shop | `<C-p>Order::total<CR>gdnnN` | Explore | Why      | 15 +1, 16 +2 | 15    |
 | Straight code | rust-shop | `<C-p>greeting<CR>gd`        | Explore | Why      | none         | 1     |
 
-`gd` on something larger than a function opens its worst function, by the current
-metric, and says which one. With `hotspot` or `churn`, that is the worst function of its
+[//]: # "decisionTable Tui"
+
+| # situation     | workspace | keys                              | view?   | section? | gutter?                               | line? |
+| --------------- | --------- | --------------------------------- | ------- | -------- | ------------------------------------- | ----- |
+| Up a line       | rust-shop | `<C-p>Order::total<CR>gdk`        | Explore | Why      | 15 +1, 16 +2                          | 12    |
+| The whole file  | clones    | `<C-p>partial::describe<CR>gd`    | Explore | Why      | 3 +1, 4 +2, 6 +1, 10 +2, 16 +1, 17 +2 | 14    |
+| On to the next  | clones    | `<C-p>partial::total<CR>gdnnnnn`  | Explore | Why      | 3 +1, 4 +2, 6 +1, 10 +2, 16 +1, 17 +2 | 16    |
+| Around the file | clones    | `<C-p>partial::describe<CR>gdnnn` | Explore | Why      | 3 +1, 4 +2, 6 +1, 10 +2, 16 +1, 17 +2 | 3     |
+
+`N` from `describe` goes back to line 10, inside `total`, and the reasons still explain
+`describe`.
+
+[//]: # "decisionTable Tui"
+
+| # situation      | workspace | keys                            | text                | includes? |
+| ---------------- | --------- | ------------------------------- | ------------------- | --------- |
+| The reasons stay | clones    | `<C-p>partial::describe<CR>gdN` | Why cyclomatic is 3 | yes       |
+
+### Moving through the file
+
+`j` and `k` move the current line, and the view follows only when the line would leave
+it. `Ctrl-d` and `Ctrl-u` move the view and the line by half a page. `gg` and `G` go to
+the first and last line. In [`rust-crates`](../../samples/rust-crates),
+`crates/engine/src/big.rs` has 400 lines, with `step_050` on lines 197 to 199. The view
+is 30 lines tall, so `step_050` has 13 lines above it and 14 below.
+
+[//]: # "decisionTable Tui"
+
+| # situation  | workspace   | keys                       | line? | top? |
+| ------------ | ----------- | -------------------------- | ----- | ---- |
+| Centered     | rust-crates | `<C-p>step_050<CR>gd`      | 197   | 184  |
+| At the start | rust-crates | `<C-p>step_001<CR>gd`      | 1     | 1    |
+| At the end   | rust-crates | `<C-p>step_100<CR>gd`      | 397   | 371  |
+| Down         | rust-crates | `<C-p>step_050<CR>gdj`     | 198   | 184  |
+| Up           | rust-crates | `<C-p>step_050<CR>gdk`     | 196   | 184  |
+| Half a page  | rust-crates | `<C-p>step_050<CR>gd<C-d>` | 212   | 199  |
+| Back up      | rust-crates | `<C-p>step_050<CR>gd<C-u>` | 182   | 169  |
+| First        | rust-crates | `<C-p>step_050<CR>gdgg`    | 1     | 1    |
+| Last         | rust-crates | `<C-p>step_050<CR>gdG`     | 400   | 371  |
+
+Line 400 is the empty last line, so at the end the view shows lines 371 to 400.
+
+### Opening a larger symbol
+
+`gd` on something larger than a function opens the file of its worst function, by the
+current metric, centered on that function, and says which one. With `hotspot` or `churn`, that is the worst function of its
 worst file.
 
 [//]: # "decisionTable Tui"

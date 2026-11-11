@@ -172,6 +172,8 @@ struct AlertsState {
 struct WhyState {
     /// The current line.
     line: u32,
+    /// The first line in view, once moved. Until then the function sits in the middle.
+    top: Option<u32>,
     /// The file being shown, and its text.
     source: Option<(String, String)>,
 }
@@ -889,6 +891,7 @@ impl App {
         let kept = self.kept();
         let shown = |symbol: &&Symbol| kept.as_ref().is_none_or(|kept| kept.contains(&symbol.id));
         let metric = self.lens.metric;
+        let stop = self.depth();
         let mut rows = Vec::new();
         let mut pending: Vec<(&Symbol, usize)> = analysis
             .roots_by(metric)
@@ -902,6 +905,7 @@ impl App {
                 .children_by(&symbol.id, metric)
                 .into_iter()
                 .filter(shown)
+                .filter(|child| stop.shows(child))
                 .collect();
             let open = (!children.is_empty()).then(|| {
                 self.expanded.contains(&symbol.id) || (kept.is_some() && !children.is_empty())
@@ -1057,6 +1061,46 @@ impl App {
         uses
     }
 
+    /// How deep the tree and the map go under the current metric.
+    fn depth(&self) -> Depth<'_> {
+        let scope = self.lens.metric.descriptor().finest_scope();
+        let files = match (&self.analysis, scope) {
+            (Some(analysis), Scope::File) => analysis
+                .files()
+                .iter()
+                .filter_map(|file| file.module.as_ref())
+                .collect(),
+            _ => HashSet::new(),
+        };
+        Depth { scope, files }
+    }
+
+    /// Whether the tree and the map show anything inside a symbol, under the metric.
+    fn shows_inside(&self, id: &SymbolId) -> bool {
+        let Some(analysis) = &self.analysis else {
+            return false;
+        };
+        let depth = self.depth();
+        analysis.view().children(id).any(|child| depth.shows(child))
+    }
+
+    /// The symbol itself when the tree shows it under the metric, or else the nearest
+    /// one it sits in.
+    fn shown_holder(&self, id: &SymbolId) -> SymbolId {
+        let depth = self.depth();
+        let mut current = id.clone();
+        while let Some(symbol) = self.symbol(&current) {
+            if depth.shows(symbol) {
+                break;
+            }
+            match parent_of(symbol) {
+                Some(parent) => current = parent.clone(),
+                None => break,
+            }
+        }
+        current
+    }
+
     /// Where a symbol is written, as the editor wants it.
     fn place_of(&self, id: &SymbolId) -> Option<(String, u32)> {
         let analysis = self.analysis.as_ref()?;
@@ -1145,7 +1189,11 @@ impl App {
                 .get(self.find.index)
                 .map(|symbol| symbol.id.clone()),
             View::Diagram => self.diagram.selected.clone().or_else(|| self.focus.clone()),
-            View::Map => self.map_selected.clone(),
+            // A focus with nothing inside is drawn as a tile of its parent, selected.
+            View::Map => self
+                .map_selected
+                .clone()
+                .or_else(|| self.focus.clone().filter(|focus| !self.shows_inside(focus))),
         }
     }
 
@@ -1465,16 +1513,31 @@ impl App {
         self.problem_at
     }
 
-    /// The lines of Why's source with cognitive points, and the points.
+    /// The lines of Why's source with cognitive points, and the points, for every
+    /// function in the file.
     #[must_use]
     pub fn gutter(&self) -> Vec<(u32, u32)> {
-        let (Some(analysis), Some(focus)) = (&self.analysis, &self.focus) else {
+        let (Some(analysis), Some((path, _))) = (&self.analysis, self.place_of_symbol()) else {
             return Vec::new();
         };
-        analysis
-            .explain(focus)
-            .map(|explanation| explanation.points)
-            .unwrap_or_default()
+        let mut points = BTreeMap::new();
+        for symbol in analysis.view().symbols() {
+            let in_file = symbol
+                .location
+                .as_ref()
+                .is_some_and(|location| location.file.as_str() == path);
+            if !in_file || !matches!(symbol.kind, SymbolKind::Function | SymbolKind::Method) {
+                continue;
+            }
+            for (line, added) in analysis
+                .explain(&symbol.id)
+                .map(|explanation| explanation.points)
+                .unwrap_or_default()
+            {
+                points.entry(line).or_insert(added);
+            }
+        }
+        points.into_iter().collect()
     }
 
     /// The current line of Why's source.
@@ -1494,10 +1557,93 @@ impl App {
         (focus_file == *path).then_some((path.as_str(), text.as_str()))
     }
 
-    /// The first line of the focus, where Why's source starts.
+    /// The first line of Why's source in view. The function opened sits in the middle
+    /// until the view moves, and the view never runs past either end of the file.
     #[must_use]
-    pub fn why_start(&self) -> Option<u32> {
-        self.place_of_symbol().map(|(_, line)| line)
+    pub fn why_top(&self) -> u32 {
+        let top = self.why.top.unwrap_or_else(|| self.why_centered());
+        top.min(self.why_last_top()).max(1)
+    }
+
+    /// How many lines of source Why has room for: the view, less its bars and borders.
+    fn why_room(&self) -> u32 {
+        u32::from(self.rows.saturating_sub(6)).max(1)
+    }
+
+    /// How many lines the file in Why has.
+    fn why_total(&self) -> u32 {
+        self.why
+            .source
+            .as_ref()
+            .map_or(1, |(_, text)| {
+                u32::try_from(text.lines().count()).unwrap_or(u32::MAX)
+            })
+            .max(1)
+    }
+
+    /// The top that shows the end of the file at the bottom of the view.
+    fn why_last_top(&self) -> u32 {
+        (self.why_total() + 1)
+            .saturating_sub(self.why_room())
+            .max(1)
+    }
+
+    /// The top that puts the focus in the middle, the odd line below it. A function
+    /// taller than the view starts at the top.
+    fn why_centered(&self) -> u32 {
+        let span = self
+            .focus
+            .as_ref()
+            .and_then(|focus| self.symbol(focus))
+            .and_then(|symbol| symbol.location.as_ref())
+            .map(|location| (location.span.start_line, location.span.end_line));
+        let Some((start, end)) = span else {
+            return self.why.line;
+        };
+        let height = end.saturating_sub(start) + 1;
+        let room = self.why_room();
+        if height >= room {
+            return start;
+        }
+        start.saturating_sub((room - height) / 2).max(1)
+    }
+
+    /// Moves Why's current line, and the view with it when `scroll`. Otherwise the view
+    /// only moves to keep the line in it.
+    fn why_move(&mut self, by: i64, scroll: bool) {
+        let total = i64::from(self.why_total());
+        let line = (i64::from(self.why.line) + by).min(total).max(1);
+        let mut top = i64::from(self.why_top());
+        if scroll {
+            top += by;
+        }
+        // The line stays in view, and the view stays within the file.
+        let room = i64::from(self.why_room());
+        let top = top
+            .min(line)
+            .max(line - room + 1)
+            .min(i64::from(self.why_last_top()))
+            .max(1);
+        self.why.line = u32::try_from(line).unwrap_or(1);
+        self.why.top = u32::try_from(top).ok().or(Some(1));
+    }
+
+    /// The keys that move through Why's source, when it has the keyboard.
+    fn why_key(&mut self, key: Key) -> bool {
+        if self.why_source().is_none() || self.pane() == Some(Pane::Inspector) {
+            return false;
+        }
+        let times = i64::try_from(self.times()).unwrap_or(1);
+        let half = i64::from(self.why_room() / 2).max(1);
+        match key {
+            Key::Char('j') | Key::Down => self.why_move(times, false),
+            Key::Char('k') | Key::Up => self.why_move(-times, false),
+            Key::Ctrl('d') => self.why_move(half, true),
+            Key::Ctrl('u') => self.why_move(-half, true),
+            Key::Char('G') => self.why_move(i64::from(u32::MAX), false),
+            _ => return false,
+        }
+        true
     }
 
     fn place_of_symbol(&self) -> Option<(String, u32)> {
@@ -1602,6 +1748,11 @@ impl App {
             self.view
         } else {
             View::Explore
+        };
+        let id = if matches!(view, View::Explore | View::Map) {
+            self.shown_holder(&id)
+        } else {
+            id
         };
         self.jump(Place {
             view,
@@ -1947,7 +2098,7 @@ impl App {
     }
 
     fn normal_key(&mut self, key: Key) {
-        if self.view_key(key) {
+        if self.why_key(key) || self.view_key(key) {
             return;
         }
         match key {
@@ -2031,7 +2182,13 @@ impl App {
 
     fn second_key(&mut self, prefix: Key, key: Key) {
         match (prefix, key) {
-            (Key::Char('g'), Key::Char('g')) => self.step(-(isize::MAX / 2)),
+            (Key::Char('g'), Key::Char('g')) => {
+                if self.why_source().is_some() && self.pane() != Some(Pane::Inspector) {
+                    self.why_move(-i64::from(u32::MAX), false);
+                } else {
+                    self.step(-(isize::MAX / 2));
+                }
+            }
             (Key::Char('g'), Key::Char('t')) => match self.count {
                 Some(place) => {
                     let index = usize::try_from(place).unwrap_or(1).saturating_sub(1);
@@ -2147,6 +2304,18 @@ impl App {
     fn set_metric(&mut self, metric: MetricId) {
         self.lens.metric = metric;
         self.lens.chosen = true;
+        // The tree and the map may no longer go as deep as the focus. Why is a view of
+        // its own, so it keeps its function.
+        if matches!(self.view, View::Explore | View::Map)
+            && self.why_source().is_none()
+            && let Some(focus) = self.focus.clone()
+        {
+            let holder = self.shown_holder(&focus);
+            if holder != focus {
+                self.map_selected = None;
+                self.set_focus(Some(holder));
+            }
+        }
     }
 
     /// Opens the Why of the selection, or of its worst function.
@@ -2177,6 +2346,7 @@ impl App {
         self.message = message;
         if let Some((path, line)) = self.place_of(&target) {
             self.why.line = line;
+            self.why.top = None;
             if self
                 .why
                 .source
@@ -2233,7 +2403,8 @@ impl App {
                 .or_else(|| lines.last())
         };
         if let Some(line) = next {
-            self.why.line = *line;
+            let by = i64::from(*line) - i64::from(self.why.line);
+            self.why_move(by, false);
         }
     }
 
@@ -2378,11 +2549,7 @@ impl App {
 
     /// Zooms the map into a tile, when it has anything inside.
     fn zoom_into(&mut self, tile: SymbolId) {
-        let has_inside = self
-            .analysis
-            .as_ref()
-            .is_some_and(|analysis| analysis.view().children(&tile).next().is_some());
-        if has_inside {
+        if self.shows_inside(&tile) {
             self.map_selected = None;
             self.jump(Place {
                 view: View::Map,
@@ -2828,7 +2995,7 @@ impl App {
                 });
             }
             View::Map => {
-                let Some(selected) = self.map_selected.clone() else {
+                let Some(selected) = self.selected() else {
                     return;
                 };
                 let scene = self.map_scene(self.map_area());
@@ -3503,7 +3670,8 @@ impl App {
 
 /// Whether `gd` shows the source of a function for a metric. The others are explained
 /// without lines to point at.
-const fn shows_source(metric: MetricId) -> bool {
+#[must_use]
+pub const fn shows_source(metric: MetricId) -> bool {
     matches!(
         metric,
         MetricId::Cyclomatic
@@ -3514,6 +3682,31 @@ const fn shows_source(metric: MetricId) -> bool {
             | MetricId::Churn
             | MetricId::Hotspot
     )
+}
+
+/// How deep the tree and the map go under a metric. They stop where it is measured,
+/// since nothing below that has a value. See `specs/tui/explore.md`.
+struct Depth<'a> {
+    scope: Scope,
+    /// The modules that are files, which a metric measured on files still shows.
+    files: HashSet<&'a SymbolId>,
+}
+
+impl Depth<'_> {
+    fn shows(&self, symbol: &Symbol) -> bool {
+        let container = matches!(symbol.kind, SymbolKind::Project | SymbolKind::Package);
+        let module = symbol.kind == SymbolKind::Module;
+        match self.scope {
+            Scope::Function => true,
+            Scope::Type => container || module || symbol.kind.is_type(),
+            Scope::Module | Scope::Project => container || module,
+            // A folder has no place of its own, and holds files.
+            Scope::File => {
+                container
+                    || (module && (symbol.location.is_none() || self.files.contains(&symbol.id)))
+            }
+        }
+    }
 }
 
 /// The scope an alert rule or a metric gives a symbol of this kind.
@@ -3728,6 +3921,45 @@ mod tests {
     use crate::render;
     use cyclops_application::diagram::{Edge, Node};
     use cyclops_domain::relation::{Confidence, RelationKind};
+
+    #[test]
+    fn under_a_file_metric_only_files_and_folders_show() {
+        use cyclops_domain::path::RelativePath;
+        use cyclops_domain::symbol::{CodeRole, Location, Span};
+        let module = |id: &str, file: Option<&str>| {
+            let mut symbol = Symbol::container(
+                SymbolId::new(id),
+                None,
+                id,
+                SymbolKind::Module,
+                CodeRole::Production,
+            );
+            symbol.location = file.map(|file| Location {
+                file: RelativePath::new(file),
+                span: Span {
+                    start_line: 5,
+                    end_line: 9,
+                },
+            });
+            symbol
+        };
+        let file = module("shop::notes", Some("src/notes.rs"));
+        let inline = module("shop::notes::tests", Some("src/notes.rs"));
+        let folder = module("src", None);
+        let notes = SymbolId::new("shop::notes");
+        let by_file = Depth {
+            scope: Scope::File,
+            files: HashSet::from([&notes]),
+        };
+        assert!(by_file.shows(&file));
+        assert!(by_file.shows(&folder));
+        assert!(!by_file.shows(&inline));
+        let by_module = Depth {
+            scope: Scope::Module,
+            files: HashSet::new(),
+        };
+        assert!(by_module.shows(&inline));
+    }
 
     fn startup(columns: u16, rows: u16) -> Startup {
         Startup {

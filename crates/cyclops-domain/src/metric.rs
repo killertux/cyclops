@@ -312,6 +312,17 @@ impl MetricDescriptor {
         }
     }
 
+    /// The finest scope a metric has values on. Below it nothing has a value, so the
+    /// tree and the map stop there. See `specs/tui/explore.md`.
+    #[must_use]
+    pub const fn finest_scope(&self) -> Scope {
+        match self.id {
+            // Copies are also found within functions.
+            MetricId::Duplication => Scope::Function,
+            _ => self.measured_on(),
+        }
+    }
+
     /// Whether a metric has values at a scope, measured there or rolled up to it.
     #[must_use]
     pub fn applies_to(&self, scope: Scope) -> bool {

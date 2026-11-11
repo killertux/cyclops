@@ -49,6 +49,42 @@ when there is nothing inside it.
 | Then up         | rust-shop | `<Space>ejhh` | shop      | shop    | yes       |
 | Open everything | rust-shop | `<Space>ezR`  | shop      | is_free | yes       |
 
+The tree stops where the metric does. A metric [measured on](../metrics/catalog.md)
+modules, types or files has no value for what is inside them, so the tree does not open
+past them, and a row has no arrow when nothing it holds is shown. A module that is a
+file still opens to the files it holds, as a Rust crate root or a TypeScript `index`
+file does. Metrics measured on functions show everything.
+
+[//]: # "decisionTable Tui"
+
+| # situation       | workspace     | keys                         | rows?                                                                                                                                                  |
+| ----------------- | ------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Files             | rust-shop     | `<Space>eMblank_lines<CR>zR` | shop, shop::billing, shop::orders, shop::catalog, shop::notes                                                                                          |
+| Files in a folder | ts-resolution | `<Space>eMblank_lines<CR>zR` | resolution, src, src/app, src/barrel, src/barrel/thing, src/lib, src/lib/helper                                                                        |
+| Types             | rust-shop     | `<Space>eMmembers<CR>zR`     | shop, shop::billing, shop::billing::Invoice, shop::catalog, shop::catalog::Item, shop::catalog::Priced, shop::notes, shop::orders, shop::orders::Order |
+| Modules           | rust-shop     | `<Space>eMinstability<CR>zR` | shop, shop::orders, shop::billing, shop::catalog, shop::notes                                                                                          |
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace | steps                                    | keys                     | rows?                                                         |
+| ----------- | --------- | ---------------------------------------- | ------------------------ | ------------------------------------------------------------- |
+| A hotspot   | rust-shop | `git init; commit src/orders.rs 2 times` | `<Space>eMhotspot<CR>zR` | shop, shop::orders, shop::billing, shop::catalog, shop::notes |
+
+`src/barrel` is an `index` file and a folder, so it opens to `src/barrel/thing` and
+stops there. `shop` is `src/lib.rs`, so it opens to its modules. Under `members`, the
+modules have no value, so they go last, alphabetically.
+
+A selection inside a row the tree no longer opens moves to that row, and so does a
+symbol picked with `Ctrl-p`. Why is a view of its own, so `gd` still opens the function
+inside, and `Ctrl-o` comes back to the row.
+
+[//]: # "decisionTable Tui"
+
+| # situation | workspace | keys                                            | selected?    |
+| ----------- | --------- | ----------------------------------------------- | ------------ |
+| Moves up    | rust-shop | `<Space>e<C-p>Order::total<CR>Mblank_lines<CR>` | shop::orders |
+| A jump      | rust-shop | `<Space>eMblank_lines<CR><C-p>Order::total<CR>` | shop::orders |
+
 When two rows of one parent share a name, each shows its kind after it.
 
 [//]: # "decisionTable Tui"
@@ -95,6 +131,15 @@ move through its sections, which wrap around. `section?` is the open section, an
 | The fifth    | rust-shop | `<Space>eKLLLL` | Impact    | Inspector | yes       |
 | Wraps        | rust-shop | `<Space>eKH`    | Impact    | Inspector | yes       |
 | In a diagram | rust-shop | `<Space>dK`     | Metrics   | Inspector | yes       |
+
+When the metric has a source to show, the Why section ends with `gd` and what it opens.
+
+[//]: # "decisionTable Tui"
+
+| # situation    | workspace | keys                              | section? | text                | includes? |
+| -------------- | --------- | --------------------------------- | -------- | ------------------- | --------- |
+| The way in     | rust-shop | `<Space>e<C-p>Order::total<CR>KL` | Why      | gd opens the source | yes       |
+| With no source | rust-shop | `<Space>ejMinstability<CR>KL`     | Why      | gd opens the source | no        |
 
 It stays open and follows the selection.
 

@@ -1806,6 +1806,12 @@ impl Tui {
         self.read(|session| session.app.why_line().to_string())
     }
 
+    /// The first line of Why's source in view.
+    #[must_use]
+    pub fn top(&self) -> String {
+        self.read(|session| session.app.why_top().to_string())
+    }
+
     /// Whether the indexer of the `language` can run.
     #[must_use]
     pub fn ready(&self) -> String {

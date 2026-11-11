@@ -51,6 +51,25 @@ A focus with nothing inside it shows its parent, with its own tile selected.
 | From a jump    | rust-shop | `<C-p>Order<CR><Space>m`        | shop::orders::Order::add, shop::orders::Order::invoices, shop::orders::Order::total |
 | Nothing inside | rust-shop | `<C-p>Order::total<CR><Space>m` | shop::orders::Order::add, shop::orders::Order::invoices, shop::orders::Order::total |
 
+The map stops where the metric does, as the [tree](explore.md#the-tree) does. Under a
+metric measured on files or modules, a file has no tiles inside it, so `Enter` on it
+does not zoom. Under one measured on types, a type has none. A focus below where the
+map stops shows the tile it sits in, selected.
+
+[//]: # "decisionTable Tui"
+
+| # situation  | workspace | keys                                            | focus?       | tiles?                                                  |
+| ------------ | --------- | ----------------------------------------------- | ------------ | ------------------------------------------------------- |
+| A file stops | rust-shop | `<Space>mMblank_lines<CR>/orders<CR><CR>`       | shop         | shop::billing, shop::catalog, shop::notes, shop::orders |
+| A type stops | rust-shop | `<Space>mMmembers<CR>/orders<CR><CR><CR>`       | shop::orders | shop::orders::Order                                     |
+| Coupling     | rust-shop | `<Space>mMinstability<CR>/orders<CR><CR>`       | shop         | shop::billing, shop::catalog, shop::notes, shop::orders |
+
+[//]: # "decisionTable Tui"
+
+| # situation    | workspace | keys                                            | tiles?                                                  | selected?    |
+| -------------- | --------- | ----------------------------------------------- | ------------------------------------------------------- | ------------ |
+| From deep down | rust-shop | `Mblank_lines<CR><C-p>Order::total<CR><Space>m` | shop::billing, shop::catalog, shop::notes, shop::orders | shop::orders |
+
 Larger tiles have larger areas. `largest?` is the tile with the most lines.
 
 [//]: # "decisionTable Tui"
