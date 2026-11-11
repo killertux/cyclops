@@ -1,0 +1,5 @@
+# Cyclops settings for this project, shared with everyone who works on it.
+# Every setting is optional. See specs/project/configuration.md in Cyclops.
+
+[project]
+languages = ["javascript", "rust", "typescript"]
