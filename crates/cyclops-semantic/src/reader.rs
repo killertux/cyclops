@@ -8,6 +8,7 @@ use protobuf::Message;
 use scip::symbol::{format_symbol, is_local_symbol, parse_symbol};
 use scip::types::descriptor::Suffix;
 use scip::types::{Descriptor, Index, Symbol, SymbolRole};
+use std::collections::HashMap;
 
 /// Whether a name can be a symbol of the project. Namespaces, parameters and type
 /// parameters cannot.
@@ -30,6 +31,22 @@ fn plain_name(name: &str) -> String {
 fn owner_of(mut symbol: Symbol) -> Option<String> {
     symbol.descriptors.pop()?;
     names_a_symbol(symbol.descriptors.last()?).then(|| format_symbol(symbol))
+}
+
+/// What a symbol of the index says: the name it gives, and the key of what it belongs
+/// to. Nothing for a symbol that is not one of the project, or cannot be read.
+type Named = Option<(String, Option<String>)>;
+
+/// Reads a symbol of the index. Parsing one is slow, and a large index names each
+/// symbol many times, so each is read once.
+fn named(symbol: &str) -> Named {
+    let symbol = parse_symbol(symbol).ok()?;
+    let name = symbol
+        .descriptors
+        .last()
+        .filter(|last| names_a_symbol(last))
+        .map(|last| plain_name(&last.name))?;
+    Some((name, owner_of(symbol)))
 }
 
 /// Reads an index that an indexer wrote.
@@ -56,6 +73,7 @@ pub fn read_rooted(bytes: &[u8]) -> Result<(SemanticIndex, String), IndexError> 
         .map(|metadata| metadata.project_root.clone())
         .unwrap_or_default();
     let definition = SymbolRole::Definition as i32;
+    let mut known: HashMap<&str, Named> = HashMap::new();
     let documents = index
         .documents
         .iter()
@@ -74,14 +92,9 @@ pub fn read_rooted(bytes: &[u8]) -> Result<(SemanticIndex, String), IndexError> 
                 let Some(line) = line else {
                     continue;
                 };
-                let Ok(symbol) = parse_symbol(&occurrence.symbol) else {
-                    continue;
-                };
-                let Some(name) = symbol
-                    .descriptors
-                    .last()
-                    .filter(|last| names_a_symbol(last))
-                    .map(|last| plain_name(&last.name))
+                let Some((name, owner)) = known
+                    .entry(occurrence.symbol.as_str())
+                    .or_insert_with(|| named(&occurrence.symbol))
                 else {
                     continue;
                 };
@@ -89,12 +102,12 @@ pub fn read_rooted(bytes: &[u8]) -> Result<(SemanticIndex, String), IndexError> 
                     references.push(IndexedReference {
                         line,
                         key: occurrence.symbol.clone(),
-                        owner: owner_of(symbol),
+                        owner: owner.clone(),
                     });
                 } else {
                     definitions.push(IndexedDefinition {
                         line,
-                        name,
+                        name: name.clone(),
                         key: occurrence.symbol.clone(),
                     });
                 }

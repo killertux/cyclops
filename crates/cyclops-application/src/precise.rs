@@ -45,31 +45,52 @@ pub(crate) struct CurrentFile<'a> {
 
 /// Where the symbols of each file are, to find the symbol around a line.
 struct Places<'a> {
-    by_file: HashMap<&'a RelativePath, Vec<&'a Symbol>>,
+    /// The symbols of each file with each name, in order.
+    by_name: HashMap<(&'a RelativePath, &'a str), Vec<&'a Symbol>>,
+    /// For each file, the innermost symbol around each line, by line number.
+    innermost: HashMap<&'a RelativePath, Vec<Option<&'a Symbol>>>,
+}
+
+/// The lines a symbol covers, and how many more after the first.
+fn lines_of(symbol: &Symbol) -> Option<(u32, u32, u32)> {
+    let span = symbol.location.as_ref()?.span;
+    let size = span.end_line.checked_sub(span.start_line)?;
+    Some((span.start_line, span.end_line, size))
 }
 
 impl<'a> Places<'a> {
     fn new(symbols: &'a [Symbol]) -> Self {
         let mut by_file: HashMap<&RelativePath, Vec<&Symbol>> = HashMap::new();
+        let mut by_name: HashMap<(&RelativePath, &str), Vec<&Symbol>> = HashMap::new();
         for symbol in symbols {
             if let Some(location) = &symbol.location {
                 by_file.entry(&location.file).or_default().push(symbol);
+                by_name
+                    .entry((&location.file, symbol.name.as_str()))
+                    .or_default()
+                    .push(symbol);
             }
         }
-        Self { by_file }
+        let innermost = by_file
+            .into_iter()
+            .map(|(file, symbols)| (file, innermost_by_line(&symbols)))
+            .collect();
+        Self { by_name, innermost }
     }
 
     /// The innermost symbol whose lines hold `line`, and that has this name if one is
     /// given.
     fn around(&self, path: &RelativePath, line: u32, name: Option<&str>) -> Option<&'a Symbol> {
-        self.by_file
-            .get(path)?
+        let Some(name) = name else {
+            let line = usize::try_from(line).ok()?;
+            return self.innermost.get(path)?.get(line).copied().flatten();
+        };
+        self.by_name
+            .get(&(path, name))?
             .iter()
-            .filter(|symbol| name.is_none_or(|name| symbol.name == name))
             .filter_map(|symbol| {
-                let span = symbol.location.as_ref()?.span;
-                (span.start_line <= line && line <= span.end_line)
-                    .then_some((span.end_line - span.start_line, *symbol))
+                let (start, end, size) = lines_of(symbol)?;
+                (start <= line && line <= end).then_some((size, *symbol))
             })
             .min_by(|(a, one), (b, other)| {
                 a.cmp(b)
@@ -77,6 +98,40 @@ impl<'a> Places<'a> {
             })
             .map(|(_, symbol)| symbol)
     }
+}
+
+/// For each line of a file, the innermost of its symbols around it: the one that covers
+/// the fewest lines, then the one with the longest id, then the first.
+fn innermost_by_line<'a>(symbols: &[&'a Symbol]) -> Vec<Option<&'a Symbol>> {
+    let mut spans: Vec<(usize, u32, u32, u32, &Symbol)> = symbols
+        .iter()
+        .enumerate()
+        .filter_map(|(order, symbol)| {
+            let (start, end, size) = lines_of(symbol)?;
+            Some((order, start, end, size, *symbol))
+        })
+        .collect();
+    // The one that should win is laid down last, over the others.
+    spans.sort_by(|(order_a, _, _, size_a, a), (order_b, _, _, size_b, b)| {
+        size_b
+            .cmp(size_a)
+            .then_with(|| a.id.as_str().len().cmp(&b.id.as_str().len()))
+            .then_with(|| order_b.cmp(order_a))
+    });
+    let last = spans
+        .iter()
+        .map(|(_, _, end, _, _)| *end)
+        .max()
+        .unwrap_or(0);
+    let mut lines = vec![None; usize::try_from(last).unwrap_or(0).saturating_add(1)];
+    for (_, start, end, _, symbol) in spans {
+        let from = usize::try_from(start).unwrap_or(usize::MAX);
+        let to = usize::try_from(end).unwrap_or(0);
+        for slot in lines.iter_mut().take(to.saturating_add(1)).skip(from) {
+            *slot = Some(symbol);
+        }
+    }
+    lines
 }
 
 /// Which symbol uses which, according to an index: the innermost symbol around each use,
@@ -170,7 +225,6 @@ pub(crate) fn enrich(
     let hashes: HashMap<&RelativePath, &ContentHash> =
         files.iter().map(|file| (file.path, &file.hash)).collect();
     let mut current: HashSet<&RelativePath> = HashSet::new();
-    let mut uses: HashMap<&SymbolId, HashSet<&SymbolId>> = HashMap::new();
     for index in indexes {
         let recorded: HashMap<&RelativePath, &ContentHash> = index
             .files
@@ -184,95 +238,133 @@ pub(crate) fn enrich(
                 current.insert(path);
             }
         }
-        for (from, to) in &index.uses {
-            uses.entry(from).or_default().insert(to);
-        }
     }
     if current.is_empty() {
         return relations;
     }
     let tree = Tree::new(symbols);
+    // What each symbol uses, by places.
+    let mut used: Vec<Vec<usize>> = vec![Vec::new(); symbols.len()];
+    for (from, to) in indexes.iter().flat_map(|index| &index.uses) {
+        if let (Some(from), Some(to)) = (tree.place(from), tree.place(to))
+            && let Some(targets) = used.get_mut(from)
+        {
+            targets.push(to);
+        }
+    }
+    // The guesses to check, by the symbol they start from, so that what a symbol uses is
+    // worked out once for all of them.
+    let mut checked: HashMap<usize, Vec<usize>> = HashMap::new();
+    for (at, relation) in relations.iter().enumerate() {
+        if relation.confidence == Confidence::Exact {
+            continue;
+        }
+        let Some(from) = tree.place(&relation.from) else {
+            continue;
+        };
+        if tree
+            .file_of(from)
+            .is_some_and(|file| current.contains(file))
+        {
+            checked.entry(from).or_default().push(at);
+        }
+    }
+    let mut proven: Vec<Option<bool>> = vec![None; relations.len()];
+    for (from, guesses) in checked {
+        let reached = tree.reached(from, &used);
+        for at in guesses {
+            let target = relations
+                .get(at)
+                .and_then(|relation| tree.place(&relation.to));
+            if let Some(verdict) = proven.get_mut(at) {
+                *verdict = Some(target.is_some_and(|target| reached.contains(&target)));
+            }
+        }
+    }
     relations
         .into_iter()
-        .filter_map(|mut relation| {
-            if relation.confidence == Confidence::Exact {
-                return Some(relation);
-            }
-            let up_to_date = tree
-                .file_of(&relation.from)
-                .is_some_and(|file| current.contains(file));
-            if !up_to_date {
-                return Some(relation);
-            }
-            if tree.proves(&relation, &uses) {
+        .zip(proven)
+        .filter_map(|(mut relation, verdict)| match verdict {
+            None => Some(relation),
+            Some(true) => {
                 relation.confidence = Confidence::Exact;
                 Some(relation)
-            } else {
-                None
             }
+            Some(false) => None,
         })
         .collect()
 }
 
-/// How symbols nest.
+/// How symbols nest, by their places in the list of symbols.
 struct Tree<'a> {
-    symbols: HashMap<&'a SymbolId, &'a Symbol>,
-    children: HashMap<&'a SymbolId, Vec<&'a SymbolId>>,
+    symbols: &'a [Symbol],
+    places: HashMap<&'a SymbolId, usize>,
+    parents: Vec<Option<usize>>,
+    children: Vec<Vec<usize>>,
 }
 
 impl<'a> Tree<'a> {
     fn new(symbols: &'a [Symbol]) -> Self {
-        let mut children: HashMap<&SymbolId, Vec<&SymbolId>> = HashMap::new();
-        for symbol in symbols {
-            if let Some(parent) = &symbol.parent {
-                children.entry(parent).or_default().push(&symbol.id);
+        let places: HashMap<&SymbolId, usize> = symbols
+            .iter()
+            .enumerate()
+            .map(|(place, symbol)| (&symbol.id, place))
+            .collect();
+        let parents: Vec<Option<usize>> = symbols
+            .iter()
+            .map(|symbol| {
+                symbol
+                    .parent
+                    .as_ref()
+                    .and_then(|parent| places.get(parent))
+                    .copied()
+            })
+            .collect();
+        let mut children = vec![Vec::new(); symbols.len()];
+        for (place, parent) in parents.iter().enumerate() {
+            if let Some(held) = parent.and_then(|parent| children.get_mut(parent)) {
+                held.push(place);
             }
         }
         Self {
-            symbols: symbols.iter().map(|symbol| (&symbol.id, symbol)).collect(),
+            symbols,
+            places,
+            parents,
             children,
         }
     }
 
-    fn file_of(&self, id: &SymbolId) -> Option<&'a RelativePath> {
+    fn place(&self, id: &SymbolId) -> Option<usize> {
+        self.places.get(id).copied()
+    }
+
+    fn file_of(&self, place: usize) -> Option<&'a RelativePath> {
         self.symbols
-            .get(id)?
+            .get(place)?
             .location
             .as_ref()
             .map(|location| &location.file)
     }
 
-    /// Whether `ancestor` is `id` or holds it.
-    fn holds(&self, ancestor: &SymbolId, id: &SymbolId) -> bool {
-        let mut next = Some(id);
-        while let Some(current) = next {
-            if current == ancestor {
-                return true;
+    /// Everything that a symbol, or anything inside it, uses according to the indexes,
+    /// with everything that holds what it uses. A guess from the symbol is proven when
+    /// its target is among them.
+    fn reached(&self, from: usize, used: &[Vec<usize>]) -> HashSet<usize> {
+        let mut reached = HashSet::new();
+        let mut pending = vec![from];
+        while let Some(at) = pending.pop() {
+            for target in used.get(at).into_iter().flatten() {
+                let mut next = Some(*target);
+                while let Some(holder) = next {
+                    if !reached.insert(holder) {
+                        break;
+                    }
+                    next = self.parents.get(holder).copied().flatten();
+                }
             }
-            next = self
-                .symbols
-                .get(current)
-                .and_then(|symbol| symbol.parent.as_ref());
+            pending.extend(self.children.get(at).into_iter().flatten());
         }
-        false
-    }
-
-    /// Whether something in the relation's source uses its target, or a part of it,
-    /// according to the indexes.
-    fn proves(&self, relation: &Relation, uses: &HashMap<&SymbolId, HashSet<&SymbolId>>) -> bool {
-        let mut pending = vec![&relation.from];
-        while let Some(id) = pending.pop() {
-            if uses
-                .get(id)
-                .is_some_and(|targets| targets.iter().any(|to| self.holds(&relation.to, to)))
-            {
-                return true;
-            }
-            if let Some(children) = self.children.get(id) {
-                pending.extend(children.iter().copied());
-            }
-        }
-        false
+        reached
     }
 }
 
@@ -561,6 +653,39 @@ mod tests {
             uses,
             commit: None,
         }
+    }
+
+    #[test]
+    fn the_innermost_symbol_around_a_line_is_the_smallest_then_the_longest_id_then_the_first() {
+        let symbols = vec![
+            symbol("c::m", SymbolKind::Module, "src/m.rs", (1, 20)),
+            symbol("c::m::A", SymbolKind::Struct, "src/m.rs", (2, 10)),
+            symbol("c::m::A::f", SymbolKind::Method, "src/m.rs", (4, 6)),
+            symbol("c::m::g", SymbolKind::Function, "src/m.rs", (12, 14)),
+            symbol("c::m::A::g", SymbolKind::Method, "src/m.rs", (12, 14)),
+            symbol("c::m::h", SymbolKind::Function, "src/m.rs", (16, 17)),
+            symbol("c::m::i", SymbolKind::Function, "src/m.rs", (16, 17)),
+        ];
+        let places = Places::new(&symbols);
+        let file = RelativePath::new("src/m.rs");
+        let around = |line: u32| {
+            places
+                .around(&file, line, None)
+                .map(|symbol| symbol.id.as_str().to_owned())
+        };
+        assert_eq!(around(1).as_deref(), Some("c::m"));
+        assert_eq!(around(3).as_deref(), Some("c::m::A"));
+        assert_eq!(around(5).as_deref(), Some("c::m::A::f"));
+        assert_eq!(around(13).as_deref(), Some("c::m::A::g"));
+        assert_eq!(around(16).as_deref(), Some("c::m::h"));
+        assert_eq!(around(21), None);
+        assert_eq!(
+            places
+                .around(&file, 13, Some("g"))
+                .map(|symbol| symbol.id.as_str()),
+            Some("c::m::A::g")
+        );
+        assert_eq!(places.around(&file, 3, Some("f")), None);
     }
 
     #[test]
