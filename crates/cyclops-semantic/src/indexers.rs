@@ -11,7 +11,9 @@ use cyclops_application::ports::{
 };
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::path::RelativePath;
-use std::ffi::OsStr;
+use std::collections::HashSet;
+use std::env;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -112,6 +114,21 @@ fn moved(index: SemanticIndex, folder: &RelativePath) -> Vec<IndexedDocument> {
         .collect()
 }
 
+/// Adds what a project's index says to the whole index. A file two projects both
+/// indexed keeps what the first said.
+fn merge(index: &mut SemanticIndex, documents: Vec<IndexedDocument>) {
+    let known: HashSet<RelativePath> = index
+        .documents
+        .iter()
+        .map(|document| document.path.clone())
+        .collect();
+    index.documents.extend(
+        documents
+            .into_iter()
+            .filter(|document| !known.contains(&document.path)),
+    );
+}
+
 /// How a folder is named in the log: `.` for the root.
 fn shown(folder: &RelativePath) -> &str {
     if folder.as_str().is_empty() {
@@ -139,6 +156,7 @@ impl Runner {
         program: &Path,
         arguments: &[&OsStr],
         folder: &RelativePath,
+        variables: &[(&str, OsString)],
     ) -> Result<(), String> {
         let name = program
             .file_name()
@@ -155,6 +173,7 @@ impl Runner {
             .args(arguments)
             .current_dir(self.root.join(folder.as_str()))
             .env("PATH", self.tools.search_path())
+            .envs(variables.iter().map(|(name, value)| (*name, value)))
             .stdin(Stdio::null())
             .output();
         let output: Output = match output {
@@ -288,10 +307,11 @@ impl SemanticProvider for RustIndexer {
                         output.as_os_str(),
                     ],
                     &RelativePath::new(""),
+                    &[],
                 )
                 .and_then(|()| self.runner.read(&output));
             match index {
-                Ok(index) => indexed.index.documents.extend(moved(index, folder)),
+                Ok(index) => merge(&mut indexed.index, moved(index, folder)),
                 Err(reason) => indexed.failures.push((folder.clone(), reason)),
             }
         }
@@ -300,7 +320,7 @@ impl SemanticProvider for RustIndexer {
 }
 
 /// `scip-typescript`, run through `npx`, which needs Node. It indexes JavaScript too. It
-/// runs for each `tsconfig.json` with no other one below it, or once for the whole
+/// runs for each `tsconfig.json` but one at the root among others, or once for the whole
 /// project when there is none.
 pub struct TypeScriptIndexer {
     runner: Runner,
@@ -320,19 +340,29 @@ impl TypeScriptIndexer {
     }
 }
 
-/// The folders of TypeScript projects: each with a `tsconfig.json` that has no other one
-/// below it.
+/// The folders of TypeScript projects: each with a `tsconfig.json`, except the root
+/// when there are others, since one there usually only serves editors and would take in
+/// every package at once.
 fn typescript_projects(files: &[RelativePath]) -> Vec<RelativePath> {
     let folders = folders_with(files, "tsconfig.json");
+    if folders.len() < 2 {
+        return folders;
+    }
     folders
-        .iter()
-        .filter(|folder| {
-            !folders
-                .iter()
-                .any(|other| other != *folder && is_inside(other.as_str(), folder))
-        })
-        .cloned()
+        .into_iter()
+        .filter(|folder| !folder.as_str().is_empty())
         .collect()
+}
+
+/// How much memory Node may use for an index: as much as a large package needs. Options
+/// already set come after, so that they win.
+fn node_options(set: Option<&OsStr>) -> OsString {
+    let mut options = OsString::from("--max-old-space-size=16384");
+    if let Some(set) = set.filter(|set| !set.is_empty()) {
+        options.push(" ");
+        options.push(set);
+    }
+    options
 }
 
 impl SemanticProvider for TypeScriptIndexer {
@@ -378,12 +408,13 @@ impl SemanticProvider for TypeScriptIndexer {
             if inferred {
                 arguments.push(OsStr::new("--infer-tsconfig"));
             }
+            let node = node_options(env::var_os("NODE_OPTIONS").as_deref());
             let index = self
                 .runner
-                .run(&program, &arguments, folder)
+                .run(&program, &arguments, folder, &[("NODE_OPTIONS", node)])
                 .and_then(|()| self.runner.read(&output));
             match index {
-                Ok(index) => indexed.index.documents.extend(moved(index, folder)),
+                Ok(index) => merge(&mut indexed.index, moved(index, folder)),
                 Err(reason) => indexed.failures.push((folder.clone(), reason)),
             }
         }
@@ -442,17 +473,17 @@ mod tests {
     }
 
     #[test]
-    fn a_typescript_project_is_a_tsconfig_with_none_below_it() {
+    fn a_typescript_project_is_any_tsconfig_but_the_root_among_others() {
         let files = paths(&[
             "tsconfig.json",
             "web/shop/tsconfig.json",
             "web/shop/src/orders.ts",
-            "packages/ui/tsconfig.json",
-            "packages/ui/stories/tsconfig.json",
+            "apps/server/tsconfig.json",
+            "apps/server/specification/tsconfig.json",
         ]);
         assert_eq!(
             texts(&typescript_projects(&files)),
-            vec!["web/shop", "packages/ui/stories"]
+            vec!["apps/server", "web/shop", "apps/server/specification"]
         );
         assert_eq!(
             texts(&typescript_projects(&paths(&["tsconfig.json", "src/a.ts"]))),
@@ -461,6 +492,59 @@ mod tests {
         assert_eq!(
             texts(&typescript_projects(&paths(&["src/a.ts"]))),
             Vec::<&str>::new()
+        );
+    }
+
+    #[test]
+    fn a_file_two_projects_indexed_keeps_what_the_first_said() {
+        let document = |path: &str, line: u32| IndexedDocument {
+            path: RelativePath::new(path),
+            definitions: Vec::new(),
+            references: vec![cyclops_application::ports::IndexedReference {
+                line,
+                key: "k".to_owned(),
+                owner: None,
+            }],
+        };
+        let mut index = SemanticIndex {
+            documents: vec![document("apps/server/specification/a.ts", 1)],
+        };
+        merge(
+            &mut index,
+            vec![
+                document("apps/server/specification/a.ts", 2),
+                document("apps/server/src/b.ts", 3),
+            ],
+        );
+        let lines: Vec<(&str, u32)> = index
+            .documents
+            .iter()
+            .flat_map(|document| {
+                document
+                    .references
+                    .iter()
+                    .map(move |reference| (document.path.as_str(), reference.line))
+            })
+            .collect();
+        assert_eq!(
+            lines,
+            vec![
+                ("apps/server/specification/a.ts", 1),
+                ("apps/server/src/b.ts", 3)
+            ]
+        );
+    }
+
+    #[test]
+    fn node_gets_room_unless_its_options_say_otherwise() {
+        assert_eq!(node_options(None), "--max-old-space-size=16384");
+        assert_eq!(
+            node_options(Some(OsStr::new(""))),
+            "--max-old-space-size=16384"
+        );
+        assert_eq!(
+            node_options(Some(OsStr::new("--max-old-space-size=4096"))),
+            "--max-old-space-size=16384 --max-old-space-size=4096"
         );
     }
 
