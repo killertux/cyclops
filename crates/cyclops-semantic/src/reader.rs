@@ -38,8 +38,23 @@ fn owner_of(mut symbol: Symbol) -> Option<String> {
 ///
 /// Fails if it is not a SCIP index.
 pub fn read_index(bytes: &[u8]) -> Result<SemanticIndex, IndexError> {
+    read_rooted(bytes).map(|(index, _)| index)
+}
+
+/// Reads an index, with the folder its paths are relative to, as the indexer wrote it:
+/// a `file://` URI.
+///
+/// # Errors
+///
+/// Fails if it is not a SCIP index.
+pub fn read_rooted(bytes: &[u8]) -> Result<(SemanticIndex, String), IndexError> {
     let index = Index::parse_from_bytes(bytes)
         .map_err(|error| IndexError::Failed(format!("the index cannot be read: {error}")))?;
+    let root = index
+        .metadata
+        .as_ref()
+        .map(|metadata| metadata.project_root.clone())
+        .unwrap_or_default();
     let definition = SymbolRole::Definition as i32;
     let documents = index
         .documents
@@ -91,7 +106,7 @@ pub fn read_index(bytes: &[u8]) -> Result<SemanticIndex, IndexError> {
             }
         })
         .collect();
-    Ok(SemanticIndex { documents })
+    Ok((SemanticIndex { documents }, root))
 }
 
 #[cfg(test)]

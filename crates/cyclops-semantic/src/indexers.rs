@@ -1,10 +1,10 @@
 //! The indexers Cyclops knows, and how to run them.
 //!
-//! A repository may hold several projects of a language, such as Cargo projects or
+//! A repository may hold several projects of a language, such as Cargo workspaces or
 //! TypeScript packages in folders of their own. Each is indexed on its own, and the
 //! indexes are put together, so that one that fails leaves the others.
 
-use crate::reader::read_index;
+use crate::reader::read_rooted;
 use crate::tools::Tools;
 use cyclops_application::ports::{
     IndexError, Indexed, IndexedDocument, Log, SemanticIndex, SemanticProvider,
@@ -15,7 +15,7 @@ use std::collections::HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::Arc;
 use std::time::Instant;
@@ -73,45 +73,74 @@ fn depth(folder: &RelativePath) -> usize {
     }
 }
 
-/// Whether a path is inside a folder, or the folder is the root.
-fn is_inside(path: &str, folder: &RelativePath) -> bool {
-    let folder = folder.as_str();
-    folder.is_empty()
-        || path
-            .strip_prefix(folder)
-            .is_some_and(|rest| rest.starts_with('/'))
-}
-
-/// A path of a project in a folder, as a path of the whole project. Nothing if it leaves
-/// the project.
-fn within(folder: &RelativePath, path: &str) -> Option<RelativePath> {
-    let mut parts: Vec<&str> = folder
-        .as_str()
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect();
-    for part in path.split('/') {
+/// A path with `.` and `..` worked out, without looking at the disk.
+fn tidied(path: &Path) -> PathBuf {
+    let mut tidy = PathBuf::new();
+    for part in path.components() {
         match part {
-            "" | "." => {}
-            ".." => {
-                parts.pop()?;
+            Component::CurDir => {}
+            Component::ParentDir => {
+                tidy.pop();
             }
-            name => parts.push(name),
+            other => tidy.push(other),
         }
     }
+    tidy
+}
+
+/// The folder a `file://` URI names, with `%XX` escapes decoded.
+fn folder_of_uri(uri: &str) -> Option<PathBuf> {
+    let path = uri.strip_prefix("file://")?;
+    let bytes = path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while let Some(byte) = bytes.get(at) {
+        let escaped = (*byte == b'%')
+            .then(|| bytes.get(at + 1..at + 3))
+            .flatten()
+            .and_then(|hex| std::str::from_utf8(hex).ok())
+            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+        if let Some(escaped) = escaped {
+            decoded.push(escaped);
+            at += 3;
+        } else {
+            decoded.push(*byte);
+            at += 1;
+        }
+    }
+    let path = String::from_utf8(decoded).ok()?;
+    let path = path.trim_end_matches('/');
+    Some(PathBuf::from(if path.is_empty() { "/" } else { path }))
+}
+
+/// A file an index names, relative to `base`, as a path of the project at `project`.
+/// Nothing if it is outside the project. Both folders are as the disk names them.
+fn in_project(project: &Path, base: &Path, path: &str) -> Option<RelativePath> {
+    let full = tidied(&base.join(path));
+    let inside = full.strip_prefix(project).ok()?;
+    let parts: Vec<String> = inside
+        .components()
+        .map(|part| part.as_os_str().to_string_lossy().into_owned())
+        .collect();
     Some(RelativePath::new(&parts.join("/")))
 }
 
-/// What the index of a project in a folder says, with paths of the whole project.
-fn moved(index: SemanticIndex, folder: &RelativePath) -> Vec<IndexedDocument> {
+/// What an index says, with paths of the project, leaving out files outside it.
+fn placed(index: SemanticIndex, project: &Path, base: &Path) -> Vec<IndexedDocument> {
     index
         .documents
         .into_iter()
         .filter_map(|document| {
-            let path = within(folder, document.path.as_str())?;
+            let path = in_project(project, base, document.path.as_str())?;
             Some(IndexedDocument { path, ..document })
         })
         .collect()
+}
+
+/// A folder as the disk names it, following links, so that two names for one folder
+/// agree.
+fn real(folder: &Path) -> PathBuf {
+    fs::canonicalize(folder).unwrap_or_else(|_| tidied(folder))
 }
 
 /// Adds what a project's index says to the whole index. A file two projects both
@@ -157,7 +186,7 @@ impl Runner {
         arguments: &[&OsStr],
         folder: &RelativePath,
         variables: &[(&str, OsString)],
-    ) -> Result<(), String> {
+    ) -> Result<String, String> {
         let name = program
             .file_name()
             .map_or_else(|| program.to_string_lossy(), |name| name.to_string_lossy());
@@ -196,7 +225,7 @@ impl Runner {
             printed.trim_end()
         ));
         if output.status.success() {
-            Ok(())
+            Ok(String::from_utf8_lossy(&output.stdout).into_owned())
         } else {
             Err(reason_of(
                 &String::from_utf8_lossy(&output.stderr),
@@ -215,16 +244,29 @@ impl Runner {
         })
     }
 
-    /// Reads the index an indexer wrote, and removes it, since the cache keeps what
-    /// counts of it.
-    fn read(&self, path: &Path) -> Result<SemanticIndex, String> {
+    /// Reads the index an indexer wrote, with paths of the project, and removes it, since
+    /// the cache keeps what counts of it. Its paths are relative to the folder it says,
+    /// or else to `ran_in`.
+    fn read(
+        &self,
+        path: &Path,
+        project: &Path,
+        ran_in: &Path,
+    ) -> Result<Vec<IndexedDocument>, String> {
         let bytes = fs::read(path)
             .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
         if let Err(error) = fs::remove_file(path) {
             self.log
                 .write(&format!("{} cannot be removed: {error}", path.display()));
         }
-        read_index(&bytes).map_err(|error| error.to_string())
+        let (index, root) = read_rooted(&bytes).map_err(|error| error.to_string())?;
+        let base = folder_of_uri(&root).map_or_else(|| real(ran_in), |root| real(&root));
+        Ok(placed(index, project, &base))
+    }
+
+    /// The project's folder, as the disk names it.
+    fn project(&self) -> PathBuf {
+        real(&self.root)
     }
 }
 
@@ -235,9 +277,9 @@ fn require(tools: &Tools, program: &str, known_as: &str) -> Result<PathBuf, Inde
         .ok_or_else(|| IndexError::Missing(known_as.to_owned()))
 }
 
-/// `rust-analyzer scip`, which needs a Cargo toolchain. It runs for each Cargo project,
-/// the outermost first, and skips one inside that an index already covers, such as a
-/// member of a workspace.
+/// `rust-analyzer scip`, which needs a Cargo toolchain. It runs once for each Cargo
+/// workspace of the project, as Cargo finds them, from the workspace's root, so that the
+/// whole workspace is indexed, even when its root is outside the project.
 pub struct RustIndexer {
     runner: Runner,
 }
@@ -254,6 +296,51 @@ impl RustIndexer {
             },
         }
     }
+
+    /// The workspaces of the Cargo projects in these folders, as Cargo finds them, in
+    /// order, and each folder it could not find one for, with why.
+    fn workspaces(
+        &self,
+        cargo: &Path,
+        folders: &[RelativePath],
+    ) -> (Vec<PathBuf>, Vec<(RelativePath, String)>) {
+        let mut found: Vec<PathBuf> = Vec::new();
+        let mut failures = Vec::new();
+        for folder in folders {
+            let located = self.runner.run(
+                cargo,
+                &[
+                    OsStr::new("locate-project"),
+                    OsStr::new("--workspace"),
+                    OsStr::new("--message-format"),
+                    OsStr::new("plain"),
+                ],
+                folder,
+                &[],
+            );
+            match located {
+                Ok(manifest) => {
+                    let manifest = PathBuf::from(manifest.trim());
+                    let workspace = real(manifest.parent().unwrap_or(&manifest));
+                    if !found.contains(&workspace) {
+                        found.push(workspace);
+                    }
+                }
+                Err(reason) => failures.push((folder.clone(), reason)),
+            }
+        }
+        found.sort();
+        (found, failures)
+    }
+}
+
+/// How a folder is named in a problem: as a folder of the project, or in full when it
+/// is outside it.
+fn named(project: &Path, folder: &Path) -> RelativePath {
+    folder.strip_prefix(project).map_or_else(
+        |_| RelativePath::new(&folder.to_string_lossy()),
+        |inside| RelativePath::new(&inside.to_string_lossy()),
+    )
 }
 
 impl SemanticProvider for RustIndexer {
@@ -277,42 +364,36 @@ impl SemanticProvider for RustIndexer {
 
     fn index(&self, files: &[RelativePath]) -> Result<Indexed, IndexError> {
         let program = require(&self.runner.tools, "rust-analyzer", "rust-analyzer")?;
-        let projects = folders_with(files, "Cargo.toml");
-        if projects.is_empty() {
+        let cargo = require(&self.runner.tools, "cargo", "cargo")?;
+        let manifests = folders_with(files, "Cargo.toml");
+        if manifests.is_empty() {
             return Err(IndexError::NoProject("Cargo.toml".to_owned()));
         }
-        let mut indexed = Indexed::default();
-        for (number, folder) in projects.iter().enumerate() {
-            let covered = !folder.as_str().is_empty()
-                && indexed
-                    .index
-                    .documents
-                    .iter()
-                    .any(|document| is_inside(document.path.as_str(), folder));
-            if covered {
-                self.runner
-                    .log
-                    .write(&format!("{} is covered already", shown(folder)));
-                continue;
-            }
+        let project = self.runner.project();
+        let (workspaces, failures) = self.workspaces(&cargo, &manifests);
+        let mut indexed = Indexed {
+            failures,
+            ..Indexed::default()
+        };
+        for (number, workspace) in workspaces.iter().enumerate() {
             let output = self.runner.index_path(&format!("rust-{number}.scip"))?;
-            let index = self
+            let documents = self
                 .runner
                 .run(
                     &program,
                     &[
                         OsStr::new("scip"),
-                        OsStr::new(shown(folder)),
+                        workspace.as_os_str(),
                         OsStr::new("--output"),
                         output.as_os_str(),
                     ],
                     &RelativePath::new(""),
                     &[],
                 )
-                .and_then(|()| self.runner.read(&output));
-            match index {
-                Ok(index) => merge(&mut indexed.index, moved(index, folder)),
-                Err(reason) => indexed.failures.push((folder.clone(), reason)),
+                .and_then(|_| self.runner.read(&output, &project, workspace));
+            match documents {
+                Ok(documents) => merge(&mut indexed.index, documents),
+                Err(reason) => indexed.failures.push((named(&project, workspace), reason)),
             }
         }
         Ok(indexed)
@@ -320,7 +401,7 @@ impl SemanticProvider for RustIndexer {
 }
 
 /// `scip-typescript`, run through `npx`, which needs Node. It indexes JavaScript too. It
-/// runs for each `tsconfig.json` but one at the root among others, or once for the whole
+/// runs for each `tsconfig.json` but an empty one among others, or once for the whole
 /// project when there is none.
 pub struct TypeScriptIndexer {
     runner: Runner,
@@ -340,18 +421,44 @@ impl TypeScriptIndexer {
     }
 }
 
-/// The folders of TypeScript projects: each with a `tsconfig.json`, except the root
-/// when there are others, since one there usually only serves editors and would take in
-/// every package at once.
-fn typescript_projects(files: &[RelativePath]) -> Vec<RelativePath> {
+/// The folders of TypeScript projects: each with a `tsconfig.json`, except one that is
+/// empty when there are others, since such a file only serves editors and would take in
+/// every package at once. `is_empty` says whether a folder's `tsconfig.json` is.
+fn typescript_projects(
+    files: &[RelativePath],
+    is_empty: impl Fn(&RelativePath) -> bool,
+) -> Vec<RelativePath> {
     let folders = folders_with(files, "tsconfig.json");
     if folders.len() < 2 {
         return folders;
     }
     folders
         .into_iter()
-        .filter(|folder| !folder.as_str().is_empty())
+        .filter(|folder| !is_empty(folder))
         .collect()
+}
+
+/// Whether a `tsconfig.json` sets nothing: once its comments are gone, it is `{}` or
+/// nothing at all.
+fn sets_nothing(text: &str) -> bool {
+    let mut kept = String::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        if let Some(after) = rest.strip_prefix("//") {
+            rest = after.split_once('\n').map_or("", |(_, next)| next);
+        } else if let Some(after) = rest.strip_prefix("/*") {
+            rest = after.split_once("*/").map_or("", |(_, next)| next);
+        } else {
+            let mut letters = rest.chars();
+            if let Some(letter) = letters.next()
+                && !letter.is_whitespace()
+            {
+                kept.push(letter);
+            }
+            rest = letters.as_str();
+        }
+    }
+    kept.is_empty() || kept == "{}"
 }
 
 /// How much memory Node may use for an index: as much as a large package needs. Options
@@ -386,7 +493,12 @@ impl SemanticProvider for TypeScriptIndexer {
 
     fn index(&self, files: &[RelativePath]) -> Result<Indexed, IndexError> {
         let program = require(&self.runner.tools, "npx", "npx")?;
-        let projects = typescript_projects(files);
+        let root = self.runner.root.clone();
+        let projects = typescript_projects(files, |folder| {
+            fs::read_to_string(root.join(folder.as_str()).join("tsconfig.json"))
+                .is_ok_and(|text| sets_nothing(&text))
+        });
+        let project = self.runner.project();
         let inferred = projects.is_empty();
         let projects = if inferred {
             vec![RelativePath::new("")]
@@ -409,12 +521,13 @@ impl SemanticProvider for TypeScriptIndexer {
                 arguments.push(OsStr::new("--infer-tsconfig"));
             }
             let node = node_options(env::var_os("NODE_OPTIONS").as_deref());
-            let index = self
+            let ran_in = self.runner.root.join(folder.as_str());
+            let documents = self
                 .runner
                 .run(&program, &arguments, folder, &[("NODE_OPTIONS", node)])
-                .and_then(|()| self.runner.read(&output));
-            match index {
-                Ok(index) => merge(&mut indexed.index, moved(index, folder)),
+                .and_then(|_| self.runner.read(&output, &project, &ran_in));
+            match documents {
+                Ok(documents) => merge(&mut indexed.index, documents),
                 Err(reason) => indexed.failures.push((folder.clone(), reason)),
             }
         }
@@ -473,7 +586,7 @@ mod tests {
     }
 
     #[test]
-    fn a_typescript_project_is_any_tsconfig_but_the_root_among_others() {
+    fn a_typescript_project_is_any_tsconfig_but_an_empty_one_among_others() {
         let files = paths(&[
             "tsconfig.json",
             "web/shop/tsconfig.json",
@@ -481,18 +594,42 @@ mod tests {
             "apps/server/tsconfig.json",
             "apps/server/specification/tsconfig.json",
         ]);
+        let root_is_empty = |folder: &RelativePath| folder.as_str().is_empty();
         assert_eq!(
-            texts(&typescript_projects(&files)),
+            texts(&typescript_projects(&files, root_is_empty)),
             vec!["apps/server", "web/shop", "apps/server/specification"]
         );
+        let none_is_empty = |_: &RelativePath| false;
         assert_eq!(
-            texts(&typescript_projects(&paths(&["tsconfig.json", "src/a.ts"]))),
+            texts(&typescript_projects(
+                &paths(&["tsconfig.json", "specification/tsconfig.json"]),
+                none_is_empty
+            )),
+            vec!["", "specification"]
+        );
+        assert_eq!(
+            texts(&typescript_projects(
+                &paths(&["tsconfig.json"]),
+                root_is_empty
+            )),
             vec![""]
         );
         assert_eq!(
-            texts(&typescript_projects(&paths(&["src/a.ts"]))),
+            texts(&typescript_projects(&paths(&["src/a.ts"]), root_is_empty)),
             Vec::<&str>::new()
         );
+    }
+
+    #[test]
+    fn a_tsconfig_that_sets_nothing_is_empty() {
+        assert!(sets_nothing("{}\n"));
+        assert!(sets_nothing("// Added by a step.\n"));
+        assert!(sets_nothing("/* editors only */ { }"));
+        assert!(sets_nothing(""));
+        assert!(!sets_nothing("{ \"include\": [\"src\"] }"));
+        assert!(!sets_nothing(
+            "// a comment\n{ \"extends\": \"../base.json\" }"
+        ));
     }
 
     #[test]
@@ -549,28 +686,33 @@ mod tests {
     }
 
     #[test]
-    fn a_path_in_a_folder_becomes_a_path_of_the_project() {
-        let folder = RelativePath::new("services/api");
+    fn a_path_an_index_names_becomes_a_path_of_the_project() {
+        let project = Path::new("/work/core/apps/server");
+        let in_it = |base: &str, path: &str| {
+            in_project(project, Path::new(base), path).map(|path| path.to_string())
+        };
         assert_eq!(
-            within(&folder, "src/main.rs").map(|path| path.to_string()),
-            Some("services/api/src/main.rs".to_owned())
+            in_it("/work/core/apps/server", "src/main.ts"),
+            Some("src/main.ts".to_owned())
         );
         assert_eq!(
-            within(&folder, "../shared/lib.rs").map(|path| path.to_string()),
-            Some("services/shared/lib.rs".to_owned())
+            in_it("/work/core/apps/server/specification", "../src/main.ts"),
+            Some("src/main.ts".to_owned())
         );
-        assert_eq!(within(&RelativePath::new(""), "../outside.rs"), None);
         assert_eq!(
-            within(&RelativePath::new(""), "src/lib.rs").map(|path| path.to_string()),
+            in_it("/work/core", "apps/server/src/lib.rs"),
             Some("src/lib.rs".to_owned())
         );
+        assert_eq!(in_it("/work/core", "apps/web/src/lib.rs"), None);
     }
 
     #[test]
-    fn a_folder_holds_what_is_below_it_and_the_root_holds_everything() {
-        let folder = RelativePath::new("services/api");
-        assert!(is_inside("services/api/src/main.rs", &folder));
-        assert!(!is_inside("services/apiary/src/main.rs", &folder));
-        assert!(is_inside("anything.rs", &RelativePath::new("")));
+    fn a_file_uri_names_a_folder() {
+        assert_eq!(
+            folder_of_uri("file:///work/my%20core/"),
+            Some(PathBuf::from("/work/my core"))
+        );
+        assert_eq!(folder_of_uri("file:///"), Some(PathBuf::from("/")));
+        assert_eq!(folder_of_uri(""), None);
     }
 }

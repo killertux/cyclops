@@ -77,14 +77,13 @@ Cyclops never presents old data as current.
 A repository often holds several projects, and nothing at its root says how to build
 them all. Cyclops finds them, and indexes each one on its own.
 
-- For Rust, each folder with a `Cargo.toml`, the outermost first. A folder inside one
-  that was indexed is skipped when that index already covers its files, as it does for
-  a member of a workspace.
-- For TypeScript, each folder with a `tsconfig.json`, except the root of the project
-  when there are others, since one there usually only serves editors and would take in
-  every package at once. A project with no `tsconfig.json` at all is indexed from its
-  root. Node may use up to 16 GB, as a large package needs, unless `NODE_OPTIONS` says
-  otherwise.
+- For Rust, each Cargo workspace, as Cargo finds it for each `Cargo.toml`. A workspace
+  is indexed whole, once, from its root, even when that root is outside the project, as
+  when Cyclops runs on one of its members. Files outside the project are left out.
+- For TypeScript, each folder with a `tsconfig.json`, except one that is empty when there
+  are others, since an empty one only serves editors and would take in every package at
+  once. A project with no `tsconfig.json` at all is indexed from its root. Node may use
+  up to 16 GB, as a large package needs, unless `NODE_OPTIONS` says otherwise.
 
 Since each project is indexed on its own, one that fails leaves the answers of the
 others, and its problem names its folder, as in
@@ -99,6 +98,7 @@ end of a stack trace. The [log](logs.md) has everything it printed.
 | Rust in a folder       | monorepo  | `precise analysis` | shop::orders::Order::total        | shop::billing::Invoice::total        | exact       |
 | TypeScript in a folder | monorepo  | `precise analysis` | web/shop/src/orders::Order::total | web/shop/src/billing::Invoice::total | exact       |
 | One inside another     | monorepo  | `add web/shop/tools/tsconfig.json; precise analysis` | web/shop/src/orders::Order::total | web/shop/src/billing::Invoice::total | exact       |
+| An empty one inside    | ts-shop   | `add specs/tsconfig.json; precise analysis`          | src/orders::Order::total          | src/billing::Invoice::total          | exact       |
 
 A project with Rust code and no `Cargo.toml` has nothing to index it with.
 
