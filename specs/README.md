@@ -24,6 +24,7 @@ New here? Read [how these pages work](writing-specs.md) and the
 - [Test code](analysis/test-code.md): recognizing test code, and leaving it out.
 - [Caching](analysis/caching.md): only paying for what changed.
 - [Precise analysis](analysis/precise-analysis.md): exact relations from compiler tooling.
+- [Logs](analysis/logs.md): what each analysis did, to read when something goes wrong.
 
 ## The model
 

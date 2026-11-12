@@ -284,8 +284,43 @@ pub enum IndexError {
     /// A tool the indexer needs is not installed, such as `Node`.
     #[error("{0} not found")]
     Missing(String),
+    /// The project has no file that says how to build it, such as `Cargo.toml`.
+    #[error("no {0} found")]
+    NoProject(String),
     #[error("{0}")]
     Failed(String),
+}
+
+/// What an indexer made of a project, which may hold several projects of its languages,
+/// each indexed on its own.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Indexed {
+    /// What it found in every project it could index.
+    pub index: SemanticIndex,
+    /// Each project it could not index: its folder, empty for the root, and why.
+    pub failures: Vec<(RelativePath, String)>,
+}
+
+/// Where Cyclops writes what it did, for someone to read when something goes wrong. A
+/// log that cannot be written never stops anything: it says why later, through
+/// `trouble`.
+pub trait Log: Send + Sync {
+    /// Writes one entry, which may span several lines.
+    fn write(&self, entry: &str);
+
+    /// Why entries could not be written, if any could not.
+    fn trouble(&self) -> Option<String>;
+}
+
+/// A log that keeps nothing.
+pub struct NoLog;
+
+impl Log for NoLog {
+    fn write(&self, _: &str) {}
+
+    fn trouble(&self) -> Option<String> {
+        None
+    }
 }
 
 /// Runs a compiler's indexer over the whole project, to find out exactly what each name
@@ -306,12 +341,14 @@ pub trait SemanticProvider: Send + Sync {
     /// Says which tool is missing.
     fn availability(&self) -> Result<(), IndexError>;
 
-    /// Indexes the project. It is slow, and may run the project's build scripts.
+    /// Indexes the project, whose files are `files`. It is slow, and may run the
+    /// project's build scripts.
     ///
     /// # Errors
     ///
-    /// Fails if a tool is missing, or the indexer fails.
-    fn index(&self) -> Result<SemanticIndex, IndexError>;
+    /// Fails if a tool is missing, the project has nothing to index, or nothing could be
+    /// indexed at all.
+    fn index(&self, files: &[RelativePath]) -> Result<Indexed, IndexError>;
 }
 
 /// The commit an index was made at: the first seven characters of its id, and its

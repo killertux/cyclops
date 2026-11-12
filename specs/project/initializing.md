@@ -30,22 +30,24 @@ An existing configuration is never overwritten.
 ## Without initializing
 
 Analysis works without `init`, using the [default settings](configuration.md#defaults).
-It creates what it needs for the cache and nothing else.
+It creates what it needs for the cache and the [log](../analysis/logs.md), and nothing
+else.
 
 [//]: # "decisionTable Cli"
 
-| # situation | workspace | command           | exit code? | created?                                       |
-| ----------- | --------- | ----------------- | ---------- | ---------------------------------------------- |
-| Cache only  | rust-shop | `cyclops analyze` | 0          | .cyclops/.gitignore, .cyclops/cache/cyclops.db |
+| # situation         | workspace | command           | exit code? | created?                                                                  |
+| ------------------- | --------- | ----------------- | ---------- | ------------------------------------------------------------------------- |
+| Cache and log only  | rust-shop | `cyclops analyze` | 0          | .cyclops/.gitignore, .cyclops/cache/cyclops.db, .cyclops/logs/cyclops.log |
 
 ## What git sees
 
-The generated `.gitignore` keeps the cache out of the repository, so nobody has to
-edit their own.
+The generated `.gitignore` keeps the cache and the log out of the repository, so nobody
+has to edit their own.
 
 [//]: # "decisionTable Cli"
 
 | # situation       | workspace | steps                    | command           | subject                   | ignored by git? |
 | ----------------- | --------- | ------------------------ | ----------------- | ------------------------- | --------------- |
 | The cache         | rust-shop | `git init; cyclops init` | `cyclops analyze` | .cyclops/cache/cyclops.db | yes             |
+| The log           | rust-shop | `git init; cyclops init` | `cyclops analyze` | .cyclops/logs/cyclops.log | yes             |
 | The configuration | rust-shop | `git init; cyclops init` | `cyclops analyze` | .cyclops/config.toml      | no              |

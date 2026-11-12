@@ -7,6 +7,7 @@ mod export;
 mod file_source;
 mod folder;
 mod git;
+mod log;
 mod rules;
 mod watch;
 
@@ -16,5 +17,6 @@ pub use export::{Export, ExportFormat};
 pub use file_source::{ProjectFiles, ProjectNotFound};
 pub use folder::ProjectFolder;
 pub use git::GitHistory;
+pub use log::FileLog;
 pub use rules::{save_alert, set_alert_enabled};
 pub use watch::ProjectWatcher;

@@ -4,8 +4,8 @@
 //! keeps the syntax layer's guesses until the next precise analysis.
 
 use crate::ports::{
-    ContentHash, FactStore, IndexCommit, Progress, SemanticIndex, SemanticProvider, Step,
-    StoredIndex,
+    ContentHash, FactStore, IndexCommit, IndexError, Progress, SemanticIndex, SemanticProvider,
+    Step, StoredIndex,
 };
 use cyclops_domain::language::LanguageId;
 use cyclops_domain::path::RelativePath;
@@ -278,11 +278,20 @@ impl<'a> Tree<'a> {
 
 /// Runs the indexers if the settings and the request say so, and returns every index
 /// there is: the new ones, and the ones the cache kept for the other languages.
+/// What an analysis found that precise analysis works from.
+#[derive(Clone, Copy)]
+pub(crate) struct Found<'a> {
+    pub symbols: &'a [Symbol],
+    /// The source files analyzed.
+    pub files: &'a [CurrentFile<'a>],
+    /// Every file of the project, for the indexers to find what says how to build it.
+    pub project: &'a [RelativePath],
+}
+
 pub(crate) fn run(
     precise: Precise<'_>,
     mode: SemanticMode,
-    symbols: &[Symbol],
-    files: &[CurrentFile<'_>],
+    found: &Found<'_>,
     cache: &mut Option<&mut dyn FactStore>,
     problems: &mut Vec<Problem>,
     progress: &dyn Progress,
@@ -305,6 +314,11 @@ pub(crate) fn run(
         SemanticMode::Manual => precise.asked,
         SemanticMode::Always => true,
     };
+    let Found {
+        symbols,
+        files,
+        project,
+    } = *found;
     let mut ran = Vec::new();
     if wanted {
         for provider in precise.providers {
@@ -316,7 +330,7 @@ pub(crate) fn run(
             if !progress.step(Step::Indexing) {
                 return None;
             }
-            if let Some(index) = index_with(provider.as_ref(), symbols, files, problems) {
+            if let Some(index) = index_with(provider.as_ref(), symbols, files, project, problems) {
                 if let Some(store) = cache.as_deref_mut()
                     && let Err(error) = store.save_index(&index)
                 {
@@ -346,11 +360,13 @@ pub(crate) fn run(
     ))
 }
 
-/// Runs one indexer, if the project has any of its languages.
+/// Runs one indexer, if the project has any of its languages. A project it could not
+/// index is a problem, and the others still count, unless none could be indexed.
 fn index_with(
     provider: &dyn SemanticProvider,
     symbols: &[Symbol],
     files: &[CurrentFile<'_>],
+    project: &[RelativePath],
     problems: &mut Vec<Problem>,
 ) -> Option<StoredIndex> {
     let languages = provider.languages();
@@ -363,42 +379,58 @@ fn index_with(
         return None;
     }
     let language = provider.label().to_owned();
-    let found = provider
+    let indexed = match provider
         .availability()
-        .map_err(|error| Problem::PreciseSkipped {
-            language: language.clone(),
-            reason: error.to_string(),
-        });
-    let found = found.and_then(|()| {
-        provider.index().map_err(|error| Problem::PreciseFailed {
-            language: language.clone(),
-            reason: error.to_string(),
-        })
-    });
-    match found {
-        Ok(index) => Some(StoredIndex {
-            label: language,
-            languages: languages.to_vec(),
-            files: theirs,
-            covered: index
-                .documents
-                .iter()
-                .map(|document| document.path.clone())
-                .collect(),
-            uses: resolve(&index, symbols),
-            commit: None,
-        }),
-        Err(problem) => {
-            problems.push(problem);
-            None
+        .and_then(|()| provider.index(project))
+    {
+        Ok(indexed) => indexed,
+        Err(IndexError::Failed(reason)) => {
+            problems.push(Problem::PreciseFailed {
+                language,
+                folder: None,
+                reason,
+            });
+            return None;
         }
+        Err(error) => {
+            problems.push(Problem::PreciseSkipped {
+                language,
+                reason: error.to_string(),
+            });
+            return None;
+        }
+    };
+    let failed = !indexed.failures.is_empty();
+    for (folder, reason) in indexed.failures {
+        problems.push(Problem::PreciseFailed {
+            language: language.clone(),
+            folder: (!folder.as_str().is_empty()).then_some(folder),
+            reason,
+        });
     }
+    // An index of nothing, because every project failed, would hide the last good one.
+    if failed && indexed.index.documents.is_empty() {
+        return None;
+    }
+    let index = indexed.index;
+    Some(StoredIndex {
+        label: language,
+        languages: languages.to_vec(),
+        files: theirs,
+        covered: index
+            .documents
+            .iter()
+            .map(|document| document.path.clone())
+            .collect(),
+        uses: resolve(&index, symbols),
+        commit: None,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::{IndexError, IndexedDefinition, IndexedDocument, IndexedReference};
+    use crate::ports::{Indexed, IndexedDefinition, IndexedDocument, IndexedReference};
     use cyclops_domain::relation::RelationKind;
     use cyclops_domain::symbol::{CodeRole, Location, Span, SymbolKind};
 
@@ -698,6 +730,10 @@ mod tests {
     struct Fake {
         missing: Option<&'static str>,
         fails: bool,
+        /// Projects in folders that fail while the rest index.
+        broken: &'static [(&'static str, &'static str)],
+        /// Whether the projects that worked found anything.
+        found: bool,
     }
 
     impl SemanticProvider for Fake {
@@ -718,12 +754,22 @@ mod tests {
                 .map_or(Ok(()), |tool| Err(IndexError::Missing(tool.to_owned())))
         }
 
-        fn index(&self) -> Result<SemanticIndex, IndexError> {
+        fn index(&self, _: &[RelativePath]) -> Result<Indexed, IndexError> {
             if self.fails {
-                Err(IndexError::Failed("it broke".to_owned()))
-            } else {
-                Ok(shop_index())
+                return Err(IndexError::Failed("it broke".to_owned()));
             }
+            Ok(Indexed {
+                index: if self.found {
+                    shop_index()
+                } else {
+                    SemanticIndex::default()
+                },
+                failures: self
+                    .broken
+                    .iter()
+                    .map(|(folder, reason)| (RelativePath::new(folder), (*reason).to_owned()))
+                    .collect(),
+            })
         }
     }
 
@@ -735,6 +781,7 @@ mod tests {
         let providers: Vec<Box<dyn SemanticProvider>> = vec![Box::new(fake)];
         let orders = RelativePath::new("src/orders.rs");
         let files = [file(&orders, 1)];
+        let symbols = shop();
         let mut problems = Vec::new();
         let (indexes, status) = run(
             Precise {
@@ -742,8 +789,11 @@ mod tests {
                 asked,
             },
             mode,
-            &shop(),
-            &files,
+            &Found {
+                symbols: &symbols,
+                files: &files,
+                project: &[],
+            },
             &mut None,
             &mut problems,
             &crate::ports::Silent,
@@ -755,6 +805,8 @@ mod tests {
     const WORKS: Fake = Fake {
         missing: None,
         fails: false,
+        broken: &[],
+        found: true,
     };
 
     #[test]
@@ -782,7 +834,7 @@ mod tests {
     fn a_missing_tool_or_a_failure_is_a_problem_and_never_fatal() {
         let missing = Fake {
             missing: Some("rust-analyzer"),
-            fails: false,
+            ..WORKS
         };
         let (indexes, status, problems) = run_with(missing, SemanticMode::Manual, true);
         assert_eq!(indexes, Vec::<StoredIndex>::new());
@@ -793,13 +845,44 @@ mod tests {
         );
 
         let broken = Fake {
-            missing: None,
             fails: true,
+            ..WORKS
         };
         let (_, _, problems) = run_with(broken, SemanticMode::Manual, true);
         assert_eq!(
             problems.first().map(ToString::to_string).as_deref(),
             Some("Precise analysis failed for Rust: it broke")
+        );
+    }
+
+    #[test]
+    fn a_project_that_fails_leaves_the_others_and_names_its_folder() {
+        let one_broken = Fake {
+            broken: &[("services/api", "Error: no projects")],
+            ..WORKS
+        };
+        let (indexes, status, problems) = run_with(one_broken, SemanticMode::Manual, true);
+        assert_eq!(indexes.first().map(|index| index.uses.len()), Some(1));
+        assert_eq!(status.ran, vec!["Rust".to_owned()]);
+        assert_eq!(
+            problems.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            vec!["Precise analysis failed for Rust in services/api: Error: no projects".to_owned()]
+        );
+    }
+
+    #[test]
+    fn when_every_project_fails_nothing_is_kept_and_the_root_has_no_folder() {
+        let all_broken = Fake {
+            broken: &[("", "Error: no projects")],
+            found: false,
+            ..WORKS
+        };
+        let (indexes, status, problems) = run_with(all_broken, SemanticMode::Manual, true);
+        assert_eq!(indexes, Vec::<StoredIndex>::new());
+        assert_eq!(status.ran, Vec::<String>::new());
+        assert_eq!(
+            problems.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            vec!["Precise analysis failed for Rust: Error: no projects".to_owned()]
         );
     }
 }

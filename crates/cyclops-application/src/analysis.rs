@@ -322,6 +322,12 @@ impl ProjectAnalysis {
         &self.extras.steps
     }
 
+    /// Adds a problem found once the analysis was made, in its place among the others.
+    pub(crate) fn add_problem(&mut self, problem: Problem) {
+        self.problems.push(problem);
+        Problem::sort(&mut self.problems);
+    }
+
     pub(crate) fn set_alerts(&mut self, alerts: Vec<Alert>) {
         self.extras.alerts = alerts;
     }

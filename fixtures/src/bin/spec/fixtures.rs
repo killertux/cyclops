@@ -306,7 +306,13 @@ pub struct Core {
     outcome: Option<Outcome>,
     settings: Option<Result<Settings, String>>,
     indexers_ran: bool,
+    log_text: String,
+    /// The log, once the row has run.
+    log: String,
 }
+
+/// Where every analysis writes what it did.
+const LOG: &str = ".cyclops/logs/cyclops.log";
 
 impl Core {
     fn run(&mut self) -> Outcome {
@@ -324,6 +330,7 @@ impl Core {
         self.settings = Some(scenario.settings());
         let analysis = scenario.analyze();
         self.indexers_ran = scenario.indexers_ran();
+        self.log = std::fs::read_to_string(scenario.root().join(LOG)).unwrap_or_default();
         analysis
     }
 
@@ -526,6 +533,19 @@ impl Core {
 
     pub fn set_relations(&mut self, relations: String) {
         self.relations = relations;
+    }
+
+    pub fn set_log_text(&mut self, text: String) {
+        self.log_text = text;
+    }
+
+    /// Whether the log has the `log text`.
+    #[must_use]
+    pub fn log_includes(&self) -> String {
+        match &self.outcome {
+            Some(_) => includes(&self.log, &self.log_text),
+            None => not_run(),
+        }
     }
 
     pub fn set_overlay(&mut self, overlay: String) {

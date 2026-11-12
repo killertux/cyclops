@@ -6,19 +6,35 @@ mod indexers;
 mod reader;
 mod tools;
 
-pub use indexers::{RustIndexer, TypeScriptIndexer};
+pub use indexers::{RustIndexer, TypeScriptIndexer, reason_of};
 pub use reader::read_index;
 pub use tools::Tools;
 
-use cyclops_application::ports::SemanticProvider;
+use cyclops_application::ports::{Log, SemanticProvider};
 use std::path::Path;
+use std::sync::Arc;
 
 /// Every indexer Cyclops has, for the project at `root`. They write their indexes into
-/// `output`, and find their tools on `tools`.
+/// `output`, find their tools on `tools`, and write what they ran to `log`.
 #[must_use]
-pub fn providers(root: &Path, output: &Path, tools: &Tools) -> Vec<Box<dyn SemanticProvider>> {
+pub fn providers(
+    root: &Path,
+    output: &Path,
+    tools: &Tools,
+    log: &Arc<dyn Log>,
+) -> Vec<Box<dyn SemanticProvider>> {
     vec![
-        Box::new(RustIndexer::new(root, output, tools.clone())),
-        Box::new(TypeScriptIndexer::new(root, output, tools.clone())),
+        Box::new(RustIndexer::new(
+            root,
+            output,
+            tools.clone(),
+            Arc::clone(log),
+        )),
+        Box::new(TypeScriptIndexer::new(
+            root,
+            output,
+            tools.clone(),
+            Arc::clone(log),
+        )),
     ]
 }

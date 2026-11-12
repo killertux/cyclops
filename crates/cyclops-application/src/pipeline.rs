@@ -6,8 +6,8 @@ use crate::duplication::Duplication;
 use crate::history::{self, churn, start_of};
 use crate::ports::{
     Analyzer, CacheAccess, CacheEntry, CachedFacts, Commit, ContentHash, FactStore, FileSource,
-    FileStamp, HistoryError, HistorySource, IndexCommit, KnownHistory, LanguageAdapter, Partial,
-    PartialFunction, Progress, SourceError, SourceFile, Step, StepReport, StoredIndex,
+    FileStamp, HistoryError, HistorySource, IndexCommit, KnownHistory, LanguageAdapter, Log,
+    Partial, PartialFunction, Progress, SourceError, SourceFile, Step, StepReport, StoredIndex,
 };
 use crate::precise::{self, CurrentFile, Precise};
 use crate::project::add_project;
@@ -179,6 +179,8 @@ pub struct Sources<'a> {
     pub precise: Precise<'a>,
     /// Who hears how it goes, and may stop it.
     pub progress: &'a dyn Progress,
+    /// Where it writes what it did.
+    pub log: &'a dyn Log,
 }
 
 /// The time now, in seconds since 1970.
@@ -304,6 +306,14 @@ fn mark_test_paths(facts: &mut FileFacts, test_paths: &[Glob]) {
     }
 }
 
+/// Whether the settings leave a file out of the project.
+fn is_excluded(path: &RelativePath, settings: &Settings) -> bool {
+    settings
+        .exclude
+        .iter()
+        .any(|pattern| pattern.matches(path.as_str()))
+}
+
 impl AnalysisService {
     #[must_use]
     pub fn new(adapters: Vec<Box<dyn LanguageAdapter>>, analyzers: Vec<Box<dyn Analyzer>>) -> Self {
@@ -346,6 +356,54 @@ impl AnalysisService {
         sources: Sources<'_>,
         settings: &Settings,
     ) -> Result<ProjectAnalysis, AnalysisError> {
+        let log = sources.log;
+        let started = Instant::now();
+        log.write(if sources.precise.asked {
+            "analysis started, with precise analysis"
+        } else {
+            "analysis started"
+        });
+        let result = self.analyze_quietly(sources, settings);
+        let seconds = started.elapsed().as_secs_f64();
+        match result {
+            Ok(mut analysis) => {
+                let steps = analysis.steps().iter().map(|report| {
+                    format!(
+                        "{}: {} ms, {}",
+                        report.step.name(),
+                        report.millis,
+                        report.result
+                    )
+                });
+                let problems = analysis
+                    .problems()
+                    .iter()
+                    .map(|problem| format!("problem: {problem}"));
+                let entry: Vec<String> =
+                    std::iter::once(format!("analysis finished in {seconds:.1} s"))
+                        .chain(steps)
+                        .chain(problems)
+                        .collect();
+                let entry = entry.join("\n");
+                log.write(&entry);
+                if let Some(trouble) = log.trouble() {
+                    analysis.add_problem(Problem::LogUnavailable(trouble));
+                }
+                Ok(analysis)
+            }
+            Err(error) => {
+                log.write(&format!("analysis stopped after {seconds:.1} s: {error}"));
+                Err(error)
+            }
+        }
+    }
+
+    /// Analyzes a project, as `analyze` does, without writing to the log.
+    fn analyze_quietly(
+        &self,
+        sources: Sources<'_>,
+        settings: &Settings,
+    ) -> Result<ProjectAnalysis, AnalysisError> {
         let rules = AlertRule::all(&settings.alerts)?;
         let mut run = Run {
             progress: sources.progress,
@@ -361,7 +419,7 @@ impl AnalysisService {
             }
             CacheAccess::None => None,
         };
-        let (mut extracted, parsed) =
+        let (mut extracted, parsed, project) =
             self.gather(sources.files, &mut cache, settings, &mut problems, &mut run)?;
         for file in &mut extracted {
             mark_test_paths(&mut file.facts, &settings.test_paths);
@@ -384,11 +442,15 @@ impl AnalysisService {
                 hash: file.hash,
             })
             .collect();
+        let found = precise::Found {
+            symbols: &symbols,
+            files: &current,
+            project: &project,
+        };
         let (mut indexes, mut precise_status) = precise::run(
             sources.precise,
             settings.semantic,
-            &symbols,
-            &current,
+            &found,
             &mut cache,
             &mut problems,
             run.progress,
@@ -510,7 +572,7 @@ impl AnalysisService {
         settings: &Settings,
         problems: &mut Vec<Problem>,
         run: &mut Run<'_>,
-    ) -> Result<(Vec<Extracted>, usize), AnalysisError> {
+    ) -> Result<(Vec<Extracted>, usize, Vec<RelativePath>), AnalysisError> {
         run.begin(Step::Discover)?;
         let mut known = match cache.as_mut().map(|store| store.load()) {
             Some(Ok(known)) => known,
@@ -530,7 +592,13 @@ impl AnalysisService {
             .collect();
         run.end(format!("{} files", discovered.files.len()));
         run.begin(Step::Check)?;
-        let candidates = self.candidates(discovered.files.clone(), settings, &mut known);
+        let project: Vec<RelativePath> = discovered
+            .files
+            .iter()
+            .filter(|path| !is_excluded(path, settings))
+            .cloned()
+            .collect();
+        let candidates = self.candidates(project.clone(), settings, &mut known);
         let found_any = !candidates.is_empty();
         problems.extend(discovered.unreadable.into_iter().map(Problem::Unreadable));
         run.end(String::new());
@@ -583,7 +651,7 @@ impl AnalysisService {
         run.amend(Step::Check, format!("{parsed} changed"));
         let facts: Vec<&FileFacts> = extracted.iter().map(|file| &file.facts).collect();
         run.progress.partial(partial_of(&facts));
-        Ok((extracted, parsed))
+        Ok((extracted, parsed, project))
     }
 
     /// The files to analyze, with the adapter for each and what the cache knows.
@@ -595,12 +663,7 @@ impl AnalysisService {
     ) -> Vec<Candidate<'_>> {
         paths
             .into_iter()
-            .filter(|path| {
-                !settings
-                    .exclude
-                    .iter()
-                    .any(|pattern| pattern.matches(path.as_str()))
-            })
+            .filter(|path| !is_excluded(path, settings))
             .filter_map(|path| {
                 let (index, adapter, language) =
                     self.adapters

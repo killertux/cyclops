@@ -107,6 +107,16 @@ Problems lists the [files that could not be fully read](../analysis/parse-failur
 | Stepping    | broken    |                   | `]p`       | Status | src/bad.rs: syntax error, web/bad.ts: syntax error | none         |
 | Opening     | broken    | `env EDITOR fake` | `]p<CR>`   | Status | src/bad.rs: syntax error, web/bad.ts: syntax error | src/bad.rs:1 |
 
+When precise analysis failed or was skipped, Problems says where the
+[log](../analysis/logs.md) is, which has what each indexer printed.
+
+[//]: # "decisionTable Tui"
+
+| # situation      | workspace | steps                                                         | keys       | text                                 | includes? |
+| ---------------- | --------- | ------------------------------------------------------------- | ---------- | ------------------------------------ | --------- |
+| Precise skipped  | rust-shop | `remove tool rust-analyzer; env CYCLOPS_SEMANTIC_MODE always` | `<Space>s` | Details in .cyclops/logs/cyclops.log | yes       |
+| Nothing went off | rust-shop |                                                               | `<Space>s` | Details in .cyclops/logs/cyclops.log | no        |
+
 ## What is left out
 
 Status says what was not measured and why: test code, and any metric that is

@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 
 const FOLDER: &str = ".cyclops";
 const CONFIG: &str = "config.toml";
-/// Keeps the cache out of the repository, so that nobody has to edit their own ignores.
-const IGNORE: &str = "cache/\n";
+/// Keeps the cache and the log out of the repository, so that nobody has to edit their
+/// own ignores.
+const IGNORE: [&str; 2] = ["cache/", "logs/"];
 
 #[derive(Debug, Clone)]
 pub struct ProjectFolder {
@@ -37,7 +38,13 @@ impl ProjectFolder {
         self.config_path().exists()
     }
 
-    /// Creates the folder and its `.gitignore`, if they are missing.
+    #[must_use]
+    pub fn log_path(&self) -> PathBuf {
+        self.folder.join("logs").join("cyclops.log")
+    }
+
+    /// Creates the folder and its `.gitignore`, if they are missing. A `.gitignore` made
+    /// before the log was kept gets its line added.
     ///
     /// # Errors
     ///
@@ -45,10 +52,26 @@ impl ProjectFolder {
     pub fn prepare(&self) -> io::Result<()> {
         fs::create_dir_all(&self.folder)?;
         let ignore = self.folder.join(".gitignore");
-        if !ignore.exists() {
-            fs::write(ignore, IGNORE)?;
+        let mut text = match fs::read_to_string(&ignore) {
+            Ok(text) => text,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
+            Err(error) => return Err(error),
+        };
+        let missing: Vec<&str> = IGNORE
+            .into_iter()
+            .filter(|line| !text.lines().any(|known| known.trim() == *line))
+            .collect();
+        if missing.is_empty() {
+            return Ok(());
         }
-        Ok(())
+        if !text.is_empty() && !text.ends_with('\n') {
+            text.push('\n');
+        }
+        for line in missing {
+            text.push_str(line);
+            text.push('\n');
+        }
+        fs::write(ignore, text)
     }
 
     /// Writes the project's settings. It never overwrites them.

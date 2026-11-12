@@ -14,7 +14,8 @@ use cyclops_application::diagram::{DiagramRequest, DiagramView, Level};
 use cyclops_application::graph::CouplingAnalyzer;
 use cyclops_application::pipeline::{AnalysisService, Sources};
 use cyclops_application::ports::{
-    CacheAccess, CacheError, HistorySource, IndexError, LanguageAdapter, Progress, Silent,
+    CacheAccess, CacheError, HistorySource, IndexError, LanguageAdapter, Log, NoLog, Progress,
+    Silent,
 };
 use cyclops_application::precise::Precise;
 use cyclops_application::queries::Order;
@@ -26,8 +27,8 @@ use cyclops_domain::settings::{
 };
 use cyclops_domain::symbol::SymbolId;
 use cyclops_infra::{
-    Export, ExportFormat, GitHistory, ProjectFiles, ProjectFolder, ProjectWatcher, SqliteFactStore,
-    UserConfig, read_layer, save_alert, set_alert_enabled,
+    Export, ExportFormat, FileLog, GitHistory, ProjectFiles, ProjectFolder, ProjectWatcher,
+    SqliteFactStore, UserConfig, read_layer, save_alert, set_alert_enabled,
 };
 use cyclops_lang_rust::RustAdapter;
 use cyclops_lang_typescript::TypeScriptAdapter;
@@ -175,7 +176,8 @@ fn run_analysis(
     let folder = ProjectFolder::of(root);
     let tools = Tools::new(environment.get("PATH"));
     let cache_path = folder.cache_path();
-    let indexers = providers(root, cache_path.parent().unwrap_or(root), &tools);
+    let log: Arc<dyn Log> = Arc::new(FileLog::new(&folder.log_path()));
+    let indexers = providers(root, cache_path.parent().unwrap_or(root), &tools, &log);
     let store = folder
         .prepare()
         .map_err(|error| CacheError(error.to_string()))
@@ -199,6 +201,7 @@ fn run_analysis(
             asked: precise,
         },
         progress,
+        log: log.as_ref(),
     };
     Ok(service.analyze(sources, settings)?)
 }
@@ -617,16 +620,14 @@ pub fn toggle_rule(
 pub fn indexer_reports(root: &Path, environment: &Environment) -> Vec<IndexerReport> {
     let tools = Tools::new(environment.get("PATH"));
     let cache = ProjectFolder::of(root).cache_path();
-    providers(root, cache.parent().unwrap_or(root), &tools)
+    let log: Arc<dyn Log> = Arc::new(NoLog);
+    providers(root, cache.parent().unwrap_or(root), &tools, &log)
         .iter()
         .map(|provider| IndexerReport {
             label: provider.label().to_owned(),
             languages: provider.languages().to_vec(),
             indexer: provider.indexer().to_owned(),
-            ready: provider.availability().map_err(|error| match error {
-                IndexError::Missing(tool) => format!("{tool} is not installed."),
-                IndexError::Failed(reason) => reason,
-            }),
+            ready: provider.availability().map_err(|error| why_not(&error)),
         })
         .collect()
 }
@@ -696,7 +697,8 @@ pub fn precise_ready(root: &Path, environment: &Environment) -> Result<(), Strin
     let folder = ProjectFolder::of(root);
     let cache = folder.cache_path();
     let mut missing = None;
-    for provider in providers(root, cache.parent().unwrap_or(root), &tools) {
+    let log: Arc<dyn Log> = Arc::new(NoLog);
+    for provider in providers(root, cache.parent().unwrap_or(root), &tools, &log) {
         if !provider
             .languages()
             .iter()
@@ -709,11 +711,19 @@ pub fn precise_ready(root: &Path, environment: &Environment) -> Result<(), Strin
             Err(error) => missing = missing.or(Some(error)),
         }
     }
-    Err(match missing {
-        Some(IndexError::Missing(tool)) => format!("{tool} is not installed."),
-        Some(IndexError::Failed(reason)) => reason,
-        None => "Nothing here can be indexed.".to_owned(),
-    })
+    Err(missing.map_or_else(
+        || "Nothing here can be indexed.".to_owned(),
+        |error| why_not(&error),
+    ))
+}
+
+/// Why an indexer cannot run, as the interface says it.
+fn why_not(error: &IndexError) -> String {
+    match error {
+        IndexError::Missing(tool) => format!("{tool} is not installed."),
+        IndexError::NoProject(_) => format!("There is {error}."),
+        IndexError::Failed(reason) => reason.clone(),
+    }
 }
 
 /// How the interface starts for a project and an environment: the theme from your own

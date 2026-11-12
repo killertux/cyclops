@@ -3536,7 +3536,18 @@ fn status_problems(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
         canvas.text(inside.x + 1, y, problem, Token::Fg, line);
         canvas.hit(line, Target::Problem(row));
     }
-    let y = inside.y + u16::try_from(problems.len()).unwrap_or(u16::MAX) + 1;
+    let mut y = inside.y + u16::try_from(problems.len()).unwrap_or(u16::MAX) + 1;
+    let precise = app.analysis().is_some_and(|analysis| {
+        analysis
+            .problems()
+            .iter()
+            .any(cyclops_domain::problem::Problem::is_precise)
+    });
+    if precise {
+        let end = canvas.text(inside.x + 1, y, "Details in ", Token::Dim, inside);
+        canvas.text(end, y, LOG, Token::Fg, inside);
+        y += 2;
+    }
     for (offset, text) in [
         "Everything else was analyzed as usual. Code around",
         "a syntax error still counts, as far as it can be",
@@ -3549,6 +3560,9 @@ fn status_problems(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
         canvas.text(inside.x + 1, row, text, Token::Dim, inside);
     }
 }
+
+/// Where the log of every analysis is, inside the project.
+const LOG: &str = ".cyclops/logs/cyclops.log";
 
 fn status_precise(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
     let inside = canvas.pane(area, "Precise analysis", false);

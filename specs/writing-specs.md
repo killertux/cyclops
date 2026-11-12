@@ -188,6 +188,7 @@ and a table that looks for two texts names the second one `other text`.
 | `config`      | `.cyclops/config.toml`.           |
 | `user config` | Your own settings file.           |
 | `exported`    | The file an export wrote.         |
+| `log`         | `.cyclops/logs/cyclops.log`.      |
 
 ### Tui expected values
 
@@ -274,6 +275,7 @@ running the specification does not run them as tests too.
 | [`broken`](../samples/broken)                   | Files with syntax errors.                          |
 | [`mixed`](../samples/mixed)                     | One file of every kind Cyclops recognizes.         |
 | [`docs-only`](../samples/docs-only)             | A project with no source code.                     |
+| [`monorepo`](../samples/monorepo)               | The Rust and TypeScript shops in folders of one repository. |
 
 The three shop projects share one dependency graph, which many pages rely on:
 
