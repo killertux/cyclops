@@ -21,37 +21,37 @@ const fn is_function(kind: SymbolKind) -> bool {
 }
 
 impl ProjectAnalysis {
-    fn symbol_value(&self, id: &SymbolId, metric: MetricId) -> Option<f64> {
-        self.value(&Subject::Symbol(id.clone()), metric)
-    }
-
     /// Symbols in order of a metric, worst first. Ties are alphabetical, and symbols
     /// with no value go last.
-    fn ordered_by<'a>(&self, mut symbols: Vec<&'a Symbol>, metric: MetricId) -> Vec<&'a Symbol> {
-        symbols.sort_by(|a, b| {
-            worst_first(
-                self.symbol_value(&a.id, metric),
-                self.symbol_value(&b.id, metric),
-            )
-            .then_with(|| a.name.cmp(&b.name))
-            .then_with(|| a.id.cmp(&b.id))
+    fn ordered_by<'a>(&self, symbols: Vec<&'a Symbol>, metric: MetricId) -> Vec<&'a Symbol> {
+        let mut valued: Vec<(&Symbol, Option<f64>)> = symbols
+            .into_iter()
+            .map(|symbol| (symbol, self.symbol_value(&symbol.id, metric)))
+            .collect();
+        valued.sort_by(|(a, x), (b, y)| {
+            worst_first(*x, *y)
+                .then_with(|| a.name.cmp(&b.name))
+                .then_with(|| a.id.cmp(&b.id))
         });
-        symbols
+        valued.into_iter().map(|(symbol, _)| symbol).collect()
     }
 
     /// The visible symbols at the top of the hierarchy, worst first by a metric.
     #[must_use]
     pub fn roots_by(&self, metric: MetricId) -> Vec<&Symbol> {
         let view = self.view();
-        let roots = view
-            .symbols()
-            .filter(|symbol| {
-                symbol
-                    .parent
-                    .as_ref()
-                    .is_none_or(|parent| view.symbol(parent).is_none())
-            })
-            .collect();
+        let ids = self.memo().roots.get_or_init(|| {
+            view.symbols()
+                .filter(|symbol| {
+                    symbol
+                        .parent
+                        .as_ref()
+                        .is_none_or(|parent| view.symbol(parent).is_none())
+                })
+                .map(|symbol| symbol.id.clone())
+                .collect()
+        });
+        let roots = ids.iter().filter_map(|id| view.symbol(id)).collect();
         self.ordered_by(roots, metric)
     }
 

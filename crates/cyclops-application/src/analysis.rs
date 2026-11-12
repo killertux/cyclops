@@ -1,10 +1,11 @@
 //! The result of an analysis, and what analyzers get to work with.
 
 use crate::duplication::Duplication;
+use crate::graph::ModuleGraph;
 use crate::history::CommitSummary;
 use crate::ports::StepReport;
 use crate::precise::PreciseStatus;
-use crate::queries::Alert;
+use crate::queries::{Alert, Peers};
 use cyclops_domain::alert::AlertRule;
 use cyclops_domain::facts::{FileFacts, LineCounts};
 use cyclops_domain::language::LanguageId;
@@ -12,9 +13,11 @@ use cyclops_domain::metric::{Measurement, MetricId, Subject};
 use cyclops_domain::model::{ModelView, ProjectModel, TestCode};
 use cyclops_domain::path::RelativePath;
 use cyclops_domain::problem::Problem;
+use cyclops_domain::relation::Confidence;
 use cyclops_domain::settings::{SemanticMode, Severity};
 use cyclops_domain::symbol::{CodeRole, Symbol, SymbolId};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::OnceLock;
 
 /// A file that was analyzed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +85,46 @@ pub struct ProjectAnalysis {
     tests: TestCode,
     files_parsed: usize,
     extras: Extras,
+    /// The values of each symbol, to look up without building a subject.
+    symbol_values: HashMap<SymbolId, Vec<(MetricId, f64)>>,
+    memo: Memo,
+}
+
+/// Subjects with their values, the worst first.
+pub(crate) type Ranked = Vec<(Subject, f64)>;
+
+/// What queries work out once and keep, since the model and the measurements never
+/// change after the analysis is made. Each part is worked out the first time it is asked
+/// for.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Memo {
+    /// Every peer with a value for a metric, the worst first.
+    pub ranked: HashMap<(Peers, MetricId), OnceLock<Ranked>>,
+    /// Which modules each module imports.
+    pub graph: OnceLock<ModuleGraph>,
+    /// The groups of modules that depend on each other, in order.
+    pub cycles: OnceLock<Vec<Vec<SymbolId>>>,
+    /// The visible symbols at the top of the hierarchy, in order of id.
+    pub roots: OnceLock<Vec<SymbolId>>,
+    /// How many relations between visible symbols are exact, inferred and ambiguous.
+    pub confidences: OnceLock<[usize; 3]>,
+}
+
+impl Memo {
+    fn new() -> Self {
+        let ranked = Peers::ALL
+            .iter()
+            .flat_map(|peers| {
+                MetricId::ALL
+                    .iter()
+                    .map(|metric| ((*peers, *metric), OnceLock::new()))
+            })
+            .collect();
+        Self {
+            ranked,
+            ..Self::default()
+        }
+    }
 }
 
 /// Metrics that could not be worked out, and why. It reads as `churn, hotspot: no git
@@ -135,6 +178,17 @@ impl ProjectAnalysis {
         files_parsed: usize,
         extras: Extras,
     ) -> Self {
+        let mut symbol_values: HashMap<SymbolId, Vec<(MetricId, f64)>> = HashMap::new();
+        for one in &measurements {
+            // A value measured twice keeps the last, as the measurements do.
+            if let Subject::Symbol(id) = &one.subject {
+                let values = symbol_values.entry(id.clone()).or_default();
+                match values.iter_mut().find(|(metric, _)| *metric == one.metric) {
+                    Some((_, value)) => *value = one.value,
+                    None => values.push((one.metric, one.value)),
+                }
+            }
+        }
         let measurements = measurements
             .into_iter()
             .map(|one| ((one.subject, one.metric), one.value))
@@ -147,6 +201,8 @@ impl ProjectAnalysis {
             tests,
             files_parsed,
             extras,
+            symbol_values,
+            memo: Memo::new(),
         }
     }
 
@@ -343,7 +399,49 @@ impl ProjectAnalysis {
     /// A value of a metric, if it was measured.
     #[must_use]
     pub fn value(&self, subject: &Subject, metric: MetricId) -> Option<f64> {
-        self.measurements.get(&(subject.clone(), metric)).copied()
+        match subject {
+            Subject::Symbol(id) => self.symbol_value(id, metric),
+            Subject::File(_) => self.measurements.get(&(subject.clone(), metric)).copied(),
+        }
+    }
+
+    /// A value of a metric for a symbol, if it was measured.
+    #[must_use]
+    pub fn symbol_value(&self, id: &SymbolId, metric: MetricId) -> Option<f64> {
+        self.symbol_values
+            .get(id)?
+            .iter()
+            .find(|(measured, _)| *measured == metric)
+            .map(|(_, value)| *value)
+    }
+
+    pub(crate) const fn memo(&self) -> &Memo {
+        &self.memo
+    }
+
+    /// How many relations between visible symbols are of each confidence: exact,
+    /// inferred, then ambiguous.
+    #[must_use]
+    pub fn relations_by_confidence(&self) -> [(Confidence, usize); 3] {
+        let [exact, inferred, ambiguous] = *self.memo.confidences.get_or_init(|| {
+            let mut counts = [0; 3];
+            for relation in self.view().relations() {
+                let at = match relation.confidence {
+                    Confidence::Exact => 0,
+                    Confidence::Inferred => 1,
+                    Confidence::Ambiguous => 2,
+                };
+                if let Some(count) = counts.get_mut(at) {
+                    *count += 1;
+                }
+            }
+            counts
+        });
+        [
+            (Confidence::Exact, exact),
+            (Confidence::Inferred, inferred),
+            (Confidence::Ambiguous, ambiguous),
+        ]
     }
 
     /// Every measurement, in order of subject and then metric.

@@ -112,13 +112,23 @@ pub struct MethodGroup {
 }
 
 /// The peers a subject is ranked among.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Peers {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum Peers {
     Function,
     Type,
     Module,
     Package,
     File,
+}
+
+impl Peers {
+    pub(crate) const ALL: [Self; 5] = [
+        Self::Function,
+        Self::Type,
+        Self::Module,
+        Self::Package,
+        Self::File,
+    ];
 }
 
 fn peers_of_kind(kind: SymbolKind) -> Option<Peers> {
@@ -193,12 +203,25 @@ impl ProjectAnalysis {
             .collect()
     }
 
+    /// Each group of modules that all depend on each other, in order, with its members
+    /// in order.
+    #[must_use]
+    pub fn module_cycles(&self) -> &[Vec<SymbolId>] {
+        self.memo()
+            .cycles
+            .get_or_init(|| self.module_graph().cycles())
+    }
+
+    /// Which modules each visible module imports.
+    #[must_use]
+    pub fn module_graph(&self) -> &ModuleGraph {
+        self.memo()
+            .graph
+            .get_or_init(|| ModuleGraph::of(&self.view()))
+    }
+
     fn modules_in_cycles(&self) -> HashSet<SymbolId> {
-        ModuleGraph::of(&self.view())
-            .cycles()
-            .into_iter()
-            .flatten()
-            .collect()
+        self.module_cycles().iter().flatten().cloned().collect()
     }
 
     /// The symbols a filter matches, in order of id unless `sort` says otherwise. Ties
@@ -225,19 +248,20 @@ impl ProjectAnalysis {
             })
             .collect();
         if let Some((metric, order)) = sort {
-            found.sort_by(|a, b| {
-                let value =
-                    |symbol: &Symbol| self.value(&Subject::Symbol(symbol.id.clone()), metric);
-                match (value(a), value(b)) {
-                    (Some(x), Some(y)) => match order {
-                        Order::Ascending => x.total_cmp(&y),
-                        Order::Descending => y.total_cmp(&x),
-                    },
-                    (Some(_), None) => std::cmp::Ordering::Less,
-                    (None, Some(_)) => std::cmp::Ordering::Greater,
-                    (None, None) => std::cmp::Ordering::Equal,
-                }
+            let mut valued: Vec<(&Symbol, Option<f64>)> = found
+                .into_iter()
+                .map(|symbol| (symbol, self.symbol_value(&symbol.id, metric)))
+                .collect();
+            valued.sort_by(|(_, a), (_, b)| match (a, b) {
+                (Some(x), Some(y)) => match order {
+                    Order::Ascending => x.total_cmp(y),
+                    Order::Descending => y.total_cmp(x),
+                },
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
             });
+            found = valued.into_iter().map(|(symbol, _)| symbol).collect();
         }
         if let Some(limit) = limit {
             found.truncate(limit);
@@ -326,15 +350,21 @@ impl ProjectAnalysis {
     }
 
     /// Every peer with a value for a metric, the worst first.
-    fn ranked(&self, peers: Peers, metric: MetricId) -> Vec<(Subject, f64)> {
-        let values = self
-            .measurements()
-            .filter(|(subject, measured, _)| {
-                *measured == metric && self.peers_of(subject) == Some(peers)
-            })
-            .map(|(subject, _, value)| (subject.clone(), value))
-            .collect();
-        sorted_by_value(values)
+    fn ranked(&self, peers: Peers, metric: MetricId) -> &[(Subject, f64)] {
+        let rank = || {
+            let values = self
+                .measurements()
+                .filter(|(subject, measured, _)| {
+                    *measured == metric && self.peers_of(subject) == Some(peers)
+                })
+                .map(|(subject, _, value)| (subject.clone(), value))
+                .collect();
+            sorted_by_value(values)
+        };
+        self.memo()
+            .ranked
+            .get(&(peers, metric))
+            .map_or(&[], |ranked| ranked.get_or_init(rank))
     }
 
     /// Where a subject stands among the peers that have a value for a metric. Ties share
@@ -357,8 +387,8 @@ impl ProjectAnalysis {
     fn peer_values(&self, scope: Scope, metric: MetricId) -> Option<(Vec<f64>, f64, f64)> {
         let values: Vec<f64> = self
             .ranked(peers_of_scope(scope), metric)
-            .into_iter()
-            .map(|(_, value)| value)
+            .iter()
+            .map(|(_, value)| *value)
             .collect();
         let lowest = values.iter().copied().reduce(f64::min)?;
         let highest = values.iter().copied().reduce(f64::max)?;
@@ -484,13 +514,14 @@ impl ProjectAnalysis {
                 .collect()
         });
         self.ranked(peers_of_scope(metric.descriptor().measured_on()), metric)
-            .into_iter()
+            .iter()
             .filter(|(subject, _)| match (subject, &matched) {
                 (_, None) => true,
                 (Subject::Symbol(id), Some(matched)) => matched.contains(id),
                 (Subject::File(_), Some(_)) => false,
             })
             .take(limit)
+            .cloned()
             .collect()
     }
 
@@ -500,9 +531,9 @@ impl ProjectAnalysis {
         let ranked = self.ranked(peers_of_scope(metric.descriptor().measured_on()), metric);
         let (_, value) = ranked.first()?.clone();
         let mut subjects: Vec<Subject> = ranked
-            .into_iter()
+            .iter()
             .take_while(|(_, other)| (other - value).abs() < 0.005)
-            .map(|(subject, _)| subject)
+            .map(|(subject, _)| subject.clone())
             .collect();
         subjects.sort();
         Some(Worst { subjects, value })
@@ -563,16 +594,12 @@ impl ProjectAnalysis {
                 RelationKind::Inherits,
             ],
         };
-        let mut callers: HashMap<&SymbolId, Vec<(&SymbolId, Confidence)>> = HashMap::new();
-        for relation in view
-            .relations()
-            .filter(|relation| kinds.contains(&relation.kind))
-        {
-            callers
-                .entry(&relation.to)
-                .or_default()
-                .push((&relation.from, relation.confidence));
-        }
+        let callers = |target: &SymbolId| -> Vec<(&SymbolId, Confidence)> {
+            view.relations_to(target)
+                .filter(|relation| kinds.contains(&relation.kind))
+                .map(|relation| (&relation.from, relation.confidence))
+                .collect()
+        };
         let mut seen: HashSet<&SymbolId> = HashSet::from([id]);
         let mut frontier: BTreeMap<&SymbolId, Confidence> =
             BTreeMap::from([(id, Confidence::Exact)]);
@@ -580,7 +607,7 @@ impl ProjectAnalysis {
         while !frontier.is_empty() {
             let mut next: BTreeMap<&SymbolId, Confidence> = BTreeMap::new();
             for (target, sure) in &frontier {
-                for (dependent, confidence) in callers.get(target).into_iter().flatten() {
+                for (dependent, confidence) in &callers(target) {
                     if seen.contains(dependent) {
                         continue;
                     }
@@ -723,12 +750,13 @@ impl ProjectAnalysis {
     #[must_use]
     pub fn cycle_path(&self, id: &SymbolId) -> Option<Vec<(SymbolId, SymbolId, Confidence)>> {
         let view = self.view();
-        let graph = ModuleGraph::of(&view);
-        let cycle: BTreeSet<SymbolId> = graph
-            .cycles()
-            .into_iter()
+        let graph = self.module_graph();
+        let cycle: BTreeSet<SymbolId> = self
+            .module_cycles()
+            .iter()
             .find(|cycle| cycle.contains(id))?
-            .into_iter()
+            .iter()
+            .cloned()
             .collect();
         let mut came_from: HashMap<SymbolId, SymbolId> = HashMap::new();
         let mut queue = VecDeque::from([id.clone()]);

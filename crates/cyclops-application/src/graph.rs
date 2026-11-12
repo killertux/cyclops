@@ -11,7 +11,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Which modules each module imports, among the visible ones.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ModuleGraph {
     imports: BTreeMap<SymbolId, BTreeSet<SymbolId>>,
 }

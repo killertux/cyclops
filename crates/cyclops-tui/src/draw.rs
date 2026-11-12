@@ -985,14 +985,14 @@ fn inspector(app: &App, canvas: &mut Canvas<'_>, area: Rect, active: bool) {
 /// The folder that holds the files of a symbol written in no one file, such as a module
 /// that is a folder: `src/billing/`.
 fn folder_of(analysis: &ProjectAnalysis, id: &SymbolId) -> String {
-    let view = analysis.view();
+    let subtree = analysis.view().subtree(id);
     let paths: Vec<&str> = analysis
         .files()
         .iter()
         .filter(|file| {
             file.module
                 .as_ref()
-                .is_some_and(|module| view.is_within(module, id))
+                .is_some_and(|module| subtree.contains(module))
         })
         .map(|file| file.path.as_str())
         .collect();
@@ -1110,11 +1110,12 @@ fn inspector_context(
     body: Rect,
 ) {
     let mut y = body.y;
+    let subtree = analysis.view().subtree(&symbol.id);
     let inside_it: Vec<_> = analysis
         .alerts()
         .iter()
         .filter(|alert| match &alert.subject {
-            Subject::Symbol(id) => analysis.view().is_within(id, &symbol.id),
+            Subject::Symbol(id) => subtree.contains(id),
             Subject::File(_) => false,
         })
         .collect();
@@ -1166,15 +1167,7 @@ fn inspector_context(
         canvas.text(x, y + 1, &format!("size {}", names.len()), Token::Dim, body);
         y += 3;
     }
-    let mut counts = [0_usize; 3];
-    for relation in analysis.view().relations() {
-        let touches = analysis.view().is_within(&relation.from, &symbol.id)
-            || analysis.view().is_within(&relation.to, &symbol.id);
-        if touches && let Some(count) = counts.get_mut(confidence_index(relation.confidence)) {
-            *count += 1;
-        }
-    }
-    let [exact, inferred, ambiguous] = counts;
+    let [exact, inferred, ambiguous] = relations_inside(analysis, symbol);
     canvas.text(body.x + 1, y, "Relations", Token::Faint, body);
     let x = canvas.text(body.x, y + 1, &format!(" {exact} exact"), Token::Fg, body);
     let x = canvas.text(
@@ -1196,6 +1189,20 @@ fn inspector_context(
     let x = canvas.text(x, keys_y, " step through its alerts   ", Token::Dim, body);
     let x = canvas.text(x, keys_y, "gr", Token::Acc, body);
     canvas.text(x, keys_y, " see its impact", Token::Dim, body);
+}
+
+/// How many relations with either end inside a symbol are exact, inferred and
+/// ambiguous.
+fn relations_inside(analysis: &ProjectAnalysis, symbol: &Symbol) -> [usize; 3] {
+    let view = analysis.view();
+    let subtree = view.subtree(&symbol.id);
+    let mut counts = [0_usize; 3];
+    for relation in view.relations_touching(&subtree) {
+        if let Some(count) = counts.get_mut(confidence_index(relation.confidence)) {
+            *count += 1;
+        }
+    }
+    counts
 }
 
 const fn confidence_index(confidence: Confidence) -> usize {
@@ -1658,17 +1665,18 @@ fn analysis_pane(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
         pair(canvas, 1, "Precise ", precise, Token::Fg);
     }
     if let Some(analysis) = app.analysis() {
-        let relations: Vec<_> = analysis.view().relations().collect();
-        let exact = relations
+        let counts = analysis.relations_by_confidence();
+        let total: usize = counts.iter().map(|(_, count)| count).sum();
+        let exact = counts
             .iter()
-            .filter(|relation| relation.confidence == Confidence::Exact)
-            .count();
-        let share = if relations.is_empty() {
+            .find(|(confidence, _)| *confidence == Confidence::Exact)
+            .map_or(0, |(_, count)| *count);
+        let share = if total == 0 {
             "n/a".to_owned()
         } else {
             let share = steps(
                 f64::from(u32::try_from(exact).unwrap_or(u32::MAX))
-                    / f64::from(u32::try_from(relations.len()).unwrap_or(u32::MAX)),
+                    / f64::from(u32::try_from(total).unwrap_or(u32::MAX)),
                 100,
             );
             format!("{share}%")
@@ -3588,21 +3596,10 @@ fn status_precise(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
         y += 2;
     }
     canvas.text(inside.x + 1, y, "Relations now", Token::Faint, inside);
-    let relations: Vec<_> = analysis.view().relations().collect();
-    let total = relations.len().max(1);
-    for (offset, confidence) in [
-        Confidence::Exact,
-        Confidence::Inferred,
-        Confidence::Ambiguous,
-    ]
-    .into_iter()
-    .enumerate()
-    {
+    let counts = analysis.relations_by_confidence();
+    let total = counts.iter().map(|(_, count)| count).sum::<usize>().max(1);
+    for (offset, (confidence, count)) in counts.into_iter().enumerate() {
         let row = y + 1 + u16::try_from(offset).unwrap_or(0);
-        let count = relations
-            .iter()
-            .filter(|relation| relation.confidence == confidence)
-            .count();
         let share = f64::from(u32::try_from(count).unwrap_or(u32::MAX))
             / f64::from(u32::try_from(total).unwrap_or(u32::MAX));
         canvas.text(inside.x + 1, row, confidence.name(), Token::Fg, inside);

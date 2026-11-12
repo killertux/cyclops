@@ -25,6 +25,7 @@ use cyclops_domain::settings::Severity;
 use cyclops_domain::symbol::{Symbol, SymbolId, SymbolKind};
 use ratatui::layout::Rect;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::rc::Rc;
 
 /// The smallest terminal the interface works in.
 pub const MIN_COLUMNS: u16 = 80;
@@ -274,9 +275,14 @@ pub struct App {
     cycle_at: Option<usize>,
     hits: Vec<(Rect, Target)>,
     effects: Vec<Effect>,
+    /// What the views worked out, kept from one frame to the next.
+    memos: Memos,
 }
 
 mod map;
+mod memo;
+
+use memo::{DiagramKey, Memos};
 
 pub use map::{MapFrame, MapGroup, MapScene, MapTile, Toward};
 
@@ -361,6 +367,7 @@ impl App {
                 tests: None,
                 precise: false,
             }],
+            memos: Memos::default(),
         }
     }
 
@@ -601,7 +608,7 @@ impl App {
 
     /// The diagram, laid out on the screen.
     #[must_use]
-    pub fn scene(&self) -> Option<(Drawing, Scene)> {
+    pub fn scene(&self) -> Option<(Rc<Drawing>, Scene)> {
         let drawing = self.drawing()?;
         let setting = Setting {
             level: drawing.level,
@@ -639,24 +646,33 @@ impl App {
     /// How many nodes the diagram would show without the filter.
     #[must_use]
     pub fn unfiltered_nodes(&self) -> usize {
-        let (Some(analysis), Some(drawing)) = (&self.analysis, self.drawing()) else {
-            return 0;
-        };
-        let request = DiagramRequest {
-            level: drawing.level,
-            focus: self.focus.clone(),
-            depth: drawing.depth,
-            relations: self.diagram.relations.clone(),
-            overlay: None,
-            filter: None,
-        };
-        analysis.diagram(&request).nodes.len()
+        let key = self.diagram_key(None, None);
+        self.memos.unfiltered_nodes.get(key, || {
+            let (Some(analysis), Some(drawing)) = (&self.analysis, self.drawing()) else {
+                return 0;
+            };
+            let request = DiagramRequest {
+                level: drawing.level,
+                focus: self.focus.clone(),
+                depth: drawing.depth,
+                relations: self.diagram.relations.clone(),
+                overlay: None,
+                filter: None,
+            };
+            analysis.diagram(&request).nodes.len()
+        })
     }
 
     /// `!` or `!!` for an alert on a node or a member itself, and `@` for a module in a
     /// cycle, or a class box whose module is. Members never show `@`.
     #[must_use]
-    pub fn diagram_marks(&self) -> HashMap<SymbolId, String> {
+    pub fn diagram_marks(&self) -> Rc<HashMap<SymbolId, String>> {
+        self.memos
+            .diagram_marks
+            .get(self.analyses, || Rc::new(self.work_out_diagram_marks()))
+    }
+
+    fn work_out_diagram_marks(&self) -> HashMap<SymbolId, String> {
         let Some(analysis) = &self.analysis else {
             return HashMap::new();
         };
@@ -865,21 +881,32 @@ impl App {
             .copied()
     }
 
-    fn kept(&self) -> Option<HashSet<SymbolId>> {
-        let analysis = self.analysis.as_ref()?;
-        let filter = self.lens.filter.as_ref()?;
-        let view = analysis.view();
-        let mut kept = HashSet::new();
-        for found in analysis.search(&filter.filter, None, None) {
-            let mut current = Some(found);
-            while let Some(symbol) = current {
-                if !kept.insert(symbol.id.clone()) {
-                    break;
+    /// The filter of the lens, if there is one.
+    fn filter(&self) -> Option<Filter> {
+        self.lens
+            .filter
+            .as_ref()
+            .map(|filter| filter.filter.clone())
+    }
+
+    fn kept(&self) -> Option<Rc<HashSet<SymbolId>>> {
+        let key = (self.analyses, self.filter());
+        self.memos.kept.get(key, || {
+            let analysis = self.analysis.as_ref()?;
+            let filter = self.lens.filter.as_ref()?;
+            let view = analysis.view();
+            let mut kept = HashSet::new();
+            for found in analysis.search(&filter.filter, None, None) {
+                let mut current = Some(found);
+                while let Some(symbol) = current {
+                    if !kept.insert(symbol.id.clone()) {
+                        break;
+                    }
+                    current = parent_of(symbol).and_then(|parent| view.symbol(parent));
                 }
-                current = parent_of(symbol).and_then(|parent| view.symbol(parent));
             }
-        }
-        Some(kept)
+            Some(Rc::new(kept))
+        })
     }
 
     /// The rows of the Explore tree, in order.
@@ -888,6 +915,31 @@ impl App {
         let Some(analysis) = &self.analysis else {
             return Vec::new();
         };
+        let key = (
+            self.analyses,
+            self.lens.metric,
+            self.filter(),
+            self.expanded.clone(),
+        );
+        let rows = self.memos.tree.get(key, || self.tree_rows().into());
+        let model = analysis.model();
+        rows.iter()
+            .filter_map(|(place, depth, open)| {
+                Some(TreeRow {
+                    symbol: model.at(*place)?,
+                    depth: *depth,
+                    open: *open,
+                })
+            })
+            .collect()
+    }
+
+    /// The rows of the tree, worked out afresh.
+    fn tree_rows(&self) -> Vec<(usize, usize, Option<bool>)> {
+        let Some(analysis) = &self.analysis else {
+            return Vec::new();
+        };
+        let model = analysis.model();
         let kept = self.kept();
         let shown = |symbol: &&Symbol| kept.as_ref().is_none_or(|kept| kept.contains(&symbol.id));
         let metric = self.lens.metric;
@@ -910,11 +962,9 @@ impl App {
             let open = (!children.is_empty()).then(|| {
                 self.expanded.contains(&symbol.id) || (kept.is_some() && !children.is_empty())
             });
-            rows.push(TreeRow {
-                symbol,
-                depth,
-                open,
-            });
+            if let Some(place) = model.place(&symbol.id) {
+                rows.push((place, depth, open));
+            }
             if open == Some(true) {
                 pending.extend(children.into_iter().rev().map(|child| (child, depth + 1)));
             }
@@ -942,31 +992,35 @@ impl App {
             (Some(live), true) => Some(live),
             _ => self.lens.filter.as_ref().map(|filter| &filter.filter),
         };
-        if let Some(filter) = filter {
-            return analysis.search(filter, Some((metric, order)), None);
-        }
-        let mut all: Vec<&Symbol> = analysis
-            .view()
-            .symbols()
-            .filter(|symbol| {
-                analysis
-                    .value(&Subject::Symbol(symbol.id.clone()), metric)
-                    .is_some()
-            })
-            .collect();
-        all.sort_by(|a, b| {
-            let value = |symbol: &Symbol| {
-                analysis
-                    .value(&Subject::Symbol(symbol.id.clone()), metric)
-                    .unwrap_or_default()
-            };
-            if lowest_first {
-                value(a).total_cmp(&value(b))
+        let model = analysis.model();
+        let key = (self.analyses, metric, lowest_first, filter.cloned());
+        let places = self.memos.found.get(key, || {
+            let found = if let Some(filter) = filter {
+                analysis.search(filter, Some((metric, order)), None)
             } else {
-                value(b).total_cmp(&value(a))
-            }
+                let mut all: Vec<(&Symbol, f64)> = analysis
+                    .view()
+                    .symbols()
+                    .filter_map(|symbol| {
+                        let value = analysis.symbol_value(&symbol.id, metric)?;
+                        Some((symbol, value))
+                    })
+                    .collect();
+                all.sort_by(|(_, a), (_, b)| {
+                    if lowest_first {
+                        a.total_cmp(b)
+                    } else {
+                        b.total_cmp(a)
+                    }
+                });
+                all.into_iter().map(|(symbol, _)| symbol).collect()
+            };
+            found
+                .iter()
+                .filter_map(|symbol| model.place(&symbol.id))
+                .collect()
         });
-        all
+        places.iter().filter_map(|place| model.at(*place)).collect()
     }
 
     /// What `Tab` offers for the filter being written, each with what it means.
@@ -980,7 +1034,13 @@ impl App {
 
     /// `!`, `!!` or `@` for each symbol that has an alert or a cycle, or holds one.
     #[must_use]
-    pub fn tree_marks(&self) -> HashMap<SymbolId, String> {
+    pub fn tree_marks(&self) -> Rc<HashMap<SymbolId, String>> {
+        self.memos
+            .tree_marks
+            .get(self.analyses, || Rc::new(self.work_out_tree_marks()))
+    }
+
+    fn work_out_tree_marks(&self) -> HashMap<SymbolId, String> {
         let Some(analysis) = &self.analysis else {
             return HashMap::new();
         };
@@ -1032,8 +1092,8 @@ impl App {
         };
         let view = analysis.view();
         let mut uses: Vec<(SymbolId, RelationKind, Confidence, bool)> = view
-            .relations()
-            .filter(|relation| &relation.from == id && &relation.to != id)
+            .relations_from(id)
+            .filter(|relation| &relation.to != id)
             .map(|relation| {
                 (
                     relation.to.clone(),
@@ -1045,8 +1105,8 @@ impl App {
             .collect();
         uses.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
         let mut used_by: Vec<(SymbolId, RelationKind, Confidence, bool)> = view
-            .relations()
-            .filter(|relation| &relation.to == id && &relation.from != id)
+            .relations_to(id)
+            .filter(|relation| &relation.from != id)
             .map(|relation| {
                 (
                     relation.from.clone(),
@@ -1121,12 +1181,16 @@ impl App {
         let Some(analysis) = &self.analysis else {
             return Vec::new();
         };
-        let filter = self.lens.filter.as_ref().map(|filter| &filter.filter);
-        analysis
-            .ranking(self.lens.metric, filter, 8)
-            .into_iter()
-            .map(|(subject, _)| subject)
-            .collect()
+        let key = (self.analyses, self.lens.metric, self.filter());
+        let ranking = self.memos.ranking.get(key, || {
+            let filter = self.lens.filter.as_ref().map(|filter| &filter.filter);
+            analysis
+                .ranking(self.lens.metric, filter, 8)
+                .into_iter()
+                .map(|(subject, _)| subject)
+                .collect()
+        });
+        ranking.to_vec()
     }
 
     /// The level the diagram shows for the focus.
@@ -1153,30 +1217,42 @@ impl App {
     /// The diagram around the focus, laid out in columns: what depends on the focus on
     /// the left, and what it depends on on the right.
     #[must_use]
-    pub fn drawing(&self) -> Option<Drawing> {
-        let analysis = self.analysis.as_ref()?;
-        let level = self.diagram_level();
-        let depth = self.diagram.depth.unwrap_or(1);
-        let request = DiagramRequest {
-            level,
-            focus: self.focus.clone(),
-            depth,
-            relations: self.diagram.relations.clone(),
-            overlay: Some(self.lens.metric),
-            filter: self
-                .lens
-                .filter
-                .as_ref()
-                .map(|filter| filter.filter.clone()),
-        };
-        let view = analysis.diagram(&request);
-        let placed = layout(&view, self.focus.as_ref());
-        Some(Drawing {
-            view,
-            level,
-            depth,
-            placed,
+    pub fn drawing(&self) -> Option<Rc<Drawing>> {
+        let key = self.diagram_key(Some(self.lens.metric), self.filter());
+        self.memos.drawing.get(key, || {
+            let analysis = self.analysis.as_ref()?;
+            let level = self.diagram_level();
+            let depth = self.diagram.depth.unwrap_or(1);
+            let request = DiagramRequest {
+                level,
+                focus: self.focus.clone(),
+                depth,
+                relations: self.diagram.relations.clone(),
+                overlay: Some(self.lens.metric),
+                filter: self.filter(),
+            };
+            let view = analysis.diagram(&request);
+            let placed = layout(&view, self.focus.as_ref());
+            Some(Rc::new(Drawing {
+                view,
+                level,
+                depth,
+                placed,
+            }))
         })
+    }
+
+    /// What a diagram with this overlay and filter is worked out from.
+    fn diagram_key(&self, overlay: Option<MetricId>, filter: Option<Filter>) -> DiagramKey {
+        DiagramKey {
+            analysis: self.analyses,
+            level: self.diagram_level(),
+            focus: self.focus.clone(),
+            depth: self.diagram.depth.unwrap_or(1),
+            relations: self.diagram.relations.clone(),
+            overlay,
+            filter,
+        }
     }
 
     /// The row, tile or node under the cursor.
@@ -2698,7 +2774,7 @@ impl App {
         self.effects.push(Effect::Export {
             format: format.to_owned(),
             path: path.to_owned(),
-            view: drawing.view,
+            view: drawing.view.clone(),
             level: drawing.level,
             overlay: Some(self.lens.metric),
         });

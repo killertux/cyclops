@@ -10,6 +10,7 @@ use cyclops_domain::metric::{MetricId, Subject};
 use cyclops_domain::symbol::{Symbol, SymbolId, SymbolKind};
 use ratatui::layout::Rect;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// The map, laid out on the screen.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -226,7 +227,24 @@ impl App {
 
     /// The map laid out in `area`: frames for packages, groups for modules, and tiles.
     #[must_use]
-    pub fn map_scene(&self, area: Rect) -> MapScene {
+    pub fn map_scene(&self, area: Rect) -> Rc<MapScene> {
+        let filter = self
+            .lens
+            .filter
+            .as_ref()
+            .map(|filter| filter.filter.clone());
+        let key = (
+            self.analyses,
+            self.focus.clone(),
+            self.lens.metric,
+            filter,
+            area,
+        );
+        self.memos.map.get(key, || Rc::new(self.lay_out_map(area)))
+    }
+
+    /// The map laid out in `area`, worked out afresh.
+    fn lay_out_map(&self, area: Rect) -> MapScene {
         let facts = self.facts();
         let framed = facts.first().is_some_and(|facts| facts.frame.is_some());
         if !framed {
