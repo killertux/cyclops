@@ -79,10 +79,14 @@ impl fmt::Display for SettingsError {
                 let (last, rest) = choices.split_last().unwrap_or((&"", &[]));
                 write!(f, "{key} must be {} or {last}.", rest.join(", "))
             }
-            Self::UnknownLanguage(name) => write!(
-                f,
-                "Unknown language: {name}. Supported: javascript, rust, typescript."
-            ),
+            Self::UnknownLanguage(name) => {
+                let supported: Vec<&str> = LanguageId::ALL.iter().map(|id| id.name()).collect();
+                write!(
+                    f,
+                    "Unknown language: {name}. Supported: {}.",
+                    supported.join(", ")
+                )
+            }
             Self::NotPeriod(key) => write!(
                 f,
                 "{key} must be a number of days, weeks, months or years, such as 12 months."
@@ -273,11 +277,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            languages: vec![
-                LanguageId::JavaScript,
-                LanguageId::Rust,
-                LanguageId::TypeScript,
-            ],
+            languages: LanguageId::ALL.to_vec(),
             exclude: Vec::new(),
             tests: TestCode::Excluded,
             test_paths: Vec::new(),
@@ -295,13 +295,9 @@ impl Default for Settings {
 }
 
 fn language(name: &str) -> Option<LanguageId> {
-    [
-        LanguageId::JavaScript,
-        LanguageId::Rust,
-        LanguageId::TypeScript,
-    ]
-    .into_iter()
-    .find(|language| language.name() == name)
+    LanguageId::ALL
+        .into_iter()
+        .find(|language| language.name() == name)
 }
 
 fn choice<T: Copy>(

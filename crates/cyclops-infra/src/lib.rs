@@ -9,6 +9,7 @@ mod folder;
 mod git;
 mod log;
 mod rules;
+mod tool_folders;
 mod watch;
 mod workspace;
 

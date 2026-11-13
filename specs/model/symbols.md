@@ -106,7 +106,7 @@ Gleam has no classes and no methods. A custom type with one constructor is a `st
 and its labelled fields are its fields. A custom type with several constructors is an
 `enum`. Every function belongs to its module.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation          | language | code                                          | symbol | kind?    | parent? |
 | -------------------- | -------- | --------------------------------------------- | ------ | -------- | ------- |

@@ -3578,6 +3578,7 @@ fn status_precise(app: &App, canvas: &mut Canvas<'_>, area: Rect) {
                 cyclops_domain::language::LanguageId::Rust => "Rust",
                 cyclops_domain::language::LanguageId::TypeScript => "TypeScript",
                 cyclops_domain::language::LanguageId::JavaScript => "JavaScript",
+                cyclops_domain::language::LanguageId::Gleam => "Gleam",
             })
             .collect();
         canvas.text(inside.x + 1, y, &languages.join(", "), Token::Fg, inside);

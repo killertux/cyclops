@@ -1,0 +1,16 @@
+[package]
+name = "cyclops-lang-gleam"
+description = "The Cyclops language adapter for Gleam"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+cyclops-application.workspace = true
+cyclops-domain.workspace = true
+toml.workspace = true
+tree-sitter.workspace = true
+tree-sitter-gleam.workspace = true
+
+[lints]
+workspace = true

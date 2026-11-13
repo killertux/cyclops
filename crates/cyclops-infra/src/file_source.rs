@@ -3,14 +3,12 @@
 use cyclops_application::ports::{Discovered, FileSource, FileStamp, SourceError};
 use cyclops_domain::path::RelativePath;
 use ignore::WalkBuilder;
-use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use thiserror::Error;
 
-/// Folders that hold what other tools installed or built, whatever `.gitignore` says.
-const NEVER_ANALYZED: [&str; 2] = ["node_modules", "target"];
+use crate::tool_folders::is_tool_folder;
 
 /// The folder given for a project does not exist.
 #[derive(Debug, Error)]
@@ -45,10 +43,6 @@ impl ProjectFiles {
     }
 }
 
-fn is_never_analyzed(name: &OsStr) -> bool {
-    NEVER_ANALYZED.iter().any(|folder| name == *folder)
-}
-
 /// What a walk could not get into.
 fn failed_path(error: &ignore::Error) -> Option<&Path> {
     match error {
@@ -77,7 +71,7 @@ impl FileSource for ProjectFiles {
             .require_git(false)
             .filter_entry(|entry| {
                 let is_folder = entry.file_type().is_some_and(|kind| kind.is_dir());
-                !(is_folder && is_never_analyzed(entry.file_name()))
+                !(is_folder && is_tool_folder(entry.path()))
             })
             .build();
         let mut discovered = Discovered::default();

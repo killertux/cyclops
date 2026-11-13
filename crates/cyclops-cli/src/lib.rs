@@ -30,6 +30,7 @@ use cyclops_infra::{
     Export, ExportFormat, FileLog, GitHistory, ProjectFiles, ProjectFolder, ProjectWatcher,
     SqliteFactStore, UserConfig, read_layer, save_alert, set_alert_enabled,
 };
+use cyclops_lang_gleam::GleamAdapter;
 use cyclops_lang_rust::RustAdapter;
 use cyclops_lang_typescript::TypeScriptAdapter;
 use cyclops_semantic::{Tools, providers};
@@ -47,7 +48,11 @@ const PROJECT_FILE: &str = ".cyclops/config.toml";
 /// Every language Cyclops has.
 #[must_use]
 pub fn adapters() -> Vec<Box<dyn LanguageAdapter>> {
-    vec![Box::new(RustAdapter), Box::new(TypeScriptAdapter)]
+    vec![
+        Box::new(RustAdapter),
+        Box::new(TypeScriptAdapter),
+        Box::new(GleamAdapter),
+    ]
 }
 
 /// Builds the analysis with these languages and every metric Cyclops has.

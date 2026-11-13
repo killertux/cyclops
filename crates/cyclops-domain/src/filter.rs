@@ -225,14 +225,10 @@ pub fn completions(written: &str) -> Vec<(String, String)> {
                 ("test".to_owned(), "code that tests it".to_owned()),
             ]),
             "language" => Some(
-                [
-                    LanguageId::Rust,
-                    LanguageId::TypeScript,
-                    LanguageId::JavaScript,
-                ]
-                .iter()
-                .map(|language| (language.name().to_owned(), "a language".to_owned()))
-                .collect(),
+                LanguageId::ALL
+                    .iter()
+                    .map(|language| (language.name().to_owned(), "a language".to_owned()))
+                    .collect(),
             ),
             "in_cycle" => Some(vec![
                 ("true".to_owned(), "in a cycle".to_owned()),
@@ -375,14 +371,10 @@ impl Parser {
                 Ok(Condition::Role(equality()?, role))
             }
             "language" => {
-                let language = [
-                    LanguageId::Rust,
-                    LanguageId::TypeScript,
-                    LanguageId::JavaScript,
-                ]
-                .into_iter()
-                .find(|language| language.name() == unquoted)
-                .ok_or_else(|| FilterError(format!("Unknown language: {unquoted}")))?;
+                let language = LanguageId::ALL
+                    .into_iter()
+                    .find(|language| language.name() == unquoted)
+                    .ok_or_else(|| FilterError(format!("Unknown language: {unquoted}")))?;
                 Ok(Condition::Language(equality()?, language))
             }
             "path" => match operator.as_str() {

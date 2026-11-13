@@ -9,9 +9,13 @@ pub enum LanguageId {
     Rust,
     TypeScript,
     JavaScript,
+    Gleam,
 }
 
 impl LanguageId {
+    /// Every language, in the order of their names.
+    pub const ALL: [Self; 4] = [Self::Gleam, Self::JavaScript, Self::Rust, Self::TypeScript];
+
     /// The name used in settings and on screen.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -19,6 +23,7 @@ impl LanguageId {
             Self::Rust => "rust",
             Self::TypeScript => "typescript",
             Self::JavaScript => "javascript",
+            Self::Gleam => "gleam",
         }
     }
 }
@@ -30,6 +35,7 @@ impl LanguageId {
         match self {
             Self::Rust => 0,
             Self::TypeScript | Self::JavaScript => 1,
+            Self::Gleam => 2,
         }
     }
 }

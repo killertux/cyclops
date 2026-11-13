@@ -14,7 +14,7 @@ stays local.
 | A Rust project     | rust-shop | `cyclops init` | 0          | .cyclops/.gitignore, .cyclops/config.toml | rust                         |
 | TypeScript project | ts-shop   | `cyclops init` | 0          | .cyclops/.gitignore, .cyclops/config.toml | typescript                   |
 | JavaScript project | js-shop   | `cyclops init` | 0          | .cyclops/.gitignore, .cyclops/config.toml | javascript                   |
-| Several languages  | mixed     | `cyclops init` | 0          | .cyclops/.gitignore, .cyclops/config.toml | javascript, rust, typescript |
+| Several languages  | mixed     | `cyclops init` | 0          | .cyclops/.gitignore, .cyclops/config.toml | gleam, javascript, rust, typescript |
 | No source code     | docs-only | `cyclops init` | 0          | .cyclops/.gitignore, .cyclops/config.toml | none                         |
 
 ## Initializing twice

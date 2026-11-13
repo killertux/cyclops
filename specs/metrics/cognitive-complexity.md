@@ -96,7 +96,7 @@ A whole `case` counts once, as a `match` does. Gleam loops by recursion, and eac
 recursive call adds 1. `use` adds no nesting, since the code after it reads as straight
 code.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation          | language | code                                                                         | cognitive? |
 | -------------------- | -------- | ---------------------------------------------------------------------------- | ---------- |

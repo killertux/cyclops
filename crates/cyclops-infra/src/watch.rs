@@ -5,8 +5,7 @@ use ignore::gitignore::Gitignore;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Component, Path, PathBuf};
 
-/// Folders that never hold the project's own code, as the analysis sees it.
-const NEVER_ANALYZED: [&str; 2] = ["node_modules", "target"];
+use crate::tool_folders::is_tool_folder;
 
 /// Watches a project for as long as it is kept.
 pub struct ProjectWatcher {
@@ -19,12 +18,15 @@ fn counts(root: &Path, ignored: &Gitignore, path: &Path) -> bool {
     let Ok(inside) = path.strip_prefix(root) else {
         return false;
     };
-    let skipped = inside.components().any(|component| match component {
-        Component::Normal(name) => {
-            let name = name.to_string_lossy();
-            name.starts_with('.') || NEVER_ANALYZED.contains(&name.as_ref())
+    let mut folder = root.to_path_buf();
+    let skipped = inside.components().any(|component| {
+        folder.push(component);
+        match component {
+            Component::Normal(name) => {
+                name.to_string_lossy().starts_with('.') || is_tool_folder(&folder)
+            }
+            _ => false,
         }
-        _ => false,
     });
     !skipped
         && !ignored

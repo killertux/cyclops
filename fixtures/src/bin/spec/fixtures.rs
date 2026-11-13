@@ -43,6 +43,12 @@ const JAVASCRIPT_SNIPPET: SnippetFile = SnippetFile {
     module: "src/snippet",
 };
 
+const GLEAM_SNIPPET: SnippetFile = SnippetFile {
+    manifest: None,
+    path: "src/snippet.gleam",
+    module: "src/snippet",
+};
+
 /// What a row reads from. A failure shows up in every column of its row.
 type Outcome = Result<ProjectAnalysis, String>;
 
@@ -68,6 +74,7 @@ impl Snippet {
         match self.language.as_str() {
             "typescript" => &TYPESCRIPT_SNIPPET,
             "javascript" => &JAVASCRIPT_SNIPPET,
+            "gleam" => &GLEAM_SNIPPET,
             _ => &RUST_SNIPPET,
         }
     }

@@ -106,7 +106,7 @@ Gleam branches with `case` alone, so a `case` counts as a Rust `match` does. `us
 `let assert` add nothing: `use` only passes the rest of the function along, and a
 failed `let assert` stops the program.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation             | language | code                                               | cyclomatic? |
 | ----------------------- | -------- | -------------------------------------------------- | ----------- |
