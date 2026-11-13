@@ -70,7 +70,7 @@ as straight code.
 A conditional expression counts as a ternary does. Each `for` and `if` of a
 comprehension adds 1, with no nesting, since a comprehension reads on one line.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation          | language | code                                                                                          | cognitive? |
 | -------------------- | -------- | --------------------------------------------------------------------------------------------- | ---------- |

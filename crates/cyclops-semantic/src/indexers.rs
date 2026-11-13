@@ -23,6 +23,12 @@ use std::time::Instant;
 /// The TypeScript indexer, pinned, so that every machine runs the same one.
 const SCIP_TYPESCRIPT: &str = "@sourcegraph/scip-typescript@0.6.1";
 
+/// The Python indexer, pinned for the same reason.
+const SCIP_PYTHON: &str = "@sourcegraph/scip-python@0.6.8";
+
+/// The files that make a folder a Python project.
+const PYTHON_MANIFESTS: [&str; 3] = ["pyproject.toml", "setup.py", "setup.cfg"];
+
 /// The line of what an indexer printed that says why it failed: the first that names an
 /// error, such as `Error: no projects`, rather than the end of a stack trace. Without one,
 /// the last line, and without any, how it exited.
@@ -535,9 +541,126 @@ impl SemanticProvider for TypeScriptIndexer {
     }
 }
 
+/// `scip-python`, run through `npx`, which needs Node, and Python to read the project's
+/// environment. It runs for each folder with a `pyproject.toml`, `setup.py` or
+/// `setup.cfg`, or once for the whole project when there is none.
+pub struct PythonIndexer {
+    runner: Runner,
+}
+
+impl PythonIndexer {
+    #[must_use]
+    pub fn new(root: &Path, output: &Path, tools: Tools, log: Arc<dyn Log>) -> Self {
+        Self {
+            runner: Runner {
+                root: root.to_path_buf(),
+                output: output.to_path_buf(),
+                tools,
+                log,
+            },
+        }
+    }
+}
+
+/// The folders of Python projects, outermost first, each once.
+fn python_projects(files: &[RelativePath]) -> Vec<RelativePath> {
+    let mut folders: Vec<RelativePath> = PYTHON_MANIFESTS
+        .iter()
+        .flat_map(|manifest| folders_with(files, manifest))
+        .collect();
+    folders.sort_by(|a, b| {
+        depth(a)
+            .cmp(&depth(b))
+            .then_with(|| a.as_str().cmp(b.as_str()))
+    });
+    folders.dedup();
+    folders
+}
+
+/// The name an index gives a project: its folder's.
+fn project_name(project: &Path, folder: &RelativePath) -> OsString {
+    project
+        .join(folder.as_str())
+        .file_name()
+        .map_or_else(|| OsString::from("project"), ToOwned::to_owned)
+}
+
+impl SemanticProvider for PythonIndexer {
+    fn label(&self) -> &'static str {
+        "Python"
+    }
+
+    fn indexer(&self) -> &'static str {
+        "scip-python"
+    }
+
+    fn languages(&self) -> &[LanguageId] {
+        &[LanguageId::Python]
+    }
+
+    fn availability(&self) -> Result<(), IndexError> {
+        require(&self.runner.tools, "node", "Node")?;
+        require(&self.runner.tools, "npx", "npx")?;
+        require(&self.runner.tools, "python3", "Python")
+            .or_else(|_| require(&self.runner.tools, "python", "Python"))?;
+        Ok(())
+    }
+
+    fn index(&self, files: &[RelativePath]) -> Result<Indexed, IndexError> {
+        self.availability()?;
+        let program = require(&self.runner.tools, "npx", "npx")?;
+        let project = self.runner.project();
+        let mut projects = python_projects(files);
+        if projects.is_empty() {
+            projects.push(RelativePath::new(""));
+        }
+        let mut indexed = Indexed::default();
+        for (number, folder) in projects.iter().enumerate() {
+            let output = self.runner.index_path(&format!("python-{number}.scip"))?;
+            let name = project_name(&project, folder);
+            let arguments = [
+                OsStr::new("--yes"),
+                OsStr::new(SCIP_PYTHON),
+                OsStr::new("index"),
+                OsStr::new("--project-name"),
+                name.as_os_str(),
+                OsStr::new("--output"),
+                output.as_os_str(),
+            ];
+            let node = node_options(env::var_os("NODE_OPTIONS").as_deref());
+            let ran_in = self.runner.root.join(folder.as_str());
+            let documents = self
+                .runner
+                .run(&program, &arguments, folder, &[("NODE_OPTIONS", node)])
+                .and_then(|_| self.runner.read(&output, &project, &ran_in));
+            match documents {
+                Ok(documents) => merge(&mut indexed.index, documents),
+                Err(reason) => indexed.failures.push((folder.clone(), reason)),
+            }
+        }
+        Ok(indexed)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn python_projects_are_the_folders_of_their_manifests() {
+        let files = paths(&[
+            "pyproject.toml",
+            "src/shop/a.py",
+            "tools/setup.py",
+            "tools/setup.cfg",
+            "lib/setup.cfg",
+        ]);
+        assert_eq!(texts(&python_projects(&files)), ["", "lib", "tools"]);
+        assert_eq!(
+            texts(&python_projects(&paths(&["a.py"]))),
+            Vec::<&str>::new()
+        );
+    }
 
     fn paths(texts: &[&str]) -> Vec<RelativePath> {
         texts.iter().map(|text| RelativePath::new(text)).collect()

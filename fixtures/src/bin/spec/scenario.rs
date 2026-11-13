@@ -471,8 +471,15 @@ impl Scenario {
             self.background = Some(value.to_owned());
             return Some(Ok(()));
         }
-        step.strip_prefix("remove tool ")
-            .map(|name| self.remove_tool(name))
+        step.strip_prefix("remove tool ").map(|name| {
+            // Python goes by `python3` as often as by `python`.
+            let names: &[&str] = if name == "python" {
+                &["python", "python3"]
+            } else {
+                &[name]
+            };
+            names.iter().try_for_each(|name| self.remove_tool(name))
+        })
     }
 
     /// Makes a program unavailable, by putting in place of each folder of the search path

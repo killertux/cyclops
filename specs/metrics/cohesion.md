@@ -54,7 +54,7 @@ Each table measures the type `S`.
 
 `__init__` is the constructor. Static and class methods do not use an instance.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation      | language | code                                                                                                                                         | lcom? |
 | ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
@@ -93,7 +93,7 @@ A type is measured as a whole, wherever its methods are.
 | Only trait methods | rust-shop       | shop::catalog::Item | n/a   |
 | A cohesive class   | ts-shop         | src/orders::Order   | 1     |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation          | workspace | subject                | lcom? |
 | -------------------- | --------- | ---------------------- | ----- |

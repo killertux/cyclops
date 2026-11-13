@@ -2,8 +2,8 @@
 
 use std::path::Path;
 
-/// Skipped wherever they are.
-const ALWAYS: [&str; 2] = ["node_modules", "target"];
+/// Skipped wherever they are: what npm, Cargo and Python install or build.
+const ALWAYS: [&str; 4] = ["node_modules", "target", "__pycache__", "venv"];
 
 /// Skipped only beside the manifest of the tool that fills them, since the names alone are
 /// common: Gleam builds into `build`, and Mix into `_build`, with dependencies in `deps`.
@@ -36,6 +36,8 @@ mod tests {
     fn some_folders_are_always_a_tool_s() {
         assert!(is_tool_folder(Path::new("web/node_modules")));
         assert!(is_tool_folder(Path::new("target")));
+        assert!(is_tool_folder(Path::new("src/__pycache__")));
+        assert!(is_tool_folder(Path::new("venv")));
         assert!(!is_tool_folder(Path::new("src")));
     }
 

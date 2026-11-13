@@ -201,7 +201,7 @@ fn init_writes_the_languages_once() {
     assert_eq!(first.status.code(), Some(0));
     assert!(
         config.contains(
-            "languages = [\"elixir\", \"gleam\", \"javascript\", \"rust\", \"typescript\"]"
+            "languages = [\"elixir\", \"gleam\", \"javascript\", \"python\", \"rust\", \"typescript\"]"
         ),
         "{config}"
     );

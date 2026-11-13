@@ -116,7 +116,8 @@ output in the **SCIP** format:
 
 `scip-typescript` is not installed with Node, so Cyclops runs it with
 `npx --yes @sourcegraph/scip-typescript@0.6.1`. The first precise analysis on a machine
-downloads it, and later ones use npm's cache.
+downloads it, and later ones use npm's cache. `scip-python` is run the same way, with
+`npx --yes @sourcegraph/scip-python@0.6.8`.
 
 SCIP records where each symbol is defined and referenced. Relations backed by it become
 `Confidence::Exact`. `scip-typescript` also records "implements" as a relationship, but

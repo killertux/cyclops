@@ -19,6 +19,7 @@ cyclops-infra.workspace = true
 cyclops-lang-rust.workspace = true
 cyclops-lang-elixir.workspace = true
 cyclops-lang-gleam.workspace = true
+cyclops-lang-python.workspace = true
 cyclops-lang-typescript.workspace = true
 cyclops-semantic.workspace = true
 cyclops-tui.workspace = true

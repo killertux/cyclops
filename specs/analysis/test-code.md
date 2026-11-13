@@ -40,7 +40,7 @@ test code too. `role?` can be read whether or not test code is left out.
 In Python, `test_*.py`, `*_test.py`, `conftest.py` and a `tests/` folder are test code,
 as pytest finds them. In Gleam and Elixir, the `test/` folder is.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation       | workspace  | steps                         | subject                 | role?      |
 | ----------------- | ---------- | ----------------------------- | ----------------------- | ---------- |
@@ -86,7 +86,7 @@ Its dependencies, lines and clones do not count either.
 | Left out    | rust-shop |                          | shop    | 55     |
 | Included    | rust-shop | `set tests.include true` | shop    | 69     |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace  | steps                    | subject                              | found? |
 | ------------------ | ---------- | ------------------------ | ------------------------------------ | ------ |
@@ -97,7 +97,7 @@ Its dependencies, lines and clones do not count either.
 | An Elixir test     | ex-shop    |                          | Shop.OrderTest                       | no     |
 | Switched on        | ex-shop    | `set tests.include true` | Shop.OrderTest                       | yes    |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation       | workspace  | steps                    | subject         | afferent? | instability? |
 | ----------------- | ---------- | ------------------------ | --------------- | --------- | ------------ |

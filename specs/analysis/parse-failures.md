@@ -15,7 +15,7 @@ listed in `problems?`, and everything else is analyzed as usual.
 | Not text        | rust-shop | `add binary src/blob.rs` | yes       | src/blob.rs: not valid UTF-8                       |
 | Unreadable file | rust-shop | `lock src/notes.rs`      | yes       | src/notes.rs: cannot be read                       |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation    | workspace    | analyzed? | problems?                                                                   |
 | -------------- | ------------ | --------- | --------------------------------------------------------------------------- |
@@ -34,7 +34,7 @@ Code around a syntax error still counts, as far as it can be understood.
 | A healthy TS file   | broken    | web/good::fine     | yes    |
 | Before a TS error   | broken    | web/bad::kept      | yes    |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation           | workspace    | subject         | found? |
 | --------------------- | ------------ | --------------- | ------ |

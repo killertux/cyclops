@@ -31,7 +31,7 @@ else is skipped without complaint. The `files?` column lists what was analyzed.
 | One language | js-shop   | `add src/extra.ts; set project.languages javascript` | src/billing.mjs, src/catalog.js, src/notes.jsx, src/orders.cjs |
 | Another one  | js-shop   | `add src/extra.ts; set project.languages typescript` | src/extra.ts                                                   |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps                          | files?                   |
 | ----------- | --------- | ------------------------------ | ------------------------ |
@@ -58,7 +58,7 @@ The extension of a file decides its language.
 | mixed     | web/esm.mjs    | javascript |
 | mixed     | web/node.cjs   | javascript |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | workspace | subject         | language? |
 | --------- | --------------- | --------- |
@@ -72,13 +72,13 @@ Folders a language's tools fill are skipped, as `node_modules` and `target` are:
 `__pycache__`, `.venv` and `venv` for Python, `build` for Gleam, and `_build` and `deps`
 for Elixir.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation       | workspace  | steps                              | files?                                                                                                       |
 | ----------------- | ---------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| A virtual env     | py-shop    | `add .venv/lib/site.py`            | src/shop/__init__.py, src/shop/billing.py, src/shop/catalog.py, src/shop/notes.py, src/shop/orders.py, tests/test_orders.py |
-| A `venv`          | py-shop    | `add venv/lib/site.py`             | src/shop/__init__.py, src/shop/billing.py, src/shop/catalog.py, src/shop/notes.py, src/shop/orders.py, tests/test_orders.py |
-| Compiled Python   | py-shop    | `add src/shop/__pycache__/extra.py` | src/shop/__init__.py, src/shop/billing.py, src/shop/catalog.py, src/shop/notes.py, src/shop/orders.py, tests/test_orders.py |
+| A virtual env     | py-shop    | `add .venv/lib/site.py`            | `src/shop/__init__.py, src/shop/billing.py, src/shop/catalog.py, src/shop/notes.py, src/shop/orders.py, tests/test_orders.py` |
+| A `venv`          | py-shop    | `add venv/lib/site.py`             | `src/shop/__init__.py, src/shop/billing.py, src/shop/catalog.py, src/shop/notes.py, src/shop/orders.py, tests/test_orders.py` |
+| Compiled Python   | py-shop    | `add src/shop/__pycache__/extra.py` | `src/shop/__init__.py, src/shop/billing.py, src/shop/catalog.py, src/shop/notes.py, src/shop/orders.py, tests/test_orders.py` |
 | Gleam build       | gleam-shop | `add build/packages/x/src/x.gleam` | src/shop.gleam, src/shop/billing.gleam, src/shop/catalog.gleam, src/shop/notes.gleam, src/shop/orders.gleam, test/orders_test.gleam |
 | Elixir build      | ex-shop    | `add _build/dev/lib/x.ex`          | lib/shop/invoice.ex, lib/shop/item.ex, lib/shop/notes.ex, lib/shop/order.ex, lib/shop/priced.ex, mix.exs, test/shop/order_test.exs, test/test_helper.exs |
 | Elixir deps       | ex-shop    | `add deps/x/lib/x.ex`              | lib/shop/invoice.ex, lib/shop/item.ex, lib/shop/notes.ex, lib/shop/order.ex, lib/shop/priced.ex, mix.exs, test/shop/order_test.exs, test/test_helper.exs |

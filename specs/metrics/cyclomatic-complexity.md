@@ -76,7 +76,7 @@ JavaScript follows the same rules.
 
 A comprehension is a loop, and its `if` is a branch.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation            | language | code                                                                                                   | cyclomatic? |
 | ---------------------- | -------- | ------------------------------------------------------------------------------------------------------ | ----------- |
@@ -164,7 +164,7 @@ its own.
 | A TS arrow      | typescript | `function f(a: boolean) { [1].map(() => { if (a) {} }); }` | 2           |
 | A named TS fn   | typescript | `function f() { function g(a: boolean) { if (a) {} } }`    | 1           |
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation          | language | code                                                                        | symbol | cyclomatic? |
 | -------------------- | -------- | --------------------------------------------------------------------------- | ------ | ----------- |

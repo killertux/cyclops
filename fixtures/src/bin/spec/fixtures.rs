@@ -49,6 +49,12 @@ const GLEAM_SNIPPET: SnippetFile = SnippetFile {
     module: "src/snippet",
 };
 
+const PYTHON_SNIPPET: SnippetFile = SnippetFile {
+    manifest: None,
+    path: "src/snippet.py",
+    module: "src/snippet",
+};
+
 /// Elixir names its modules in the code, so a snippet's symbols have no module of the
 /// file around them.
 const ELIXIR_SNIPPET: SnippetFile = SnippetFile {
@@ -84,6 +90,7 @@ impl Snippet {
             "javascript" => &JAVASCRIPT_SNIPPET,
             "gleam" => &GLEAM_SNIPPET,
             "elixir" => &ELIXIR_SNIPPET,
+            "python" => &PYTHON_SNIPPET,
             _ => &RUST_SNIPPET,
         }
     }

@@ -6,7 +6,7 @@ mod indexers;
 mod reader;
 mod tools;
 
-pub use indexers::{RustIndexer, TypeScriptIndexer, reason_of};
+pub use indexers::{PythonIndexer, RustIndexer, TypeScriptIndexer, reason_of};
 pub use reader::read_index;
 pub use tools::Tools;
 
@@ -31,6 +31,12 @@ pub fn providers(
             Arc::clone(log),
         )),
         Box::new(TypeScriptIndexer::new(
+            root,
+            output,
+            tools.clone(),
+            Arc::clone(log),
+        )),
+        Box::new(PythonIndexer::new(
             root,
             output,
             tools.clone(),

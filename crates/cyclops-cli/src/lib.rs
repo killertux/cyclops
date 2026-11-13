@@ -32,6 +32,7 @@ use cyclops_infra::{
 };
 use cyclops_lang_elixir::ElixirAdapter;
 use cyclops_lang_gleam::GleamAdapter;
+use cyclops_lang_python::PythonAdapter;
 use cyclops_lang_rust::RustAdapter;
 use cyclops_lang_typescript::TypeScriptAdapter;
 use cyclops_semantic::{Tools, providers};
@@ -54,6 +55,7 @@ pub fn adapters() -> Vec<Box<dyn LanguageAdapter>> {
         Box::new(TypeScriptAdapter),
         Box::new(GleamAdapter),
         Box::new(ElixirAdapter),
+        Box::new(PythonAdapter),
     ]
 }
 

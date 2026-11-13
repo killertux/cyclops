@@ -63,7 +63,7 @@ uses it. Struct fields have no types, so Elixir has no `composes`.
 
 Names from outside the project, such as the standard library, are left out.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace  | from                            | to                          | relation?  | confidence? |
 | ------------------- | ---------- | ------------------------------- | --------------------------- | ---------- | ----------- |
@@ -113,7 +113,7 @@ the syntax layer knows what it calls. An Elixir call is matched on its arity too
 pipe passes one more argument. Python follows Rust and TypeScript: `self` is known, and
 anything else is matched by name.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace  | from                              | to                                | relation? | confidence? |
 | ------------------- | ---------- | --------------------------------- | --------------------------------- | --------- | ----------- |

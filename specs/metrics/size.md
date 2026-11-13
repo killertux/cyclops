@@ -94,7 +94,7 @@ the first to the last line of the last. Its parameters are its arity, and defaul
 arguments count. Python's `self` and `cls` are not counted, nor the `/` and `*` that
 only mark how arguments are passed.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation         | language | code                                                         | lines? | comment lines? | blank lines? |
 | ------------------- | -------- | ------------------------------------------------------------ | ------ | -------------- | ------------ |
@@ -108,7 +108,7 @@ only mark how arguments are passed.
 | A `@doc`            | elixir   | `defmodule M do\n  @doc """\n  a\n  """\n  def f, do: 1\nend` | 3     | 3              | 0            |
 | A `@moduledoc`      | elixir   | `defmodule M do\n  @moduledoc "a"\nend`                      | 2      | 1              | 0            |
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation       | language | code                                                         | symbol | lines? |
 | ----------------- | -------- | ------------------------------------------------------------ | ------ | ------ |
@@ -118,7 +118,7 @@ only mark how arguments are passed.
 | A function        | elixir   | `defmodule M do\n  def f do\n    g()\n  end\nend`            | M::f/0 | 3      |
 | Several clauses   | elixir   | `defmodule M do\n  def f(0), do: 0\n\n  def f(_), do: 1\nend` | M::f/1 | 2     |
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation        | language | code                                                      | symbol | parameters? |
 | ------------------ | -------- | --------------------------------------------------------- | ------ | ----------- |
@@ -131,7 +131,7 @@ only mark how arguments are passed.
 | Its arity          | elixir   | `defmodule M do def f(a, b), do: a end`                   | M::f/2 | 2           |
 | A default          | elixir   | `defmodule M do def f(a, b \\ 1), do: a + b end`          | M::f/2 | 2           |
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation | language | code                                                                     | symbol | max nesting? |
 | ----------- | -------- | ------------------------------------------------------------------------ | ------ | ------------ |
@@ -142,7 +142,7 @@ only mark how arguments are passed.
 A Python class counts the fields set on `self` too. A Gleam type counts its fields, and
 an Elixir struct its fields and the methods of its protocol implementations.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation       | language | code                                                                                  | symbol | members? |
 | ----------------- | -------- | ------------------------------------------------------------------------------------- | ------ | -------- |

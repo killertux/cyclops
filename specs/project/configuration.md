@@ -15,7 +15,7 @@ The `setting` column names the setting to read.
 
 | # meaning                     | workspace | setting                        | value?                       |
 | ----------------------------- | --------- | ------------------------------ | ---------------------------- |
-| Languages to analyze          | rust-shop | project.languages              | elixir, gleam, javascript, rust, typescript |
+| Languages to analyze          | rust-shop | project.languages              | elixir, gleam, javascript, python, rust, typescript |
 | Paths to leave out            | rust-shop | project.exclude                | none                         |
 | Measure test code             | rust-shop | tests.include                  | false                        |
 | Extra paths that are tests    | rust-shop | tests.paths                    | none                         |
@@ -100,7 +100,7 @@ rules, and the message names it.
 | Unknown setting    | rust-shop | `set project.unknown 1`                | no        | Unknown setting: project.unknown                                  |
 | Wrong type         | rust-shop | `set tests.include maybe`              | no        | tests.include must be true or false.                              |
 | Out of range       | rust-shop | `set metrics.duplication.min_tokens 0` | no        | metrics.duplication.min_tokens must be at least 1.                |
-| Unknown language   | rust-shop | `set project.languages cobol`          | no        | Unknown language: cobol. Supported: elixir, gleam, javascript, rust, typescript. |
+| Unknown language   | rust-shop | `set project.languages cobol`          | no        | Unknown language: cobol. Supported: elixir, gleam, javascript, python, rust, typescript. |
 | Your own, not TOML | rust-shop | `break user config`                    | no        | ~/.config/cyclops/config.toml is not valid TOML.                  |
 | Your own, unknown  | rust-shop | `set user project.unknown 1`           | no        | Unknown setting: project.unknown                                  |
 

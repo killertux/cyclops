@@ -78,7 +78,7 @@ A class is a `class`, unless it is a protocol or an abstract base, which is an
 Python has no constants of its own and such a name plays their part. A field is a name
 declared in the class body, or assigned on `self` in any of its methods.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation         | language | code                                                          | symbol | kind?     | parent? |
 | ------------------- | -------- | ------------------------------------------------------------- | ------ | --------- | ------- |
@@ -170,7 +170,7 @@ value, such as `@limit 10`, is a `constant`. Attributes Elixir itself reads, suc
 A Python lambda, a Gleam anonymous function and an Elixir `fn` are closures too, and so
 are an Elixir attribute that Elixir reads and a Python name inside a function.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation           | language | code                                                         | symbol        | found? |
 | --------------------- | -------- | ------------------------------------------------------------ | ------------- | ------ |
@@ -200,14 +200,14 @@ A Python name that starts with `_` is private, but a name like `__init__`, which
 Python itself calls, is public. Gleam's `pub opaque type` is public, and its fields are
 private. An Elixir attribute only exists inside its module.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation         | language | code                                           | symbol      | visibility? |
 | ------------------- | -------- | ---------------------------------------------- | ----------- | ----------- |
 | Python default      | python   | `def f():\n    pass`                           | f           | public      |
 | Python `_`          | python   | `def _f():\n    pass`                          | _f          | private     |
 | Python `__` member  | python   | `class C:\n    def __x(self):\n        pass`   | C::__x      | private     |
-| Python dunder       | python   | `class C:\n    def __init__(self):\n        pass` | C::__init__ | public   |
+| Python dunder       | python   | `class C:\n    def __init__(self):\n        pass` | `C::__init__` | public |
 | Python `_` field    | python   | `class C:\n    def __init__(self):\n        self._x = 1` | C::_x | private  |
 | Gleam `pub`         | gleam    | `pub fn f() { 1 }`                             | f           | public      |
 | Gleam default       | gleam    | `fn f() { 1 }`                                 | f           | private     |
@@ -280,7 +280,7 @@ Gleam file next to a folder of the same name, such as `src/shop.gleam` next to
 An Elixir module is named after itself, not its file, and sits inside the module of its
 prefix, up to the package.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation              | workspace  | subject                          | kind?     | parent?                |
 | ------------------------ | ---------- | -------------------------------- | --------- | ---------------------- |
@@ -305,7 +305,7 @@ prefix, up to the package.
 | An Elixir protocol       | ex-shop    | Shop.Priced::Priced              | interface | Shop.Priced            |
 | A protocol's method      | ex-shop    | Shop.Item::Item::price/1         | method    | Shop.Item::Item        |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation             | workspace  | subject           | children?                                                                         |
 | ----------------------- | ---------- | ----------------- | --------------------------------------------------------------------------------- |

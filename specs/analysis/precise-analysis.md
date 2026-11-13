@@ -51,7 +51,7 @@ An exact answer replaces a guess. See how relations are
 | TypeScript         | ts-shop       | `precise analysis` | src/orders::Order::total   | src/billing::Invoice::total     | exact       |
 | A Rust re-export   | rust-reexport | `precise analysis` | reexport::app::make        | reexport::inner::Thing          | exact       |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation        | workspace  | steps              | from                          | to                               | confidence? |
 | ------------------ | ---------- | ------------------ | ----------------------------- | -------------------------------- | ----------- |
@@ -61,7 +61,7 @@ An exact answer replaces a guess. See how relations are
 
 Nothing runs for a project of only Gleam or Elixir, and nothing is missing.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace  | steps              | indexers run? | problems? |
 | ----------- | ---------- | ------------------ | ------------- | --------- |
@@ -145,7 +145,7 @@ results, and still uses the indexers it can.
 | No Node          | ts-shop   | `remove tool node; precise analysis`          | yes       | Precise analysis skipped for TypeScript: Node not found.    |
 | Not asked for    | rust-shop | `remove tool rust-analyzer`                   | yes       | none                                                        |
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation | workspace | steps                                  | analyzed? | problems?                                               |
 | ----------- | --------- | -------------------------------------- | --------- | ------------------------------------------------------- |

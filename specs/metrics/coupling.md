@@ -42,7 +42,7 @@ is the protocol that items implement and invoices call. `Shop.Order` depends on
 `Shop.Invoice` and `Shop.Item`, `Shop.Invoice` on `Shop.Item` and `Shop.Priced`, and
 `Shop.Item` on `Shop.Priced`.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation         | workspace  | subject          | afferent? | efferent? | instability? |
 | ------------------- | ---------- | ---------------- | --------- | --------- | ------------ |
@@ -84,7 +84,7 @@ A module with no types has neither.
 Gleam has no interfaces, so a Gleam module is never abstract. An Elixir protocol is an
 interface.
 
-[//]: # "decisionTable Core -- snooze until 2099-12-31"
+[//]: # "decisionTable Core"
 
 | # situation     | workspace  | subject          | abstractness? | distance? |
 | --------------- | ---------- | ---------------- | ------------- | --------- |
