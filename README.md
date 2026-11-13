@@ -52,13 +52,32 @@ never colored as a problem.
 
 ## Languages
 
-Rust, TypeScript and JavaScript are supported. Each language is an adapter that turns
-source code into a shared model, and every metric works on that model, so adding a
-language does not mean rewriting the metrics.
+Rust, TypeScript, JavaScript, Python, Gleam and Elixir are supported. Each language is
+an adapter that turns source code into a shared model, and every metric works on that
+model, so adding a language does not mean rewriting the metrics.
 
-## Getting started
+## Install
 
-Cyclops is written in Rust. With a recent toolchain (edition 2024):
+On macOS with Apple silicon, or on Linux on x86-64 or ARM64:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/killertux/cyclops/main/install.sh | sh
+```
+
+The script downloads the latest release for your machine, checks its checksum, and
+puts `cyclops` in `~/.local/bin`. Set `CYCLOPS_VERSION` to install a given release, such
+as `v0.1.0`, or `CYCLOPS_INSTALL_DIR` to install somewhere else:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/killertux/cyclops/main/install.sh | CYCLOPS_INSTALL_DIR=/usr/local/bin sh
+```
+
+The Linux builds need glibc 2.35 or later, as on Ubuntu 22.04, Debian 12 or Fedora 36.
+Every build is also on the [releases page](https://github.com/killertux/cyclops/releases).
+
+### From source
+
+Cyclops is written in Rust. With a recent toolchain (edition 2024) and a C compiler:
 
 ```sh
 git clone git@github.com:killertux/cyclops.git
@@ -66,7 +85,9 @@ cd cyclops
 cargo install --path crates/cyclops-cli
 ```
 
-That installs the `cyclops` binary. Then, in any project:
+## Getting started
+
+In any project:
 
 ```sh
 cyclops
@@ -165,7 +186,7 @@ The analysis has two layers. A fast **syntax layer** always runs and needs nothi
 installed. It reads each file on its own, so some relations, such as which `total`
 a call refers to, are educated guesses, and Cyclops marks them as such. An optional
 **precise layer** asks each language's compiler tooling (`rust-analyzer`,
-`scip-typescript`) for the exact answer. It is slower, so you ask for it with
+`scip-typescript`, `scip-python`) for the exact answer. It is slower, so you ask for it with
 `Space p` in the interface or `cyclops analyze --precise`.
 
 All the analysis lives in a core with no dependency on any interface. The terminal
@@ -188,6 +209,17 @@ cargo test --workspace --all-features
 temoc -c temoc.toml
 ```
 
+## Releasing
+
+Pushing a tag such as `v0.2.0` builds Cyclops for every platform and publishes a
+release, which the install script then finds. The tag must match the version in the
+workspace's `Cargo.toml`, so bump that first:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
 ## Repository layout
 
 | Path                            | What is there                                    |
@@ -196,6 +228,9 @@ temoc -c temoc.toml
 | `crates/cyclops-application`    | The analysis and the queries over it             |
 | `crates/cyclops-lang-rust`      | The Rust adapter                                 |
 | `crates/cyclops-lang-typescript`| The TypeScript and JavaScript adapter            |
+| `crates/cyclops-lang-python`    | The Python adapter                               |
+| `crates/cyclops-lang-gleam`     | The Gleam adapter                                |
+| `crates/cyclops-lang-elixir`    | The Elixir adapter                               |
 | `crates/cyclops-semantic`       | The precise layer, through compiler tooling      |
 | `crates/cyclops-infra`          | Files, git, the cache and settings               |
 | `crates/cyclops-tui`            | The terminal interface                           |
