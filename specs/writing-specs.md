@@ -270,6 +270,7 @@ running the specification does not run them as tests too.
 | [`rust-wide`](../samples/rust-wide)             | A module with many dependents.                     |
 | [`rust-uneven`](../samples/rust-uneven)         | One large file, small ones, and a getter.          |
 | [`rust-crates`](../samples/rust-crates)         | A workspace of one large crate and six small ones. |
+| [`rust-excluded`](../samples/rust-excluded)     | A workspace that leaves `crates/.cyclops` out.     |
 | [`ts-resolution`](../samples/ts-resolution)     | TypeScript path aliases and barrel files.          |
 | [`clones`](../samples/clones)                   | Duplicated code.                                   |
 | [`broken`](../samples/broken)                   | Files with syntax errors.                          |

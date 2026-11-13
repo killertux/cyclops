@@ -4,6 +4,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::workspace::TakenByWorkspace;
+
 const FOLDER: &str = ".cyclops";
 const CONFIG: &str = "config.toml";
 /// Keeps the cache and the log out of the repository, so that nobody has to edit their
@@ -21,6 +23,22 @@ impl ProjectFolder {
         Self {
             folder: project.join(FOLDER),
         }
+    }
+
+    /// The Cargo workspace that would take this folder as one of its crates, and stop
+    /// building, if there is one.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the project's real path cannot be found.
+    pub fn taken_by_workspace(&self) -> io::Result<Option<TakenByWorkspace>> {
+        let Some(project) = self.folder.parent() else {
+            return Ok(None);
+        };
+        Ok(crate::workspace::taking(
+            &fs::canonicalize(project)?,
+            FOLDER,
+        ))
     }
 
     #[must_use]

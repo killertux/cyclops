@@ -173,7 +173,7 @@ fn run_analysis(
     precise: bool,
     progress: &dyn Progress,
 ) -> Result<ProjectAnalysis> {
-    let folder = ProjectFolder::of(root);
+    let folder = usable_folder(root)?;
     let tools = Tools::new(environment.get("PATH"));
     let cache_path = folder.cache_path();
     let log: Arc<dyn Log> = Arc::new(FileLog::new(&folder.log_path()));
@@ -206,6 +206,20 @@ fn run_analysis(
     Ok(service.analyze(sources, settings)?)
 }
 
+/// The project's `.cyclops/`, unless a Cargo workspace would take it as one of its
+/// crates and stop building.
+///
+/// # Errors
+///
+/// Says which workspace, and how to go on.
+fn usable_folder(root: &Path) -> Result<ProjectFolder> {
+    let folder = ProjectFolder::of(root);
+    match folder.taken_by_workspace()? {
+        Some(taken) => Err(taken.into()),
+        None => Ok(folder),
+    }
+}
+
 /// Creates `.cyclops/` with settings for the languages the project has. It never
 /// overwrites existing settings. Returns what to tell the person.
 ///
@@ -214,7 +228,7 @@ fn run_analysis(
 /// Fails if the folder is not a project, or the files cannot be written.
 pub fn init(root: &Path) -> Result<String> {
     let files = ProjectFiles::open(root)?;
-    let folder = ProjectFolder::of(root);
+    let folder = usable_folder(root)?;
     if folder.has_config() {
         return Ok(format!("Already initialized: {PROJECT_FILE} exists."));
     }
@@ -754,6 +768,7 @@ pub fn interface_startup(root: &Path, environment: &Environment) -> Startup {
 /// Opens the terminal interface.
 fn interactive(root: &Path, environment: &Environment) -> Result<ExitCode> {
     ProjectFiles::open(root)?;
+    usable_folder(root)?;
     let startup = interface_startup(root, environment);
     let backend: Arc<dyn Backend> = Arc::new(Interactive {
         root: root.to_path_buf(),
