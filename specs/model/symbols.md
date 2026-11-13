@@ -133,7 +133,7 @@ wherever it is written, as a Rust trait `impl` does. A module attribute that hol
 value, such as `@limit 10`, is a `constant`. Attributes Elixir itself reads, such as
 `@doc`, `@spec` or `@behaviour`, are not.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation           | language | code                                                                                        | symbol    | kind?     | parent? |
 | --------------------- | -------- | ------------------------------------------------------------------------------------------- | --------- | --------- | ------- |

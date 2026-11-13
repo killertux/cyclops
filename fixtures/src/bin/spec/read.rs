@@ -21,10 +21,16 @@ pub fn list(items: &[String]) -> String {
     }
 }
 
-/// A subject with an extension is a file, and anything else is a symbol.
+/// A subject with an extension is a file, and anything else is a symbol. An Elixir module
+/// such as `Shop.Order` has dots too, but each of its parts is capitalized, and an
+/// extension is not.
 pub fn subject(text: &str) -> Subject {
     let file_name = text.rsplit('/').next().unwrap_or(text);
-    if file_name.contains('.') && !text.contains("::") {
+    let has_extension = file_name
+        .rsplit_once('.')
+        .and_then(|(_, extension)| extension.chars().next())
+        .is_some_and(|first| first.is_ascii_lowercase() || first.is_ascii_digit());
+    if has_extension && !text.contains("::") {
         Subject::File(RelativePath::new(text))
     } else {
         Subject::Symbol(SymbolId::new(text))

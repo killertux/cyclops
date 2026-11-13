@@ -30,6 +30,7 @@ use cyclops_infra::{
     Export, ExportFormat, FileLog, GitHistory, ProjectFiles, ProjectFolder, ProjectWatcher,
     SqliteFactStore, UserConfig, read_layer, save_alert, set_alert_enabled,
 };
+use cyclops_lang_elixir::ElixirAdapter;
 use cyclops_lang_gleam::GleamAdapter;
 use cyclops_lang_rust::RustAdapter;
 use cyclops_lang_typescript::TypeScriptAdapter;
@@ -52,6 +53,7 @@ pub fn adapters() -> Vec<Box<dyn LanguageAdapter>> {
         Box::new(RustAdapter),
         Box::new(TypeScriptAdapter),
         Box::new(GleamAdapter),
+        Box::new(ElixirAdapter),
     ]
 }
 

@@ -1,0 +1,15 @@
+[package]
+name = "cyclops-lang-elixir"
+description = "The Cyclops language adapter for Elixir"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+cyclops-application.workspace = true
+cyclops-domain.workspace = true
+tree-sitter.workspace = true
+tree-sitter-elixir.workspace = true
+
+[lints]
+workspace = true

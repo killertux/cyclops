@@ -128,7 +128,7 @@ first adds 1, and so does each guard. `if` and `unless` add 1, and `case`, `cond
 `receive` count as a Rust `match` does. Each step of a `with` can fail, and adds 1. A
 pipe adds nothing.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation             | language | code                                                                     | symbol | cyclomatic? |
 | ----------------------- | -------- | ------------------------------------------------------------------------ | ------ | ----------- |

@@ -576,6 +576,7 @@ dependencies = [
  "cyclops-application",
  "cyclops-domain",
  "cyclops-infra",
+ "cyclops-lang-elixir",
  "cyclops-lang-gleam",
  "cyclops-lang-rust",
  "cyclops-lang-typescript",
@@ -619,6 +620,16 @@ dependencies = [
  "thiserror 2.0.21",
  "toml",
  "toml_edit",
+]
+
+[[package]]
+name = "cyclops-lang-elixir"
+version = "0.1.0"
+dependencies = [
+ "cyclops-application",
+ "cyclops-domain",
+ "tree-sitter",
+ "tree-sitter-elixir",
 ]
 
 [[package]]
@@ -4213,6 +4224,16 @@ dependencies = [
  "regex",
  "serde_json",
  "streaming-iterator",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-elixir"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66dd064a762ed95bfc29857fa3cb7403bb1e5cb88112de0f6341b7e47284ba40"
+dependencies = [
+ "cc",
  "tree-sitter-language",
 ]
 

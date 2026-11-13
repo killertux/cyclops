@@ -6,8 +6,12 @@ use std::path::Path;
 const ALWAYS: [&str; 2] = ["node_modules", "target"];
 
 /// Skipped only beside the manifest of the tool that fills them, since the names alone are
-/// common: Gleam builds into `build`.
-const BESIDE_MANIFEST: [(&str, &str); 1] = [("build", "gleam.toml")];
+/// common: Gleam builds into `build`, and Mix into `_build`, with dependencies in `deps`.
+const BESIDE_MANIFEST: [(&str, &str); 3] = [
+    ("build", "gleam.toml"),
+    ("_build", "mix.exs"),
+    ("deps", "mix.exs"),
+];
 
 /// Whether a folder holds what a tool installed or built.
 pub(crate) fn is_tool_folder(folder: &Path) -> bool {
@@ -40,8 +44,11 @@ mod tests {
         let root = std::env::temp_dir().join(format!("cyclops-tools-{}", std::process::id()));
         fs::create_dir_all(root.join("gleam/build")).unwrap();
         fs::create_dir_all(root.join("other/build")).unwrap();
+        fs::create_dir_all(root.join("mix/deps")).unwrap();
         fs::write(root.join("gleam/gleam.toml"), "name = \"shop\"\n").unwrap();
+        fs::write(root.join("mix/mix.exs"), "defmodule M do end\n").unwrap();
         assert!(is_tool_folder(&root.join("gleam/build")));
+        assert!(is_tool_folder(&root.join("mix/deps")));
         assert!(!is_tool_folder(&root.join("other/build")));
         fs::remove_dir_all(&root).unwrap();
     }

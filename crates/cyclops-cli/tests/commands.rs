@@ -200,7 +200,9 @@ fn init_writes_the_languages_once() {
     let second = cyclops(project.path(), &["init"]);
     assert_eq!(first.status.code(), Some(0));
     assert!(
-        config.contains("languages = [\"gleam\", \"javascript\", \"rust\", \"typescript\"]"),
+        config.contains(
+            "languages = [\"elixir\", \"gleam\", \"javascript\", \"rust\", \"typescript\"]"
+        ),
         "{config}"
     );
     assert!(text(&second.stdout).contains("Already initialized"));

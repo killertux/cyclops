@@ -20,8 +20,18 @@ use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table, value};
 
-/// A small valid source file, for the `add` step.
-const SMALL_FILE: &str = "// Added by a step.\n";
+/// A small valid source file, for the `add` and `edit` steps: a comment, in the way
+/// the file's language writes one.
+fn small_file(path: &str, what: &str) -> String {
+    let hash = [".py", ".pyi", ".ex", ".exs"]
+        .iter()
+        .any(|extension| path.ends_with(extension));
+    if hash {
+        format!("# {what} by a step.\n")
+    } else {
+        format!("// {what} by a step.\n")
+    }
+}
 const PROJECT_CONFIG: &str = ".cyclops/config.toml";
 const CACHE: &str = ".cyclops/cache/cyclops.db";
 
@@ -599,12 +609,14 @@ impl Scenario {
         match verb {
             "add" => match rest.strip_prefix("binary ") {
                 Some(path) => self.scratch.write(path, &[0xff, 0xfe, 0x00]),
-                None => self.scratch.write(rest, SMALL_FILE.as_bytes()),
+                None => self
+                    .scratch
+                    .write(rest, small_file(rest, "Added").as_bytes()),
             },
             "edit" => {
                 let path = root.join(rest);
                 let mut text = fs::read_to_string(&path)?;
-                text.push_str("// Edited by a step.\n");
+                text.push_str(&small_file(rest, "Edited"));
                 fs::write(path, text)
             }
             "touch" => {

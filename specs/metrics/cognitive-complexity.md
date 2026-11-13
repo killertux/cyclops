@@ -116,7 +116,7 @@ code.
 `receive` counts once, and so does `rescue`. The clauses of a function add nothing,
 because each one reads as a small function of its own. A pipe adds nothing.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation          | language | code                                                                           | symbol | cognitive? |
 | -------------------- | -------- | ------------------------------------------------------------------------------ | ------ | ---------- |

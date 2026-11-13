@@ -72,7 +72,7 @@ Gleam types and Elixir structs have no methods of their own, so their cohesion i
 `n/a`. The methods of an Elixir protocol implementation serve the protocol, as a Rust
 trait's do.
 
-[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+[//]: # "decisionTable Snippet"
 
 | # situation       | language | code                                                                                          | symbol | lcom? |
 | ----------------- | -------- | --------------------------------------------------------------------------------------------- | ------ | ----- |

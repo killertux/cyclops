@@ -10,11 +10,18 @@ pub enum LanguageId {
     TypeScript,
     JavaScript,
     Gleam,
+    Elixir,
 }
 
 impl LanguageId {
     /// Every language, in the order of their names.
-    pub const ALL: [Self; 4] = [Self::Gleam, Self::JavaScript, Self::Rust, Self::TypeScript];
+    pub const ALL: [Self; 5] = [
+        Self::Elixir,
+        Self::Gleam,
+        Self::JavaScript,
+        Self::Rust,
+        Self::TypeScript,
+    ];
 
     /// The name used in settings and on screen.
     #[must_use]
@@ -24,6 +31,7 @@ impl LanguageId {
             Self::TypeScript => "typescript",
             Self::JavaScript => "javascript",
             Self::Gleam => "gleam",
+            Self::Elixir => "elixir",
         }
     }
 }
@@ -36,6 +44,7 @@ impl LanguageId {
             Self::Rust => 0,
             Self::TypeScript | Self::JavaScript => 1,
             Self::Gleam => 2,
+            Self::Elixir => 3,
         }
     }
 }

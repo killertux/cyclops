@@ -49,6 +49,14 @@ const GLEAM_SNIPPET: SnippetFile = SnippetFile {
     module: "src/snippet",
 };
 
+/// Elixir names its modules in the code, so a snippet's symbols have no module of the
+/// file around them.
+const ELIXIR_SNIPPET: SnippetFile = SnippetFile {
+    manifest: None,
+    path: "lib/snippet.ex",
+    module: "",
+};
+
 /// What a row reads from. A failure shows up in every column of its row.
 type Outcome = Result<ProjectAnalysis, String>;
 
@@ -75,6 +83,7 @@ impl Snippet {
             "typescript" => &TYPESCRIPT_SNIPPET,
             "javascript" => &JAVASCRIPT_SNIPPET,
             "gleam" => &GLEAM_SNIPPET,
+            "elixir" => &ELIXIR_SNIPPET,
             _ => &RUST_SNIPPET,
         }
     }
@@ -93,7 +102,10 @@ impl Snippet {
         } else {
             &self.symbol
         };
-        SymbolId::new(&format!("{}::{symbol}", self.file().module))
+        match self.file().module {
+            "" => SymbolId::new(symbol),
+            module => SymbolId::new(&format!("{module}::{symbol}")),
+        }
     }
 
     fn read(&self, reader: impl FnOnce(&ProjectAnalysis) -> String) -> String {
@@ -162,17 +174,27 @@ impl Snippet {
         })
     }
 
-    /// The module is the whole snippet, so what sits directly in it has no parent.
+    /// The module is the whole snippet, so what sits directly in it has no parent, and
+    /// neither does what sits directly in the package.
     #[must_use]
     pub fn parent(&self) -> String {
         self.read(|analysis| {
             let parent = read::symbol(analysis, &self.id("f")).and_then(|s| s.parent.as_ref());
-            parent
-                .map(SymbolId::as_str)
-                .and_then(|parent| parent.strip_prefix(self.file().module))
-                .and_then(|parent| parent.strip_prefix("::"))
-                .unwrap_or(NONE)
-                .into()
+            let in_package = parent
+                .and_then(|parent| read::symbol(analysis, parent))
+                .is_some_and(|parent| parent.kind == SymbolKind::Package);
+            let module = self.file().module;
+            let name = parent.map(SymbolId::as_str).and_then(|parent| {
+                if module.is_empty() {
+                    Some(parent)
+                } else {
+                    parent.strip_prefix(module)?.strip_prefix("::")
+                }
+            });
+            match name {
+                Some(name) if !in_package => name.into(),
+                _ => NONE.into(),
+            }
         })
     }
 

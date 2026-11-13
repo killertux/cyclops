@@ -11,6 +11,7 @@ cyclops-application = { path = "crates/cyclops-application" }
 cyclops-cli = { path = "crates/cyclops-cli" }
 cyclops-domain = { path = "crates/cyclops-domain" }
 cyclops-infra = { path = "crates/cyclops-infra" }
+cyclops-lang-elixir = { path = "crates/cyclops-lang-elixir" }
 cyclops-lang-gleam = { path = "crates/cyclops-lang-gleam" }
 cyclops-lang-rust = { path = "crates/cyclops-lang-rust" }
 cyclops-lang-typescript = { path = "crates/cyclops-lang-typescript" }
@@ -51,6 +52,7 @@ thiserror = "2"
 # Each grammar is generated for a tree-sitter version, so the family is pinned and upgraded
 # together. The grammars compile C code, so building needs a C compiler.
 tree-sitter = "=0.27.2"
+tree-sitter-elixir = "=0.3.5"
 tree-sitter-gleam = "=1.0.0"
 toml = "1"
 toml_edit = "0.25"
