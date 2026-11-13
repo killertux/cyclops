@@ -55,7 +55,7 @@ set by [the design](tui/design/README.md).
 
 | Column     | Meaning                                                                                                        |
 | ---------- | -------------------------------------------------------------------------------------------------------------- |
-| `language` | `rust`, `typescript`, or `javascript`.                                                                         |
+| `language` | `rust`, `typescript`, `javascript`, `python`, `gleam`, or `elixir`.                                            |
 | `code`     | The source code. `\n` stands for a line break.                                                                 |
 | `symbol`   | The symbol to read. Pages that measure a function read `f` by default, and pages that measure a type read `S`. |
 
@@ -247,9 +247,14 @@ A symbol is written as its module, then its names, separated by `::`.
 | ---------------------- | ------------------------------------ | ------------------------------- |
 | Rust                   | The crate and module path.           | `shop::billing::Invoice::total` |
 | TypeScript, JavaScript | The file path without its extension. | `src/billing::Invoice::total`   |
+| Python                 | The file path without its extension. | `src/shop/billing::Invoice::total` |
+| Gleam                  | The file path without its extension. | `src/shop/billing::total`       |
+| Elixir                 | The module's name.                   | `Shop.Invoice::total/1`         |
 
 A Rust integration test is its own crate, so its module is its path, as in
-`tests/orders::starts_empty`. A subject with a file extension, such as `src/orders.rs`,
+`tests/orders::starts_empty`. An Elixir function is written with its arity, as Elixir
+writes it, and the struct of a module is named after the module's last part, as in
+`Shop.Order::Order`. A subject with a file extension, such as `src/orders.rs`,
 is a file.
 
 ## Sample workspaces
@@ -277,8 +282,13 @@ running the specification does not run them as tests too.
 | [`mixed`](../samples/mixed)                     | One file of every kind Cyclops recognizes.         |
 | [`docs-only`](../samples/docs-only)             | A project with no source code.                     |
 | [`monorepo`](../samples/monorepo)               | The Rust and TypeScript shops in folders of one repository. |
+| [`py-shop`](../samples/py-shop)                 | The shop in Python.                                |
+| [`gleam-shop`](../samples/gleam-shop)           | The shop in Gleam.                                 |
+| [`ex-shop`](../samples/ex-shop)                 | The shop in Elixir, with a module for each struct. |
+| [`broken-langs`](../samples/broken-langs)       | Python, Gleam and Elixir files with syntax errors. |
 
-The three shop projects share one dependency graph, which many pages rely on:
+The Rust, TypeScript, JavaScript, Python and Gleam shops share one dependency graph,
+which many pages rely on:
 
 ```
 orders -> billing -> catalog

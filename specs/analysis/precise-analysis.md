@@ -10,6 +10,10 @@ Precise analysis uses each language's compiler tooling to replace guessed
 | ---------------------- | ----------------- | ------------------------------------ |
 | Rust                   | `rust-analyzer`   | rust-analyzer and a Cargo toolchain  |
 | TypeScript, JavaScript | `scip-typescript` | Node, and the project's dependencies |
+| Python                 | `scip-python`     | Node, and Python 3.10 or later       |
+
+Gleam and Elixir have no indexer. Their calls name their module, so the syntax layer
+already knows what most of them reach, and precise analysis leaves them as they are.
 
 Precise analysis is slow because it covers the whole project, and indexing a Rust
 project may run its build scripts and proc macros. So it only runs when asked.
@@ -46,6 +50,24 @@ An exact answer replaces a guess. See how relations are
 | A single candidate | rust-shop     | `precise analysis` | shop::orders::Order::total | shop::billing::Invoice::is_free | exact       |
 | TypeScript         | ts-shop       | `precise analysis` | src/orders::Order::total   | src/billing::Invoice::total     | exact       |
 | A Rust re-export   | rust-reexport | `precise analysis` | reexport::app::make        | reexport::inner::Thing          | exact       |
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation        | workspace  | steps              | from                          | to                               | confidence? |
+| ------------------ | ---------- | ------------------ | ----------------------------- | -------------------------------- | ----------- |
+| Python, without it | py-shop    |                    | src/shop/orders::Order::total | src/shop/billing::Invoice::total | ambiguous   |
+| Python, with it    | py-shop    | `precise analysis` | src/shop/orders::Order::total | src/shop/billing::Invoice::total | exact       |
+| A wrong candidate  | py-shop    | `precise analysis` | src/shop/orders::Order::total | src/shop/orders::Order::total    | none        |
+
+Nothing runs for a project of only Gleam or Elixir, and nothing is missing.
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation | workspace  | steps              | indexers run? | problems? |
+| ----------- | ---------- | ------------------ | ------------- | --------- |
+| Gleam       | gleam-shop | `precise analysis` | no            | none      |
+| Elixir      | ex-shop    | `precise analysis` | no            | none      |
+| Python      | py-shop    | `precise analysis` | yes           | none      |
 
 Metrics never need it. Complexity, size and duplication come from the syntax layer,
 so they do not change.
@@ -84,6 +106,8 @@ them all. Cyclops finds them, and indexes each one on its own.
   are others, since an empty one only serves editors and would take in every package at
   once. A project with no `tsconfig.json` at all is indexed from its root. Node may use
   up to 16 GB, as a large package needs, unless `NODE_OPTIONS` says otherwise.
+- For Python, each folder with a `pyproject.toml`, `setup.py` or `setup.cfg`, or the
+  project's root when there is none.
 
 Since each project is indexed on its own, one that fails leaves the answers of the
 others, and its problem names its folder, as in
@@ -120,3 +144,10 @@ results, and still uses the indexers it can.
 | No rust-analyzer | rust-shop | `remove tool rust-analyzer; precise analysis` | yes       | Precise analysis skipped for Rust: rust-analyzer not found. |
 | No Node          | ts-shop   | `remove tool node; precise analysis`          | yes       | Precise analysis skipped for TypeScript: Node not found.    |
 | Not asked for    | rust-shop | `remove tool rust-analyzer`                   | yes       | none                                                        |
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation | workspace | steps                                  | analyzed? | problems?                                               |
+| ----------- | --------- | -------------------------------------- | --------- | ------------------------------------------------------- |
+| No Node     | py-shop   | `remove tool node; precise analysis`   | yes       | Precise analysis skipped for Python: Node not found.    |
+| No Python   | py-shop   | `remove tool python; precise analysis` | yes       | Precise analysis skipped for Python: Python not found.  |

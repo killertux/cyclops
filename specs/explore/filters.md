@@ -31,7 +31,7 @@ first row. `kind` narrows the search.
 | ---------- | ----------------------------------------------------------------- |
 | `kind`     | Any [kind](../model/symbols.md). `function` also matches methods. |
 | `role`     | `production` or `test`.                                           |
-| `language` | `rust`, `typescript`, or `javascript`.                            |
+| `language` | `rust`, `typescript`, `javascript`, `python`, `gleam`, or `elixir`. |
 | `path`     | The file of the symbol. `~` matches a glob pattern.               |
 | `in_cycle` | `true` or `false`.                                                |
 

@@ -47,6 +47,49 @@ containing a module is the [hierarchy](symbols.md#the-hierarchy), not a relation
 | A `require`         | js-shop   | src/orders                  | src/billing            | imports    | exact       |
 | `extends`           | js-shop   | src/billing::DiscountedItem | src/catalog::Item      | inherits   | exact       |
 
+### Python, Gleam and Elixir
+
+A Python import may be relative, or start from the project's root or its `src` folder.
+A base class that is an interface is implemented, and any other is inherited. Type
+annotations give `composes` and `uses`.
+
+Gleam imports name the module. A record field gives `composes`, and a parameter, or
+building a record, gives `uses`.
+
+An Elixir module depends on every module it names in an `alias`, `import`, `require`,
+`use` or `@behaviour`, in a call, or in a struct such as `%Item{}`, so `alias Shop.{Invoice, Item}`
+names both. A protocol's implementation implements it. A function that names a struct
+uses it. Struct fields have no types, so Elixir has no `composes`.
+
+Names from outside the project, such as the standard library, are left out.
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation         | workspace  | from                            | to                          | relation?  | confidence? |
+| ------------------- | ---------- | ------------------------------- | --------------------------- | ---------- | ----------- |
+| An absolute import  | py-shop    | src/shop/orders                 | src/shop/billing            | imports    | exact       |
+| A relative import   | py-shop    | src/shop/orders                 | src/shop/catalog            | imports    | exact       |
+| No import           | py-shop    | src/shop/notes                  | src/shop/billing            | none       | none        |
+| An abstract base    | py-shop    | src/shop/catalog::Item          | src/shop/catalog::Priced    | implements | exact       |
+| A plain base        | py-shop    | src/shop/billing::DiscountedItem | src/shop/catalog::Item     | inherits   | exact       |
+| An annotated field  | py-shop    | src/shop/billing::Invoice       | src/shop/catalog::Item      | composes   | exact       |
+| A field in a list   | py-shop    | src/shop/orders::Order          | src/shop/billing::Invoice   | composes   | exact       |
+| A parameter         | py-shop    | src/shop/orders::Order::add     | src/shop/catalog::Item      | uses       | exact       |
+| A Gleam import      | gleam-shop | src/shop/orders                 | src/shop/billing            | imports    | exact       |
+| Another one         | gleam-shop | src/shop/billing                | src/shop/catalog            | imports    | exact       |
+| No import           | gleam-shop | src/shop/notes                  | src/shop/billing            | none       | none        |
+| A record field      | gleam-shop | src/shop/billing::Invoice       | src/shop/catalog::Item      | composes   | exact       |
+| A field in a list   | gleam-shop | src/shop/orders::Order          | src/shop/billing::Invoice   | composes   | exact       |
+| A parameter         | gleam-shop | src/shop/orders::add            | src/shop/catalog::Item      | uses       | exact       |
+| Building a record   | gleam-shop | src/shop/orders::add            | src/shop/billing::Invoice   | uses       | exact       |
+| An `alias`          | ex-shop    | Shop.Order                      | Shop.Invoice                | imports    | exact       |
+| One of an alias set | ex-shop    | Shop.Order                      | Shop.Item                   | imports    | exact       |
+| A call by full name | ex-shop    | Shop.Invoice                    | Shop.Priced                 | imports    | exact       |
+| An implementation   | ex-shop    | Shop.Item                       | Shop.Priced                 | imports    | exact       |
+| No dependency       | ex-shop    | Shop.Notes                      | Shop.Invoice                | none       | none        |
+| A protocol          | ex-shop    | Shop.Item::Item                 | Shop.Priced::Priced         | implements | exact       |
+| A struct pattern    | ex-shop    | Shop.Order::add/2               | Shop.Item::Item             | uses       | exact       |
+
 ## Calls
 
 The syntax layer knows the name of a called method, but not always the type it
@@ -64,6 +107,26 @@ methods with that name.
 | On `this`           | ts-shop   | src/billing::Invoice::isFree    | src/billing::Invoice::total     | calls     | exact       |
 | One candidate       | ts-shop   | src/orders::Order::total        | src/billing::Invoice::isFree    | calls     | inferred    |
 | Two candidates      | ts-shop   | src/orders::Order::total        | src/billing::Invoice::total     | calls     | ambiguous   |
+
+In Gleam and Elixir a call names its module, or the function is imported or local, so
+the syntax layer knows what it calls. An Elixir call is matched on its arity too, and a
+pipe passes one more argument. Python follows Rust and TypeScript: `self` is known, and
+anything else is matched by name.
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation         | workspace  | from                              | to                                | relation? | confidence? |
+| ------------------- | ---------- | --------------------------------- | --------------------------------- | --------- | ----------- |
+| On `self`           | py-shop    | src/shop/billing::Invoice::is_free | src/shop/billing::Invoice::total | calls     | exact       |
+| One candidate       | py-shop    | src/shop/orders::Order::total     | src/shop/billing::Invoice::is_free | calls    | inferred    |
+| Two candidates      | py-shop    | src/shop/orders::Order::total     | src/shop/billing::Invoice::total  | calls     | ambiguous   |
+| Through its module  | gleam-shop | src/shop/orders::total            | src/shop/billing::total           | calls     | exact       |
+| In its own module   | gleam-shop | src/shop/billing::is_free         | src/shop/billing::total           | calls     | exact       |
+| Not the other one   | gleam-shop | src/shop/orders::total            | src/shop/orders::total            | none      | none        |
+| Through an alias    | ex-shop    | Shop.Order::total/1               | Shop.Invoice::total/1             | calls     | exact       |
+| A pipe              | ex-shop    | Shop.Order::add/2                 | Shop.Invoice::new/2               | calls     | exact       |
+| In its own module   | ex-shop    | Shop.Invoice::free?/1             | Shop.Invoice::total/1             | calls     | exact       |
+| A protocol function | ex-shop    | Shop.Invoice::total/1             | Shop.Priced::Priced::price/1      | calls     | exact       |
 
 ## Across files
 

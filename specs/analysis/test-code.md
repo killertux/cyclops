@@ -37,6 +37,23 @@ test code too. `role?` can be read whether or not test code is left out.
 | A `#[test]`      | rust     | `#[test] fn f() {}`                         | f             | test       |
 | A test module    | rust     | `#[cfg(test)] mod tests { fn helper() {} }` | tests::helper | test       |
 
+In Python, `test_*.py`, `*_test.py`, `conftest.py` and a `tests/` folder are test code,
+as pytest finds them. In Gleam and Elixir, the `test/` folder is.
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation       | workspace  | steps                         | subject                 | role?      |
+| ----------------- | ---------- | ----------------------------- | ----------------------- | ---------- |
+| Python source     | py-shop    |                               | src/shop/orders.py      | production |
+| A `test_` file    | py-shop    | `add src/shop/test_extra.py`  | src/shop/test_extra.py  | test       |
+| A `_test` file    | py-shop    | `add src/shop/extra_test.py`  | src/shop/extra_test.py  | test       |
+| `conftest.py`     | py-shop    | `add conftest.py`             | conftest.py             | test       |
+| `tests/` folder   | py-shop    | `add tests/extra.py`          | tests/extra.py          | test       |
+| Gleam source      | gleam-shop |                               | src/shop/orders.gleam   | production |
+| Gleam `test/`     | gleam-shop | `add test/extra_test.gleam`   | test/extra_test.gleam   | test       |
+| Elixir source     | ex-shop    |                               | lib/shop/order.ex       | production |
+| Elixir `test/`    | ex-shop    | `add test/extra_test.exs`     | test/extra_test.exs     | test       |
+
 ## Leaving it out
 
 Excluded test code is hidden everywhere, and it contributes to no metric.
@@ -68,5 +85,27 @@ Its dependencies, lines and clones do not count either.
 | ----------- | --------- | ------------------------ | ------- | ------ |
 | Left out    | rust-shop |                          | shop    | 55     |
 | Included    | rust-shop | `set tests.include true` | shop    | 69     |
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation        | workspace  | steps                    | subject                              | found? |
+| ------------------ | ---------- | ------------------------ | ------------------------------------ | ------ |
+| A Python test      | py-shop    |                          | tests/test_orders::test_starts_empty | no     |
+| Switched on        | py-shop    | `set tests.include true` | tests/test_orders::test_starts_empty | yes    |
+| A Gleam test       | gleam-shop |                          | test/orders_test::starts_empty_test  | no     |
+| Switched on        | gleam-shop | `set tests.include true` | test/orders_test::starts_empty_test  | yes    |
+| An Elixir test     | ex-shop    |                          | Shop.OrderTest                       | no     |
+| Switched on        | ex-shop    | `set tests.include true` | Shop.OrderTest                       | yes    |
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation       | workspace  | steps                    | subject         | afferent? | instability? |
+| ----------------- | ---------- | ------------------------ | --------------- | --------- | ------------ |
+| Python, left out  | py-shop    |                          | src/shop/orders | 0         | 1.00         |
+| Python, included  | py-shop    | `set tests.include true` | src/shop/orders | 1         | 0.67         |
+| Gleam, left out   | gleam-shop |                          | src/shop/orders | 0         | 1.00         |
+| Gleam, included   | gleam-shop | `set tests.include true` | src/shop/orders | 1         | 0.67         |
+| Elixir, left out  | ex-shop    |                          | Shop.Order      | 0         | 1.00         |
+| Elixir, included  | ex-shop    | `set tests.include true` | Shop.Order      | 1         | 0.67         |
 
 Switching test code on or off [re-parses nothing](caching.md).

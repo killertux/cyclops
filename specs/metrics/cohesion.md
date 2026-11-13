@@ -50,6 +50,36 @@ Each table measures the type `S`.
 | Separate fields             | javascript | `class S { a = 1; b = 2; x() { return this.a; } y() { return this.b; } }`                             | 2     |
 | Fields set in a constructor | javascript | `class S { constructor() { this.a = 1; this.b = 2; } x() { return this.a; } y() { return this.b; } }` | 2     |
 
+## Python
+
+`__init__` is the constructor. Static and class methods do not use an instance.
+
+[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+
+| # situation      | language | code                                                                                                                                         | lcom? |
+| ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| A shared field   | python   | `class S:\n    def __init__(self):\n        self.a = 1\n    def x(self):\n        return self.a\n    def y(self):\n        return self.a`     | 1     |
+| Separate fields  | python   | `class S:\n    def __init__(self):\n        self.a = 1\n        self.b = 2\n    def x(self):\n        return self.a\n    def y(self):\n        return self.b` | 2 |
+| Joined by a call | python   | `class S:\n    a = 1\n    b = 2\n    def x(self):\n        return self.a\n    def y(self):\n        return self.b + self.x()`                 | 1     |
+| A static method  | python   | `class S:\n    a = 1\n    @staticmethod\n    def make():\n        return 1\n    def x(self):\n        return self.a`                         | 1     |
+| A class method   | python   | `class S:\n    a = 1\n    @classmethod\n    def make(cls):\n        return cls()\n    def x(self):\n        return self.a`                   | 1     |
+| A dataclass      | python   | `@dataclass\nclass S:\n    a: int\n    b: int\n    def x(self):\n        return self.a\n    def y(self):\n        return self.b`              | 2     |
+| A protocol       | python   | `class S(Protocol):\n    def x(self) -> int: ...`                                                                                            | n/a   |
+
+## Gleam and Elixir
+
+Gleam types and Elixir structs have no methods of their own, so their cohesion is
+`n/a`. The methods of an Elixir protocol implementation serve the protocol, as a Rust
+trait's do.
+
+[//]: # "decisionTable Snippet -- snooze until 2099-12-31"
+
+| # situation       | language | code                                                                                          | symbol | lcom? |
+| ----------------- | -------- | --------------------------------------------------------------------------------------------- | ------ | ----- |
+| A Gleam record    | gleam    | `pub type S { S(a: Int) }\npub fn x(s: S) { s.a }`                                            | S      | n/a   |
+| An Elixir struct  | elixir   | `defmodule M do defstruct [:a]; def x(m), do: m.a end`                                        | M::M   | n/a   |
+| An implementation | elixir   | `defprotocol P do def x(a) end\ndefmodule M do defstruct [:a]; defimpl P do def x(m), do: m.a end end` | M::M | n/a |
+
 ## Across files
 
 A type is measured as a whole, wherever its methods are.
@@ -62,3 +92,9 @@ A type is measured as a whole, wherever its methods are.
 | A cohesive type    | rust-shop       | shop::orders::Order | 1     |
 | Only trait methods | rust-shop       | shop::catalog::Item | n/a   |
 | A cohesive class   | ts-shop         | src/orders::Order   | 1     |
+
+[//]: # "decisionTable Core -- snooze until 2099-12-31"
+
+| # situation          | workspace | subject                | lcom? |
+| -------------------- | --------- | ---------------------- | ----- |
+| A cohesive Python class | py-shop | src/shop/orders::Order | 1   |
